@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import NewType
 
@@ -7,8 +8,17 @@ class Kind(StrEnum):
     CONTINUOUS = "continuous"
 
 
-GenericCharacteristicName = NewType("GenericCharacteristicName", str)
-# Возможно тут надо делить не по числу, а на одномерные/многомерные, но непонятно как сэмплить
-type Dimension = int
+class DistributionType:
+    __slots__ = ()
 
-__all__ = ["Kind", "Dimension", "GenericCharacteristicName"]
+
+@dataclass(frozen=True, slots=True)
+class EuclidianDistributionType(DistributionType):
+    kind: Kind
+    dimension: int
+
+
+GenericCharacteristicName = NewType("GenericCharacteristicName", str)
+
+
+__all__ = ["Kind", "EuclidianDistributionType", "GenericCharacteristicName", "DistributionType"]

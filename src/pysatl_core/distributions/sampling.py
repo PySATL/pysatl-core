@@ -6,13 +6,9 @@ from typing import Any, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from pysatl_core.types import Dimension
-
 
 class Sample(Protocol):
     def __len__(self) -> int: ...
-    @property
-    def dim(self) -> Dimension: ...
     @property
     def array(self) -> npt.NDArray[np.floating[Any]]: ...
     @property
@@ -20,18 +16,20 @@ class Sample(Protocol):
 
 
 class ArraySample(Sample):
-    dimension: Dimension
+    dimension: int
     data: npt.NDArray[np.floating[Any]]
 
     def __init__(self, data: npt.NDArray[np.floating[Any]]) -> None:
+        if data.ndim != 2:
+            raise ValueError("ArraySample expects 2D array of shape (n, d).")
         self.data = data
-        self.dimension = data.shape[1]
+        self.dimension = int(data.shape[1])
 
     def __len__(self) -> int:
         return int(self.data.shape[0])
 
     @property
-    def dim(self) -> Dimension:
+    def dim(self) -> int:
         return self.dimension
 
     def __iter__(self) -> Iterator[npt.NDArray[np.floating[Any]]]:

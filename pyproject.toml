@@ -44,6 +44,7 @@ urls.Issues = "https://github.com/PySATL/pysatl-core/issues"
 [tool.poetry.dependencies]
 python = ">=3.12"
 numpy = "^2.0.0"
+scipy = ">=1.13"
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.6"

@@ -13,18 +13,16 @@ from pysatl_core.distributions.strategies import (
     SamplingStrategy,
 )
 from pysatl_core.types import (
-    Dimension,
+    DistributionType,
+    EuclidianDistributionType,
     GenericCharacteristicName,
-    Kind,
 )
 
 
 @runtime_checkable
 class Distribution(Protocol):
     @property
-    def dimension(self) -> Dimension: ...
-    @property
-    def kind(self) -> Kind: ...
+    def distribution_type(self) -> DistributionType: ...
 
     @property
     def analytical_computations(
@@ -41,32 +39,25 @@ class Distribution(Protocol):
 
 
 @dataclass(slots=True)
-class StandaloneDistribution:
-    _dimension: Dimension
-    _kind: Kind
+class StandaloneEuclidianDistribution:
+    _distribution_type: EuclidianDistributionType
     _analytical: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
 
     def __init__(
         self,
-        dimension: Dimension,
-        kind: Kind,
+        distribution_type: EuclidianDistributionType,
         analytical_computations: Iterable[AnalyticalComputation[Any, Any]]
         | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = (),
     ):
-        self._dimension = dimension
-        self._kind = kind
+        self._distribution_type = distribution_type
         if isinstance(analytical_computations, Mapping):
             self._analytical = dict(analytical_computations)
         else:
             self._analytical = {ac.target: ac for ac in analytical_computations}
 
     @property
-    def dimension(self) -> Dimension:
-        return self._dimension
-
-    @property
-    def kind(self) -> Kind:
-        return self._kind
+    def distribution_type(self) -> EuclidianDistributionType:
+        return self._distribution_type
 
     @property
     def analytical_computations(
@@ -83,7 +74,7 @@ class StandaloneDistribution:
         return DefaultComputationStrategy()
 
     def sample(self, n: int, **options: Any) -> Sample:
-        return self.sampling_strategy.sample(n, d=self.dimension, **options)
+        return self.sampling_strategy.sample(n, d=self.distribution_type.dimension, **options)
 
     def log_likelihood(self, batch: Sample) -> float:
         # TODO: Не ноль)
