@@ -59,7 +59,6 @@ repos:
     hooks:
       - id: mypy
         args: [ "--config-file=pyproject.toml" ]
-        exclude: ^tests/
         additional_dependencies:
           # Иначе mypy не находит пакеты в венве
           # Альтернатива сделать repo: local, но это менее чисто с точки зрения CI
