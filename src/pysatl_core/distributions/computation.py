@@ -1,11 +1,13 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from pysatl_core.distributions.distribution import Distribution
 from pysatl_core.types import (
     GenericCharacteristicName,
 )
+
+if TYPE_CHECKING:
+    from pysatl_core.distributions.distribution import Distribution
 
 
 @runtime_checkable
@@ -30,7 +32,7 @@ class ComputationMethodProtocol[In, Out](Protocol):
     def target(self) -> GenericCharacteristicName: ...
     @property
     def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def fit(self, distribution: Distribution) -> FittedComputationMethodProtocol[In, Out]: ...
+    def fit(self, distribution: "Distribution") -> FittedComputationMethodProtocol[In, Out]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +58,7 @@ class FittedComputationMethod[In, Out]:
 class ComputationMethod[In, Out]:
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    fitter: Callable[[Distribution], FittedComputationMethod[In, Out]]
+    fitter: Callable[["Distribution"], FittedComputationMethod[In, Out]]
 
-    def fit(self, distribution: Distribution) -> FittedComputationMethod[In, Out]:
+    def fit(self, distribution: "Distribution") -> FittedComputationMethod[In, Out]:
         return self.fitter(distribution)
