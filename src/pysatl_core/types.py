@@ -44,14 +44,21 @@ class EuclideanDistributionType(DistributionType):
     dimension: int
 
 
+UnivariateContinuous = EuclideanDistributionType(kind=Kind.CONTINUOUS, dimension=1)
+UnivariateDiscrete = EuclideanDistributionType(kind=Kind.DISCRETE, dimension=1)
+
 type GenericCharacteristicName = str
+type ParametrizationName = str
 ScalarFunc = Callable[[float], float]
 
 
 __all__ = [
     "Kind",
     "EuclideanDistributionType",
+    "UnivariateContinuous",
+    "UnivariateDiscrete",
     "GenericCharacteristicName",
+    "ParametrizationName",
     "DistributionType",
     "ScalarFunc",
 ]
