@@ -9,11 +9,13 @@ from pysatl_core.distributions import (
 )
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization, ParametrizationSpec
-from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     DistributionType,
     GenericCharacteristicName,
+    ParametrizationName,
 )
+
+type ParametrizedFunction = Callable[[Parametrization, Any], Any]
 
 
 class ParametricFamily:
@@ -32,6 +34,8 @@ class ParametricFamily:
         Type of distributions in this family.
     parametrizations : ParametrizationSpec
         Specification of available parametrizations.
+    distr_parametrizations :
+
     distr_characteristics : Dict[GenericCharacteristicName, Callable[[Any, Any], Any]]
         Mapping from characteristic names to computation functions.
     sampling_strategy : SamplingStrategy
@@ -44,8 +48,10 @@ class ParametricFamily:
         self,
         name: str,
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
+        distr_parametrizations: list[ParametrizationName],
         distr_characteristics: dict[
-            GenericCharacteristicName, Callable[[Parametrization, Any], Any]
+            GenericCharacteristicName,
+            dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
         ],
         sampling_strategy: SamplingStrategy,
         computation_strategy: ComputationStrategy[Any, Any],
@@ -57,12 +63,22 @@ class ParametricFamily:
         ----------
         name : str
             Name of the distribution family.
-        distr_type : DistributionType
-            Type of distributions in this family.
-        distr_characteristics : Dict[GenericCharacteristicName, Callable[[Any, Any], Any]]
-            Mapping from characteristic names to computation functions.
+
+        distr_type : DistributionType | Callable[[Parametrization], DistributionType]
+            Type of distributions in this family or, if type is parameter-depended, function
+            that takes as input *base* parametrization and inferes type based on it.
+
+        distr_parametrizations : List[ParametrizationName]
+            List of parametrizations for this distribution. *First parametrization is always
+            base parametrization*.
+
+        distr_characteristics:
+            Mapping from characteristics names to computation functions or dictionary of those,
+            if for multiple parametrizations same characteristic available.
+
         sampling_strategy : SamplingStrategy
             Strategy for sampling from distributions in this family.
+
         computation_strategy : ComputationStrategy
             Strategy for computing distribution characteristics.
         """
@@ -71,12 +87,21 @@ class ParametricFamily:
             (lambda params: distr_type) if isinstance(distr_type, DistributionType) else distr_type
         )
 
+        # Parametrizations must be built by user
+        self.parametrization_names = distr_parametrizations
         self.parametrizations = ParametrizationSpec()
-        self.distr_characteristics = distr_characteristics
+
         self.sampling_strategy = sampling_strategy
         self.computation_strategy = computation_strategy
 
-        ParametricFamilyRegister.register(self)
+        def _process_char_val(
+            v: dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
+        ) -> dict[ParametrizationName, ParametrizedFunction]:
+            return v if isinstance(v, dict) else {self.parametrization_names[0]: v}
+
+        self.distr_characteristics = {
+            k: _process_char_val(v) for k, v in distr_characteristics.items()
+        }
 
     def __call__(
         self, parametrization_name: str | None = None, **parameters_values: Any
