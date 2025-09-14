@@ -68,11 +68,30 @@ class ParametricFamilyDistribution:
         Mapping[GenericCharacteristicName, AnalyticalComputation]
             Mapping from characteristic names to computation functions.
         """
-        base_params = self.family.parametrizations.get_base_parameters(self.parameters)
-        return {
-            char: AnalyticalComputation(target=char, func=partial(comp, base_params))
-            for char, comp in self.family.distr_characteristics.items()
-        }
+        analytical_computations = {}
+
+        # First form list of all characteristics, available from current parametrization
+        for characteristic, forms in self.family.distr_characteristics.items():
+            if self.parameters.name in forms:
+                analytical_computations[characteristic] = AnalyticalComputation(
+                    target=characteristic,
+                    func=partial(forms[self.parameters.name], self.parameters),
+                )
+
+        # TODO: Second, apply rule set, for, e.g. approximations
+
+        # Finally, fill other chacteristics
+        base_name = self.family.parametrizations.base_parametrization_name
+        base_parameters = self.family.parametrizations.get_base_parameters(self.parameters)
+        for characteristic, forms in self.family.distr_characteristics.items():
+            if characteristic in analytical_computations:
+                continue
+            if base_name in forms:
+                analytical_computations[characteristic] = AnalyticalComputation(
+                    target=characteristic, func=partial(forms[base_name], base_parameters)
+                )
+
+        return analytical_computations
 
     @property
     def sampling_strategy(self) -> SamplingStrategy:
