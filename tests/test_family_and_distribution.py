@@ -39,7 +39,7 @@ class TestParametricFamily:
 
         # Check properties
         assert family.name == "TestFamily"
-        assert family.distr_type == "Continuous"
+        assert family._distr_type == "Continuous"
         assert PDF in family.distr_characteristics
         assert isinstance(family.sampling_strategy, MockSamplingStrategy)
         assert isinstance(family.computation_strategy, MockComputationStrategy)
@@ -85,7 +85,7 @@ class TestParametricFamilyDistribution:
                 return {"value": self.value}
 
         # Add to family
-        family.parametrizations.add_parametrization("mock", MockParametrization, is_base=True)
+        family.parametrizations.add_parametrization("mock", MockParametrization)
 
         # Register family
         register = ParametricFamilyRegister()

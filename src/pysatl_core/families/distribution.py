@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
-    Distribution,
     Sample,
     SamplingStrategy,
 )
@@ -36,8 +35,8 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
 
 
-@dataclass(slots=True)
-class ParametricFamilyDistribution(Distribution):
+@dataclass
+class ParametricFamilyDistribution:
     """
     A specific distribution instance from a parametric family.
 
@@ -91,7 +90,6 @@ class ParametricFamilyDistribution(Distribution):
                     target=characteristic,
                     func=partial(forms[self.parameters.name], self.parameters),
                 )
-
         # TODO: Second, apply rule set, for, e.g. approximations
 
         # Finally, fill other chacteristics

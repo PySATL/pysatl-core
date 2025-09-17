@@ -148,10 +148,10 @@ class ParametrizationSpec:
         Name of the base parametrization, if defined.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, base_name: ParametrizationName) -> None:
         """Initialize an empty parametrization specification."""
         self.parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
-        self.base_parametrization_name: ParametrizationName | None = None
+        self.base_parametrization_name: ParametrizationName = base_name
 
     @property
     def base(self) -> type[Parametrization]:

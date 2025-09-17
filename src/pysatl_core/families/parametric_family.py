@@ -102,7 +102,7 @@ class ParametricFamily:
 
         # Parametrizations must be built by user
         self.parametrization_names = distr_parametrizations
-        self.parametrizations = ParametrizationSpec()
+        self.parametrizations = ParametrizationSpec(self.parametrization_names[0])
 
         self.sampling_strategy = sampling_strategy
         self.computation_strategy = computation_strategy
@@ -118,7 +118,7 @@ class ParametricFamily:
 
     @property
     def name(self) -> str:
-        return self.name
+        return self._name
 
     def distribution(
         self, parametrization_name: str | None = None, **parameters_values: Any
