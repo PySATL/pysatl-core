@@ -45,6 +45,7 @@ repos:
     rev: v2.3.0
     hooks:
       - id: codespell
+        exclude: '.*\.ipynb'
         args: [ "-L", "crate,te,ba,ans,fo,nd" ]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
