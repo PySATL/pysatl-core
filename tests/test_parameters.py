@@ -56,7 +56,7 @@ class TestParametrizationSpec:
 
     def test_add_and_get_parametrization(self):
         """Test adding and retrieving parametrizations."""
-        spec = ParametrizationSpec()
+        spec = ParametrizationSpec(base_name="mock")
 
         # Create a mock parametrization class
         class MockParametrization(Parametrization):
@@ -69,7 +69,7 @@ class TestParametrizationSpec:
                 return {}
 
         # Add parametrization
-        spec.add_parametrization("mock", MockParametrization, is_base=True)
+        spec.add_parametrization("mock", MockParametrization)
 
         # Check it was added
         assert "mock" in spec.parametrizations
@@ -79,7 +79,7 @@ class TestParametrizationSpec:
 
     def test_get_base_parameters(self):
         """Test converting parameters to base parametrization."""
-        spec = ParametrizationSpec()
+        spec = ParametrizationSpec(base_name="base")
 
         # Create mock parametrizations
         class BaseParametrization(Parametrization):
@@ -110,7 +110,7 @@ class TestParametrizationSpec:
                 return BaseParametrization(self.other_value * 2)
 
         # Add parametrizations
-        spec.add_parametrization("base", BaseParametrization, is_base=True)
+        spec.add_parametrization("base", BaseParametrization)
         spec.add_parametrization("other", OtherParametrization)
 
         # Test with base parametrization
