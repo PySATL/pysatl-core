@@ -1,4 +1,16 @@
+"""
+Global registry for parametric distribution families using singleton pattern.
+
+This module implements a centralized registry that maintains references to all
+defined parametric families, enabling easy access and management across the
+application. The registry follows the singleton pattern to ensure consistency.
+"""
+
 from __future__ import annotations
+
+__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
 
 from typing import TYPE_CHECKING, ClassVar
 
@@ -80,3 +92,8 @@ class ParametricFamilyRegister:
         if family.name in self._registered_families:
             raise ValueError(f"Family {family.name} already found in register")
         self._registered_families[family.name] = family
+
+
+def _reset_families_register_for_tests() -> None:
+    """Reset the cached distribution type register (test helper)."""
+    ParametricFamilyRegister._instance = None

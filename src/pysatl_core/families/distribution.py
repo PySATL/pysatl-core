@@ -1,4 +1,17 @@
+"""
+Concrete distribution instances with specific parameter values.
+
+This module provides the implementation for individual distribution instances
+created from parametric families. It handles distribution characteristics
+computation, sampling, and provides access to analytical methods for
+specific parameter sets.
+"""
+
 from __future__ import annotations
+
+__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -8,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
+    Distribution,
     Sample,
     SamplingStrategy,
 )
@@ -22,8 +36,8 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
 
 
-@dataclass
-class ParametricFamilyDistribution:
+@dataclass(slots=True)
+class ParametricFamilyDistribution(Distribution):
     """
     A specific distribution instance from a parametric family.
 
