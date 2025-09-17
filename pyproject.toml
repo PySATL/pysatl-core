@@ -45,7 +45,6 @@ urls.Issues = "https://github.com/PySATL/pysatl-core/issues"
 python = ">=3.12"
 numpy = "^2.0.0"
 scipy = ">=1.13"
-matplotlib = "^3.10.6"
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.6"
@@ -58,6 +57,7 @@ types-setuptools = "*"
 
 [tool.poetry.group.docs.dependencies]
 jupyter = "^1.1.1"
+matplotlib = "^3.10.6"
 
 [tool.ruff]
 target-version = "py312"
