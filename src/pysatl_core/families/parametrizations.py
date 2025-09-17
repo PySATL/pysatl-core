@@ -1,10 +1,22 @@
+"""
+Parameterization classes and specifications for distribution families.
+
+This module provides the core classes for defining different parameterizations
+of statistical distributions, including constraints validation and conversion
+between parameterization formats.
+"""
+
 from __future__ import annotations
+
+__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from pysatl_core.types import ParametrizationName
 
@@ -12,17 +24,17 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
 
 
+@runtime_checkable
 class ParametrizationConstraintProtocol(Protocol):
     @property
     def _is_constraint(self) -> bool: ...
     @property
     def _constraint_description(self) -> str: ...
 
-    def __call__(self, **kwargs: Any) -> bool:
-        pass
+    def __call__(self, **kwargs: Any) -> bool: ...
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class ParametrizationConstraint:
     """
     A constraint on parameter values for a parametrization.
@@ -164,7 +176,6 @@ class ParametrizationSpec:
         self,
         name: ParametrizationName,
         parametrization_class: type[Parametrization],
-        is_base: bool = False,
     ) -> None:
         """
         Add a new parametrization to the specification.
@@ -175,12 +186,8 @@ class ParametrizationSpec:
             Name of the parametrization.
         parametrization_class : Type[Parametrization]
             Class implementing the parametrization.
-        is_base : bool, optional
-            Whether this is the base parametrization, by default False.
         """
         self.parametrizations[name] = parametrization_class
-        if is_base:
-            self.base_parametrization_name = name
 
     def get_base_parameters(self, parameters: Parametrization) -> Parametrization:
         """
@@ -239,7 +246,7 @@ def constraint(
 
 
 def parametrization(
-    family: ParametricFamily, name: str, base: bool = False
+    family: ParametricFamily, name: str
 ) -> Callable[[type[Parametrization]], type[Parametrization]]:
     """
     Decorator to register a class as a parametrization for a family.
@@ -300,7 +307,7 @@ def parametrization(
         cls.validate = Parametrization.validate  # type: ignore
 
         # Register with family
-        family.parametrizations.add_parametrization(name, cls, is_base=base)
+        family.parametrizations.add_parametrization(name, cls)
 
         return cls
 
