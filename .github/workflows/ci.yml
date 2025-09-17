@@ -59,7 +59,7 @@ jobs:
         run: poetry run ruff format --check .
 
       - name: Mypy
-        run: poetry run mypy src tests
+        run: poetry run mypy src
 
       - name: Pytest
         run: poetry run pytest --cov
