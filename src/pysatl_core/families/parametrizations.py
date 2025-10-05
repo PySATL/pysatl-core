@@ -14,24 +14,20 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+from inspect import isfunction
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    ParamSpec,
+)
 
 from pysatl_core.types import ParametrizationName
 
 if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
-
-
-@runtime_checkable
-class ParametrizationConstraintProtocol(Protocol):
-    @property
-    def _is_constraint(self) -> bool: ...
-    @property
-    def _constraint_description(self) -> str: ...
-
-    def __call__(self, **kwargs: Any) -> bool: ...
 
 
 @dataclass(slots=True, frozen=True)
@@ -63,6 +59,10 @@ class Parametrization(ABC):
     constraints : ClassVar[List[ParametrizationConstraint]]
         Class-level list of constraints that apply to this parametrization.
     """
+
+    # These class attributes are set by the @parametrization decorator.
+    __family__: ClassVar[ParametricFamily]
+    __param_name__: ClassVar[ParametrizationName]
 
     _constraints: ClassVar[list[ParametrizationConstraint]] = []
 
@@ -166,7 +166,7 @@ class ParametrizationSpec:
         Raises
         ------
         ValueError
-            If no base parametrization has been defined.
+            If no base parametrization has been defined or registered.
         """
         if self.base_parametrization_name is None:
             raise ValueError("No base parametrization defined")
@@ -209,12 +209,16 @@ class ParametrizationSpec:
             return parameters.transform_to_base_parametrization()
 
 
-# Decorators for declarative syntax
-def constraint(
-    description: str,
-) -> Callable[[Callable[[Any], bool]], ParametrizationConstraintProtocol]:
+P = ParamSpec("P")
+
+
+def constraint(description: str) -> Callable[[Callable[P, bool]], Callable[P, bool]]:
     """
-    Decorator to mark a method as a parameter constraint.
+    Decorator to mark an instance method as a parameter constraint.
+
+    The decorated function must be a predicate returning ``bool``. At class
+    decoration time it will be discovered and attached as a
+    :class:`ParametrizationConstraint`.
 
     Parameters
     ----------
@@ -223,30 +227,44 @@ def constraint(
 
     Returns
     -------
-    Callable
-        Decorator function that marks the method as a constraint.
+    Callable[[Callable[P, bool]], Callable[P, bool]]
+        A decorator that returns the function wrapper with two marker
+        attributes set on it.
+
+    Notes
+    -----
+    The following marker attributes are set on the resulting function object:
+
+    * ``__is_constraint`` : ``True``
+    * ``__constraint_description`` : ``str``
 
     Examples
     --------
-    >>> @constraint("sigma > 0")
-    >>> def check_sigma_positive(self):
-    >>>     return self.sigma > 0
+    >>> class MeanStd(Parametrization):
+    ...     mean: float
+    ...     sigma: float
+    ...
+    ...     @constraint("sigma > 0")
+    ...     def _c_sigma_positive(self) -> bool:
+    ...         return self.sigma > 0
     """
 
-    def decorator(func: Callable[[Any], bool]) -> ParametrizationConstraintProtocol:
+    def decorator(func: Callable[P, bool]) -> Callable[P, bool]:
         @wraps(func)
-        def wrapper(*args, **kwargs):  # type: ignore
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> bool:
             return func(*args, **kwargs)
 
-        wrapper._is_constraint = True  # type: ignore
-        wrapper._constraint_description = description  # type: ignore
-        return wrapper  # type: ignore
+        setattr(wrapper, "__is_constraint", True)
+        setattr(wrapper, "__constraint_description", description)
+        return wrapper
 
     return decorator
 
 
 def parametrization(
-    family: ParametricFamily, name: str
+    *,
+    family: ParametricFamily,
+    name: str,
 ) -> Callable[[type[Parametrization]], type[Parametrization]]:
     """
     Decorator to register a class as a parametrization for a family.
@@ -257,58 +275,72 @@ def parametrization(
         The family to register the parametrization with.
     name : str
         Name of the parametrization.
-    base : bool, optional
-        Whether this is the base parametrization, by default False.
 
     Returns
     -------
-    Callable
-        Decorator function that registers the class as a parametrization.
+    Callable[[type[Parametrization]], type[Parametrization]]
+        A class decorator that registers the parametrization and returns the class.
 
     Examples
     --------
-    >>> @parametrization(family=NormalFamily, name='meanvar')
-    >>> class MeanVarParametrization:
-    >>>     mean: float
-    >>>     var: float
+    >>> @parametrization(family=normal, name="mean_var")
+    ... class MeanVar(Parametrization):
+    ...     mean: float
+    ...     var: float
     """
 
-    def decorator(cls: type[Parametrization]) -> type[Parametrization]:
-        # Convert to dataclass if not already
-        if not hasattr(cls, "__dataclass_fields__"):
-            cls = dataclass(cls)
+    def _collect_constraints(cls: type[Parametrization]) -> list[ParametrizationConstraint]:
+        """
+        Collect constraint methods declared on the class.
 
-        # Add name property
-        def name_property(self):  # type: ignore
-            return name
+        Parameters
+        ----------
+        cls : type[Parametrization]
+            Class being registered as a parametrization.
 
-        cls.name = property(name_property)  # type: ignore
+        Returns
+        -------
+        list[ParametrizationConstraint]
+            Collected constraints in declaration order.
 
-        # Add parameters property
-        def parameters_property(self):  # type: ignore
-            return {
-                field.name: getattr(self, field.name)
-                for field in self.__dataclass_fields__.values()
-            }
-
-        cls.parameters = property(parameters_property)  # type: ignore
-
-        # Collect constraints
-        constraints = []
-        for attr_name in dir(cls):
-            attr = getattr(cls, attr_name)
-            if hasattr(attr, "_is_constraint") and attr._is_constraint:
-                constraints.append(
-                    ParametrizationConstraint(description=attr._constraint_description, check=attr)
+        Raises
+        ------
+        TypeError
+            If a constraint is declared as ``@staticmethod`` or ``@classmethod``.
+        """
+        constraints: list[ParametrizationConstraint] = []
+        for name, attr in cls.__dict__.items():
+            if isinstance(attr, staticmethod):
+                raise TypeError(
+                    f"@constraint '{name}' must be an instance method, not @staticmethod"
                 )
+            if isinstance(attr, classmethod):
+                raise TypeError(
+                    f"@constraint '{name}' must be an instance method, not @classmethod"
+                )
+
+            func = attr if callable(attr) and isfunction(attr) else None
+            if not func:
+                continue
+            if getattr(func, "__is_constraint", False):
+                desc = getattr(func, "__constraint_description", func.__name__)
+                constraints.append(ParametrizationConstraint(description=desc, check=func))
+        return constraints
+
+    def decorator(cls: type[Parametrization]) -> type[Parametrization]:
+        if not is_dataclass(cls):
+            cls = dataclass(slots=True, frozen=True)(cls)
+
+        # Attach metadata expected by tooling; declared in base class for mypy.
+        cls.__family__ = family
+        cls.__param_name__ = name
+
+        # Discover and store constraints.
+        constraints = _collect_constraints(cls)
         cls._constraints = constraints
 
-        # Add validate method
-        cls.validate = Parametrization.validate  # type: ignore
-
-        # Register with family
+        # Register in the family's spec.
         family.parametrizations.add_parametrization(name, cls)
-
         return cls
 
     return decorator

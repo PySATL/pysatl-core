@@ -154,4 +154,25 @@ class ParametricFamily:
         distribution_type = self._distr_type(base_parameters)
         return ParametricFamilyDistribution(self.name, distribution_type, parameters)
 
+    def parametrization(
+        self, name: str
+    ) -> Callable[[type[Parametrization]], type[Parametrization]]:
+        """
+        Create a class decorator that registers a parametrization in this family.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parametrization.
+
+        Returns
+        -------
+        Callable[[type[TParam]], type[TParam]]
+            Class decorator that registers the parametrization and returns it.
+        """
+        # local import to avoid import cycle at module import time
+        from pysatl_core.families.parametrizations import parametrization as _param_deco
+
+        return _param_deco(family=self, name=name)
+
     __call__ = distribution
