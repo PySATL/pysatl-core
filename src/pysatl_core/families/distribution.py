@@ -15,7 +15,6 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from pysatl_core.distributions import (
@@ -73,37 +72,26 @@ class ParametricFamilyDistribution:
     def analytical_computations(
         self,
     ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
+        """Lazily computed analytical computations for this distribution instance.
+
+        Delegates construction to the parent family (precomputed plan) and
+        caches the result per-instance. The cache auto-invalidates when either
+        the **parametrization object** changes (by identity) or the
+        **parametrization name** changes.
+
+        *If you mutate numeric fields of the same parametrization object*,
+        the callables see fresh values because they close over that object.
         """
-        Get analytical computation functions for this distribution.
+        key = (id(self.parameters), self.parameters.name)
+        cache_key = getattr(self, "_analytical_cache_key", None)
+        cache_val = getattr(self, "_analytical_cache_val", None)
 
-        Returns
-        -------
-        Mapping[GenericCharacteristicName, AnalyticalComputation]
-            Mapping from characteristic names to computation functions.
-        """
-        analytical_computations = {}
+        if cache_key != key or cache_val is None:
+            cache_val = self.family._build_analytical_computations(self.parameters)
+            self._analytical_cache_key = key
+            self._analytical_cache_val = cache_val
 
-        # First form list of all characteristics, available from current parametrization
-        for characteristic, forms in self.family.distr_characteristics.items():
-            if self.parameters.name in forms:
-                analytical_computations[characteristic] = AnalyticalComputation(
-                    target=characteristic,
-                    func=partial(forms[self.parameters.name], self.parameters),
-                )
-        # TODO: Second, apply rule set, for, e.g. approximations
-
-        # Finally, fill other chacteristics
-        base_name = self.family.parametrizations.base_parametrization_name
-        base_parameters = self.family.parametrizations.get_base_parameters(self.parameters)
-        for characteristic, forms in self.family.distr_characteristics.items():
-            if characteristic in analytical_computations:
-                continue
-            if base_name in forms:
-                analytical_computations[characteristic] = AnalyticalComputation(
-                    target=characteristic, func=partial(forms[base_name], base_parameters)
-                )
-
-        return analytical_computations
+        return cache_val
 
     @property
     def sampling_strategy(self) -> SamplingStrategy:

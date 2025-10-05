@@ -17,7 +17,6 @@ from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
     ParametrizationConstraint,
-    ParametrizationSpec,
     constraint,
     parametrization,
 )
@@ -27,7 +26,6 @@ __all__ = [
     "ParametricFamilyRegister",
     "ParametrizationConstraint",
     "Parametrization",
-    "ParametrizationSpec",
     "ParametricFamily",
     "ParametricFamilyDistribution",
     "constraint",
