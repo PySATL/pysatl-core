@@ -12,7 +12,7 @@ __author__ = "Leonid Elkin, Mikhail, Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from functools import wraps
@@ -67,7 +67,6 @@ class Parametrization(ABC):
     _constraints: ClassVar[list[ParametrizationConstraint]] = []
 
     @property
-    @abstractmethod
     def name(self) -> str:
         """
         Get the name of this parametrization.
@@ -77,9 +76,9 @@ class Parametrization(ABC):
         str
             The name of the parametrization.
         """
+        return self.__class__.__param_name__
 
     @property
-    @abstractmethod
     def parameters(self) -> dict[str, Any]:
         """
         Get the parameters as a dictionary.
@@ -89,6 +88,11 @@ class Parametrization(ABC):
         Dict[str, Any]
             Dictionary mapping parameter names to values.
         """
+        fields = getattr(self, "__dataclass_fields__", None)
+        if fields:
+            return {f: getattr(self, f) for f in fields}
+        ann = getattr(self, "__annotations__", {})
+        return {k: getattr(self, k) for k in ann}
 
     @property
     def constraints(self) -> list[ParametrizationConstraint]:
@@ -131,82 +135,6 @@ class Parametrization(ABC):
         if they need to convert to a different parametrization.
         """
         return self
-
-
-class ParametrizationSpec:
-    """
-    Container for all parametrizations of a distribution family.
-
-    This class manages the collection of parametrizations for a family
-    and handles conversions between them.
-
-    Attributes
-    ----------
-    parametrizations : Dict[ParametrizationName, Type[Parametrization]]
-        Mapping from parametrization names to parametrization classes.
-    base_parametrization_name : ParametrizationName | None
-        Name of the base parametrization, if defined.
-    """
-
-    def __init__(self, base_name: ParametrizationName) -> None:
-        """Initialize an empty parametrization specification."""
-        self.parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
-        self.base_parametrization_name: ParametrizationName = base_name
-
-    @property
-    def base(self) -> type[Parametrization]:
-        """
-        Get the base parametrization class.
-
-        Returns
-        -------
-        Type[Parametrization]
-            The base parametrization class.
-
-        Raises
-        ------
-        ValueError
-            If no base parametrization has been defined or registered.
-        """
-        if self.base_parametrization_name is None:
-            raise ValueError("No base parametrization defined")
-        return self.parametrizations[self.base_parametrization_name]
-
-    def add_parametrization(
-        self,
-        name: ParametrizationName,
-        parametrization_class: type[Parametrization],
-    ) -> None:
-        """
-        Add a new parametrization to the specification.
-
-        Parameters
-        ----------
-        name : ParametrizationName
-            Name of the parametrization.
-        parametrization_class : Type[Parametrization]
-            Class implementing the parametrization.
-        """
-        self.parametrizations[name] = parametrization_class
-
-    def get_base_parameters(self, parameters: Parametrization) -> Parametrization:
-        """
-        Convert parameters to the base parametrization.
-
-        Parameters
-        ----------
-        parameters : Parametrization
-            Parameters in any parametrization.
-
-        Returns
-        -------
-        Parametrization
-            Equivalent parameters in the base parametrization.
-        """
-        if parameters.name == self.base_parametrization_name:
-            return parameters
-        else:
-            return parameters.transform_to_base_parametrization()
 
 
 P = ParamSpec("P")
@@ -289,7 +217,9 @@ def parametrization(
     ...     var: float
     """
 
-    def _collect_constraints(cls: type[Parametrization]) -> list[ParametrizationConstraint]:
+    def _collect_constraints(
+        cls: type[Parametrization],
+    ) -> list[ParametrizationConstraint]:
         """
         Collect constraint methods declared on the class.
 
@@ -340,7 +270,7 @@ def parametrization(
         cls._constraints = constraints
 
         # Register in the family's spec.
-        family.parametrizations.add_parametrization(name, cls)
+        family.register_parametrization(name, cls)
         return cls
 
     return decorator
