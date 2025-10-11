@@ -291,6 +291,46 @@ class ParametricFamily:
 
         return result
 
+    def build_analytical_computations(
+        self, parameters: Parametrization
+    ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
+        """
+        Build analytical computations mapping for the given parameter instance.
+
+        This uses a precomputed provider plan so runtime work is reduced to:
+        - (Optionally) converting parameters to base once,
+        - binding callables with :func:`functools.partial`.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parameters in any registered parametrization.
+
+        Returns
+        -------
+        dict[GenericCharacteristicName, AnalyticalComputation]
+            Mapping from characteristic name to analytical computation callable.
+        """
+        plan = self._analytical_plan.get(parameters.name, {})
+        result: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = {}
+        base_params: Parametrization | None = None
+
+        for characteristic, provider_name in plan.items():
+            if provider_name == parameters.name:
+                params_obj = parameters
+            else:
+                if base_params is None:
+                    base_params = self.get_base_parameters(parameters)
+                params_obj = base_params
+
+            func_factory = self.distr_characteristics[characteristic][provider_name]
+            result[characteristic] = AnalyticalComputation(
+                target=characteristic,
+                func=partial(func_factory, params_obj),
+            )
+
+        return result
+
     def distribution(
         self,
         parametrization_name: str | None = None,

@@ -87,7 +87,7 @@ class ParametricFamilyDistribution:
         cache_val = getattr(self, "_analytical_cache_val", None)
 
         if cache_key != key or cache_val is None:
-            cache_val = self.family._build_analytical_computations(self.parameters)
+            cache_val = self.family.build_analytical_computations(self.parameters)
             self._analytical_cache_key = key
             self._analytical_cache_val = cache_val
 
