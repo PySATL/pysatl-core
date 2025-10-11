@@ -11,7 +11,10 @@ class TestBaseFamily:
     CDF: GenericCharacteristicName = "cdf"
     PPF: GenericCharacteristicName = "mean"
 
-    def make_default_family(self, distr_characteristics=None) -> ParametricFamily:
+    def make_default_family(
+        self,
+        distr_characteristics: dict[GenericCharacteristicName, dict[str, object]] | None = None,
+    ) -> ParametricFamily:
         if distr_characteristics is None:
             distr_characteristics = {
                 self.PDF: {"base": lambda p, x: x},
@@ -22,7 +25,7 @@ class TestBaseFamily:
             name="Default",
             distr_type=UnivariateContinuous,
             distr_parametrizations=["base", "alt"],
-            distr_characteristics=distr_characteristics,
+            distr_characteristics=distr_characteristics,  # type: ignore[arg-type]
             sampling_strategy=MockSamplingStrategy(),
         )
 
@@ -35,6 +38,6 @@ class TestBaseFamily:
             value: float
 
             def transform_to_base_parametrization(self) -> Parametrization:
-                return Base(value=self.value)
+                return Base(value=self.value)  # type: ignore[call-arg]
 
         return fam
