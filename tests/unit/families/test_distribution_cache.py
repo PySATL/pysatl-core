@@ -33,12 +33,12 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         assert computations1 is computations1_again  # cache hit
 
         # Replacing with a *new* object of the same parametrization should rebuild the cache
-        distribution.parameters = family.parametrizations["alt"](value=5.0)
+        distribution.parameters = family.parametrizations["alt"](value=5.0)  # type: ignore[call-arg]
         computations2 = distribution.analytical_computations
         assert computations2 is not computations1
 
         # Switching to the base parametrization should also rebuild the cache
-        distribution.parameters = family.parametrizations["base"](value=7.0)
+        distribution.parameters = family.parametrizations["base"](value=7.0)  # type: ignore[call-arg]
         computations3 = distribution.analytical_computations
         assert computations3 is not computations2
 
