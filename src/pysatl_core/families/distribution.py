@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
+    Distribution,
     Sample,
     SamplingStrategy,
 )
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class ParametricFamilyDistribution:
+class ParametricFamilyDistribution(Distribution):
     """
     A specific distribution instance from a parametric family.
 

@@ -5,7 +5,7 @@ Characteristic Graph Registry
 A directed graph over characteristic names for a fixed
 :class:`~pysatl_core.types.DistributionType`.
 
-- Nodes: ``GenericCharacteristicName``.
+- characteristics: ``GenericCharacteristicName``.
 - Edges: unary :class:`~pysatl_core.distributions.computation.ComputationMethod`
   (``1 source -> 1 target``).
 
@@ -14,10 +14,11 @@ indefinitive" semantics:
 
 Invariants
 ----------
-1. There is at least one *definitive* node.
-2. The subgraph induced by the *definitive* nodes is **strongly connected**.
-3. Every *indefinitive* node is reachable from at least one *definitive* node.
-4. No path from any *indefinitive* node back to any *definitive* node is allowed.
+1. There is at least one *definitive* characteristic.
+2. The subgraph induced by the *definitive* characteristics is **strongly connected**.
+3. Every *indefinitive* characteristic is reachable from at least one *definitive* characteristic.
+4. No path from any *indefinitive* characteristic back to any *definitive* characteristic
+is allowed.
 
 The module also exposes a singleton-like
 :class:`DistributionTypeRegister` with a default configuration for the
@@ -91,7 +92,7 @@ class GenericCharacteristicRegister:
     __definitive: set[GenericCharacteristicName] = field(default_factory=set, repr=False)
 
     def _ensure_vertex(self, v: GenericCharacteristicName) -> None:
-        """Ensure that node ``v`` exists in the adjacency structure."""
+        """Ensure that characteristic ``v`` exists in the adjacency structure."""
         self.__adj.setdefault(v, {})
 
     def _pick_method(
@@ -137,16 +138,16 @@ class GenericCharacteristicRegister:
 
     def register_definitive(self, name: GenericCharacteristicName) -> None:
         """
-        Mark a node as *definitive*.
+        Mark a characteristic as *definitive*.
 
         Parameters
         ----------
         name : str
-            Node to mark as definitive.
+            characteristic to mark as definitive.
 
         Notes
         -----
-        Strong connectivity for a single-node definitive subgraph is trivial.
+        Strong connectivity for a single-characteristic definitive subgraph is trivial.
         """
         self.__definitive.add(name)
         self._ensure_vertex(name)
@@ -160,12 +161,12 @@ class GenericCharacteristicRegister:
         name_ba: str,
     ) -> None:
         """
-        Add a bidirectional linkage between two *definitive* nodes.
+        Add a bidirectional linkage between two *definitive* characteristics.
 
         Parameters
         ----------
         a_to_b, b_to_a : ComputationMethod
-            Inverse unary conversions linking the same pair of nodes.
+            Inverse unary conversions linking the same pair of characteristics.
         name_ab, name_ba : str
             Method names (edge labels).
 
@@ -178,7 +179,7 @@ class GenericCharacteristicRegister:
         b = a_to_b.target
         if b_to_a.sources[0] != b or b_to_a.target != a:
             raise GraphInvariantError(
-                "Inverse methods must link the same pair of definitive nodes "
+                "Inverse methods must link the same pair of definitive characteristics "
                 "in opposite directions."
             )
 
@@ -206,8 +207,8 @@ class GenericCharacteristicRegister:
           - definitive -> indefinitive
           - indefinitive -> indefinitive
 
-        Any link that creates a path from an indefinitive node to a definitive
-        node is forbidden by the invariants and will cause validation to fail.
+        Any link that creates a path from an indefinitive characteristic to a definitive
+        characteristic is forbidden by the invariants and will cause validation to fail.
         """
         self._add_edge_unary(method, name=name)
         self._validate_invariants()
@@ -216,21 +217,21 @@ class GenericCharacteristicRegister:
         """Return ``True`` if ``name`` is definitive."""
         return name in self.__definitive
 
-    def definitive_nodes(self) -> frozenset[GenericCharacteristicName]:
-        """Return the set of definitive nodes."""
+    def definitive_characteristics(self) -> frozenset[GenericCharacteristicName]:
+        """Return the set of definitive characteristics."""
         return frozenset(self.__definitive)
 
-    def all_nodes(self) -> frozenset[GenericCharacteristicName]:
-        """Return the set of all graph nodes."""
+    def all_characteristics(self) -> frozenset[GenericCharacteristicName]:
+        """Return the set of all graph characteristics."""
         verts = set(self.__adj.keys())
         for nbrs in self.__adj.values():
             verts.update(nbrs.keys())
         verts.update(self.__definitive)
         return frozenset(verts)
 
-    def indefinitive_nodes(self) -> frozenset[GenericCharacteristicName]:
-        """Return the set of non-definitive nodes."""
-        return self.all_nodes() - self.__definitive
+    def indefinitive_characteristics(self) -> frozenset[GenericCharacteristicName]:
+        """Return the set of non-definitive characteristics."""
+        return self.all_characteristics() - self.__definitive
 
     def find_path(
         self,
@@ -246,7 +247,7 @@ class GenericCharacteristicRegister:
         Parameters
         ----------
         src, dst : str
-            Source and destination nodes.
+            Source and destination characteristics.
 
         Returns
         -------
@@ -293,13 +294,15 @@ class GenericCharacteristicRegister:
         # (3) every indefinitive is reachable from some definitive
         if not self._all_indefinitives_reachable_from_definitives():
             raise GraphInvariantError(
-                "Every indefinitive node must be reachable from some definitive node."
+                "Every indefinitive characteristic must be reachable from some "
+                "definitive characteristic."
             )
 
         # (4) no path from any indefinitive to any definitive
         if self._exists_path_from_indefinitive_to_definitive():
             raise GraphInvariantError(
-                "No path from any indefinitive node back to a definitive node is allowed."
+                "No path from any indefinitive characteristic back to a definitive "
+                "characteristic is allowed."
             )
 
     def _reachable_from(
@@ -307,7 +310,8 @@ class GenericCharacteristicRegister:
         start: GenericCharacteristicName,
         allowed: set[GenericCharacteristicName] | None = None,
     ) -> set[GenericCharacteristicName]:
-        """Return nodes reachable from ``start`` (optionally constrained to ``allowed``)."""
+        """Return characteristics reachable from ``start``
+        (optionally constrained to ``allowed``)."""
         seen: set[GenericCharacteristicName] = {start}
         q: deque[GenericCharacteristicName] = deque([start])
         while q:
@@ -355,8 +359,9 @@ class GenericCharacteristicRegister:
         return seen == self.__definitive
 
     def _all_indefinitives_reachable_from_definitives(self) -> bool:
-        """Check that every non-definitive node is reachable from some definitive node."""
-        indefs = self.indefinitive_nodes()
+        """Check that every non-definitive characteristic is reachable from
+        some definitive characteristic."""
+        indefs = self.indefinitive_characteristics()
         if not indefs:
             return True
         total: set[GenericCharacteristicName] = set()
@@ -365,8 +370,8 @@ class GenericCharacteristicRegister:
         return indefs.issubset(total)
 
     def _exists_path_from_indefinitive_to_definitive(self) -> bool:
-        """Check that there is no path from any indefinitive to any definitive node."""
-        for i in self.indefinitive_nodes():
+        """Check that there is no path from any indefinitive to any definitive characteristic."""
+        for i in self.indefinitive_characteristics():
             reach = self._reachable_from(i, allowed=None)
             if reach & self.__definitive:
                 return True
@@ -408,7 +413,7 @@ def _configure(reg: DistributionTypeRegister) -> None:
     """
     Default configuration for the univariate continuous case.
 
-    Definitive nodes: ``pdf``, ``cdf``, ``ppf``.
+    Definitive characteristics: ``pdf``, ``cdf``, ``ppf``.
     Bidirectional edges between each pair are registered.
     """
 
