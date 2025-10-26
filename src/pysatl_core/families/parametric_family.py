@@ -25,6 +25,7 @@ from pysatl_core.distributions import (
 from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization
+from pysatl_core.families.support import Support
 from pysatl_core.types import (
     DistributionType,
     GenericCharacteristicName,
@@ -32,6 +33,7 @@ from pysatl_core.types import (
 )
 
 type ParametrizedFunction = Callable[[Parametrization, Any], Any]
+type SupportArg = Callable[[Parametrization], Support | None] | None
 
 
 class ParametricFamily:
@@ -76,6 +78,7 @@ class ParametricFamily:
         ],
         sampling_strategy: SamplingStrategy,
         computation_strategy: ComputationStrategy[Any, Any] = DefaultComputationStrategy(),
+        support_by_parametrization: SupportArg = None,
     ):
         """
         Initialize a new parametric family.
@@ -103,6 +106,12 @@ class ParametricFamily:
         self._distr_type: Callable[[Parametrization], DistributionType] = (
             (lambda params: distr_type) if isinstance(distr_type, DistributionType) else distr_type
         )
+
+        if support_by_parametrization is None:
+            self._support_resolver: Callable[[Parametrization], Support | None]
+            self._support_resolver = lambda _params: None
+        else:
+            self._support_resolver = support_by_parametrization
 
         # Ordered names; the first one is the base parametrization name
         self.parametrization_names: list[ParametrizationName] = distr_parametrizations
