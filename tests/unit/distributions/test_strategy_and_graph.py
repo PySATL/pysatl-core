@@ -16,7 +16,7 @@ class TestDefinitiveGraph(DistributionTestBase):
         dt = EuclideanDistributionType(kind=Kind.CONTINUOUS, dimension=1)
         registry = distribution_type_register().get(dt)
 
-        definitive = registry.definitive_nodes()
+        definitive = registry.definitive_characteristics()
         assert {self.PDF, self.CDF, self.PPF}.issubset(definitive)
 
         for src in (self.PDF, self.CDF, self.PPF):
@@ -29,9 +29,9 @@ class TestComputationStrategy(DistributionTestBase):
     def test_uniform_ppf_only(self) -> None:
         distr = self.make_uniform_ppf_distribution()
 
-        cdf = distr.computation_strategy.query_method(self.CDF, distr)
-        pdf = distr.computation_strategy.query_method(self.PDF, distr)
-        ppf = distr.computation_strategy.query_method(self.PPF, distr)
+        cdf = distr.query_method(self.CDF)
+        pdf = distr.query_method(self.PDF)
+        ppf = distr.query_method(self.PPF)
 
         assert ppf(0.3) == pytest.approx(0.3, rel=1e-12, abs=1e-12)
 
@@ -44,8 +44,8 @@ class TestComputationStrategy(DistributionTestBase):
     def test_uniform_pdf_only(self) -> None:
         distr = self.make_uniform_pdf_distribution()
 
-        cdf = distr.computation_strategy.query_method(self.CDF, distr)
-        ppf = distr.computation_strategy.query_method(self.PPF, distr)
+        cdf = distr.query_method(self.CDF)
+        ppf = distr.query_method(self.PPF)
 
         assert cdf(0.3) == pytest.approx(0.3, rel=5e-3, abs=5e-4)
         assert cdf(0.8) == pytest.approx(0.8, rel=5e-3, abs=5e-4)
@@ -66,9 +66,9 @@ class TestComputationStrategy(DistributionTestBase):
             ],
         )
 
-        pdf = distr.computation_strategy.query_method(self.PDF, distr)
-        cdf = distr.computation_strategy.query_method(self.CDF, distr)
-        ppf = distr.computation_strategy.query_method(self.PPF, distr)
+        pdf = distr.query_method(self.PDF)
+        cdf = distr.query_method(self.CDF)
+        ppf = distr.query_method(self.PPF)
 
         expected_pdf_mu = 1.0 / (sigma * math.sqrt(2.0 * math.pi))
         assert pdf(mu) == pytest.approx(expected_pdf_mu, rel=5e-3, abs=5e-4)
@@ -89,8 +89,8 @@ class TestComputationStrategy(DistributionTestBase):
     def test_cdf_to_ppf_respects_most_left_option_on_plateau(self) -> None:
         distr = self.make_plateau_cdf_distribution()
 
-        ppf_rightmost = distr.computation_strategy.query_method(self.PPF, distr)
-        ppf_leftmost = distr.computation_strategy.query_method(self.PPF, distr, most_left=True)
+        ppf_rightmost = distr.query_method(self.PPF)
+        ppf_leftmost = distr.query_method(self.PPF, most_left=True)
 
         q = 0.5
         x_right = float(ppf_rightmost(q))

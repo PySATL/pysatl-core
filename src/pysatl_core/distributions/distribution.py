@@ -34,6 +34,7 @@ from pysatl_core.distributions.strategies import (
     ComputationStrategy,
     DefaultComputationStrategy,
     DefaultSamplingUnivariateStrategy,
+    Method,
     SamplingStrategy,
 )
 from pysatl_core.types import (
@@ -61,12 +62,24 @@ class Distribution(Protocol):
     @property
     def computation_strategy(self) -> ComputationStrategy[Any, Any]: ...
 
-    def sample(self, n: int, **options: Any) -> Sample: ...
+    def query_method(
+        self, characteristic_name: GenericCharacteristicName, **options: Any
+    ) -> Method[Any, Any]:
+        return self.computation_strategy.query_method(characteristic_name, self, **options)
+
+    def calculate_characteristic(
+        self, characteristic_name: GenericCharacteristicName, value: Any, **options: Any
+    ) -> Any:
+        return self.query_method(characteristic_name, **options)(value)
+
+    def sample(self, n: int, **options: Any) -> Sample:
+        return self.sampling_strategy.sample(n, distr=self, **options)
+
     def log_likelihood(self, batch: Sample) -> float: ...
 
 
 @dataclass(slots=True)
-class StandaloneEuclideanUnivariateDistribution:
+class StandaloneEuclideanUnivariateDistribution(Distribution):
     """
     Minimal standalone univariate Euclidean distribution.
 
@@ -91,8 +104,10 @@ class StandaloneEuclideanUnivariateDistribution:
     def __init__(
         self,
         kind: Kind,
-        analytical_computations: Iterable[AnalyticalComputation[Any, Any]]
-        | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = (),
+        analytical_computations: (
+            Iterable[AnalyticalComputation[Any, Any]]
+            | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
+        ) = (),
     ):
         self._distribution_type = EuclideanDistributionType(kind, 1)
         if isinstance(analytical_computations, Mapping):
@@ -122,24 +137,6 @@ class StandaloneEuclideanUnivariateDistribution:
         """Computation strategy instance."""
         return DefaultComputationStrategy()
 
-    def sample(self, n: int, **options: Any) -> Sample:
-        """
-        Draw a sample of size ``n``.
-
-        Parameters
-        ----------
-        n : int
-            Number of observations to draw.
-        **options
-            Passed through to the computation strategy while resolving ``ppf``.
-
-        Returns
-        -------
-        Sample
-            A 2D array-like sample of shape ``(n, 1)``.
-        """
-        return self.sampling_strategy.sample(n, distr=self, **options)
-
     def log_likelihood(self, batch: Sample) -> float:
         """
         Compute the log-likelihood of the given batch.
@@ -161,7 +158,7 @@ class StandaloneEuclideanUnivariateDistribution:
         hence values are computed element-wise.
         """
         name = "pdf" if self.distribution_type.kind == "continuous" else "pmf"
-        method = self.computation_strategy.query_method(name, self)
+        method = self.query_method(name)
         xs = np.asarray(batch.array, dtype=np.float64).ravel()
         vals = np.fromiter((float(method(float(x))) for x in xs), dtype=np.float64, count=xs.size)
         if np.any(vals <= 0.0):

@@ -186,7 +186,7 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
     """
 
     def sample(self, n: int, distr: "Distribution", **options: Any) -> ArraySample:
-        ppf = distr.computation_strategy.query_method("ppf", distr, **options)
+        ppf = distr.query_method("ppf", **options)
         rng = np.random.default_rng()
         U = rng.random(n)
         vals = np.array([ppf(Ui) for Ui in U], dtype=np.float64).reshape(n, 1)

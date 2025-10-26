@@ -68,7 +68,7 @@ def _resolve(distribution: "Distribution", name: GenericCharacteristicName) -> S
         If the distribution does not provide a suitable computation strategy.
     """
     try:
-        fn = distribution.computation_strategy.query_method(name, distribution)
+        fn = distribution.query_method(name)
     except AttributeError as e:
         raise RuntimeError(
             "Distribution must provide computation_strategy.querry_method(name, distribution)."
