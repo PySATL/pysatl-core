@@ -231,11 +231,9 @@ class ParametricFamily:
         """
         return self._parametrizations[name]
 
-    def get_base_parameters(self, parameters: Parametrization) -> Parametrization:
+    def to_base(self, parameters: Parametrization) -> Parametrization:
         """
         Convert parameters to the base parametrization.
-
-        This method mirrors the former ``ParametrizationSpec.get_base_parameters``.
 
         Parameters
         ----------
@@ -280,47 +278,7 @@ class ParametricFamily:
                 params_obj = parameters
             else:
                 if base_params is None:
-                    base_params = self.get_base_parameters(parameters)
-                params_obj = base_params
-
-            func_factory = self.distr_characteristics[characteristic][provider_name]
-            result[characteristic] = AnalyticalComputation(
-                target=characteristic,
-                func=partial(func_factory, params_obj),
-            )
-
-        return result
-
-    def build_analytical_computations(
-        self, parameters: Parametrization
-    ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
-        """
-        Build analytical computations mapping for the given parameter instance.
-
-        This uses a precomputed provider plan so runtime work is reduced to:
-        - (Optionally) converting parameters to base once,
-        - binding callables with :func:`functools.partial`.
-
-        Parameters
-        ----------
-        parameters : Parametrization
-            Parameters in any registered parametrization.
-
-        Returns
-        -------
-        dict[GenericCharacteristicName, AnalyticalComputation]
-            Mapping from characteristic name to analytical computation callable.
-        """
-        plan = self._analytical_plan.get(parameters.name, {})
-        result: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = {}
-        base_params: Parametrization | None = None
-
-        for characteristic, provider_name in plan.items():
-            if provider_name == parameters.name:
-                params_obj = parameters
-            else:
-                if base_params is None:
-                    base_params = self.get_base_parameters(parameters)
+                    base_params = self.to_base(parameters)
                 params_obj = base_params
 
             func_factory = self.distr_characteristics[characteristic][provider_name]
@@ -364,7 +322,7 @@ class ParametricFamily:
             parametrization_class = self._parametrizations[parametrization_name]
 
         parameters = parametrization_class(**parameters_values)
-        base_parameters = self.get_base_parameters(parameters)
+        base_parameters = self.to_base(parameters)
         parameters.validate()
         distribution_type = self._distr_type(base_parameters)
         return ParametricFamilyDistribution(self.name, distribution_type, parameters)
