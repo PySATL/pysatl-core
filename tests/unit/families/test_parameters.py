@@ -77,10 +77,10 @@ class TestParametrizationAPI(TestBaseFamily):
         AltCls = family.parametrizations["alt"]
 
         base_params = BaseCls(value=5.0)  # type: ignore[call-arg]
-        assert family.get_base_parameters(base_params) is base_params
+        assert family.to_base(base_params) is base_params
 
         alt_params = AltCls(value=3.0)  # type: ignore[call-arg]
-        base_from_alt = family.get_base_parameters(alt_params)
+        base_from_alt = family.to_base(alt_params)
         assert isinstance(base_from_alt, BaseCls)
         # Our default factory maps Alt(value=v) → Base(value=v)
         assert base_from_alt.value == 3.0  # type: ignore[attr-defined]
