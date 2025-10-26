@@ -58,8 +58,6 @@ __author__ = "Leonid Elkin, Mikhail, Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-# Re-exports: characteristics
-from .characteristics import GenericCharacteristic
 
 # Re-exports: computation primitives and canonical conversions
 from .computation import (
