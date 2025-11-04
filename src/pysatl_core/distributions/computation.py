@@ -182,8 +182,10 @@ class ComputationMethod[In, Out]:
 
 from pysatl_core.distributions.fitters import (  # noqa: E402
     fit_cdf_to_pdf_1C,
+    fit_cdf_to_pmf_1D,
     fit_cdf_to_ppf_1C,
     fit_pdf_to_cdf_1C,
+    fit_pmf_to_cdf_1D,
     fit_ppf_to_cdf_1C,
 )
 
@@ -191,9 +193,22 @@ from pysatl_core.distributions.fitters import (  # noqa: E402
 PDF = "pdf"
 CDF = "cdf"
 PPF = "ppf"
+PMF = "pmf"
 
 # Public conversion descriptors
 pdf_to_cdf_1C = ComputationMethod[float, float](target=CDF, sources=[PDF], fitter=fit_pdf_to_cdf_1C)
 cdf_to_pdf_1C = ComputationMethod[float, float](target=PDF, sources=[CDF], fitter=fit_cdf_to_pdf_1C)
 cdf_to_ppf_1C = ComputationMethod[float, float](target=PPF, sources=[CDF], fitter=fit_cdf_to_ppf_1C)
 ppf_to_cdf_1C = ComputationMethod[float, float](target=CDF, sources=[PPF], fitter=fit_ppf_to_cdf_1C)
+
+pmf_to_cdf_1D = ComputationMethod[float, float](
+    target=CDF,
+    sources=[PMF],
+    fitter=fit_pmf_to_cdf_1D,
+)
+
+cdf_to_pmf_1D = ComputationMethod[float, float](
+    target=PMF,
+    sources=[CDF],
+    fitter=fit_cdf_to_pmf_1D,
+)

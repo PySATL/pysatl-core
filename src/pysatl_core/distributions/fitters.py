@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 PDF = "pdf"
 CDF = "cdf"
 PPF = "ppf"
+PMF = "pmf"
 
 
 def _resolve(distribution: "Distribution", name: GenericCharacteristicName) -> ScalarFunc:
@@ -355,3 +356,84 @@ def fit_ppf_to_cdf_1C(
 
     cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
     return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=cdf_func)
+
+
+# --- Discrete fitters: pmf <-> cdf (1D) --------------------------------------
+
+
+def fit_pmf_to_cdf_1D(
+    distribution: "Distribution", /, **_: Any
+) -> FittedComputationMethod[float, float]:
+    """
+    Build CDF from PMF on a discrete support by partial summation.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        Distribution exposing a discrete support on ``._support`` and a scalar
+        ``pmf`` via the computation strategy.
+
+    Returns
+    -------
+    FittedComputationMethod[float, float]
+        Fitted ``pmf -> cdf`` conversion.
+
+    Raises
+    ------
+    RuntimeError
+        If the distribution does not expose a discrete support.
+    """
+    support = getattr(distribution, "_support", None)
+    if support is None:
+        raise RuntimeError("Discrete support is required for pmf->cdf.")
+    pmf_func = _resolve(distribution, PMF)
+
+    def _cdf(x: float) -> float:
+        s = 0.0
+        for k in support.iter_leq(x):
+            s += float(pmf_func(float(k)))
+        return float(np.clip(s, 0.0, 1.0))
+
+    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf)
+
+
+def fit_cdf_to_pmf_1D(
+    distribution: "Distribution", /, **_: Any
+) -> FittedComputationMethod[float, float]:
+    """
+    Extract PMF from CDF on a discrete support as jump sizes.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        Distribution exposing a discrete support on ``._support`` and a scalar
+        ``cdf`` via the computation strategy.
+
+    Returns
+    -------
+    FittedComputationMethod[float, float]
+        Fitted ``cdf -> pmf`` conversion.
+
+    Raises
+    ------
+    RuntimeError
+        If the distribution does not expose a discrete support.
+
+    Notes
+    -----
+    ``pmf(x) = cdf(x) - cdf(prev(x))``, where ``prev(x)`` is the predecessor on
+    the support (with ``cdf(prev) := 0`` if no predecessor exists).
+    """
+    support = getattr(distribution, "_support", None)
+    if support is None:
+        raise RuntimeError("Discrete support is required for cdf->pmf.")
+    cdf_func = _resolve(distribution, CDF)
+
+    def _pmf(x: float) -> float:
+        p = support.prev(x)
+        left = 0.0 if p is None else float(cdf_func(float(p)))
+        right = float(cdf_func(x))
+        mass = max(right - left, 0.0)
+        return float(np.clip(mass, 0.0, 1.0))
+
+    return FittedComputationMethod[float, float](target=PMF, sources=[CDF], func=_pmf)
