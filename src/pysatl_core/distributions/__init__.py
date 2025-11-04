@@ -71,7 +71,7 @@ from .computation import (
 )
 
 # Re-exports: distribution protocol and a minimal implementation
-from .distribution import Distribution, StandaloneEuclideanUnivariateDistribution
+from .distribution import Distribution
 
 # Re-exports: characteristic graph registry and helpers
 from .registry import (

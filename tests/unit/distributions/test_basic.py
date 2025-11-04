@@ -4,8 +4,8 @@ import math
 from collections.abc import Callable
 
 from pysatl_core.distributions.computation import AnalyticalComputation
-from pysatl_core.distributions.distribution import StandaloneEuclideanUnivariateDistribution
 from pysatl_core.types import Kind
+from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
 class DistributionTestBase:
