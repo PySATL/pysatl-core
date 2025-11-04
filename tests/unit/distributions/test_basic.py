@@ -7,8 +7,8 @@ from typing import Any, cast
 from mypy_extensions import KwArg
 
 from pysatl_core.distributions.computation import AnalyticalComputation
-from pysatl_core.distributions.distribution import StandaloneEuclideanUnivariateDistribution
 from pysatl_core.types import Kind
+from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
 class DistributionTestBase:
