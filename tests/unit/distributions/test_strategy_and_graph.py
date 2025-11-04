@@ -5,10 +5,10 @@ import math
 import pytest
 
 from pysatl_core.distributions.computation import AnalyticalComputation
-from pysatl_core.distributions.distribution import StandaloneEuclideanUnivariateDistribution
 from pysatl_core.distributions.registry import distribution_type_register
 from pysatl_core.types import EuclideanDistributionType, Kind
 from tests.unit.distributions.test_basic import DistributionTestBase
+from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
 class TestDefinitiveGraph(DistributionTestBase):
