@@ -437,3 +437,189 @@ def fit_cdf_to_pmf_1D(
         return float(np.clip(mass, 0.0, 1.0))
 
     return FittedComputationMethod[float, float](target=PMF, sources=[CDF], func=_pmf)
+
+
+# --- DISCRETE (1D): CDF <-> PPF -------------------------------------------------
+
+
+def _collect_support_values(support: Any) -> np.ndarray:
+    """
+    Try to extract a sorted array of support values from a discrete support object.
+
+    Accepted shapes (auto-detected in order):
+      * iterable support: for x in support
+      * support.values() / support.to_list()
+      * cursor API: support.first()/next(x)
+
+    Returns
+    -------
+    np.ndarray
+        1D float array of sorted support points.
+
+    Raises
+    ------
+    RuntimeError
+        If the support cannot be iterated by any of the strategies.
+    """
+    xs: list[float] = []
+
+    # 1) Direct iteration
+    try:
+        it = iter(support)  # may raise TypeError
+        xs = [float(v) for v in it]
+        if xs:
+            return np.asarray(sorted(xs), dtype=float)
+    except Exception:
+        pass
+
+    # 2) Common containers: values() / to_list()
+    for name in ("values", "to_list"):
+        if hasattr(support, name):
+            try:
+                seq = getattr(support, name)()
+                xs = [float(v) for v in seq]
+                if xs:
+                    return np.asarray(sorted(xs), dtype=float)
+            except Exception:
+                pass
+
+    # 3) Cursor-like API: first(), next(x)
+    if hasattr(support, "first") and hasattr(support, "next"):
+        try:
+            cur = support.first()
+            seen = set()
+            while cur is not None and cur not in seen:
+                seen.add(cur)
+                xs.append(float(cur))
+                cur = support.next(cur)
+            if xs:
+                return np.asarray(sorted(xs), dtype=float)
+        except Exception:
+            pass
+
+    raise RuntimeError("Discrete support must be iterable or expose first()/next().")
+
+
+def fit_cdf_to_ppf_1D(
+    distribution: "Distribution", /, **options: Any
+) -> FittedComputationMethod[float, float]:
+    """
+    Fit **discrete** PPF from a resolvable CDF and explicit discrete support.
+
+    Semantics
+    ---------
+    For a given ``q ∈ [0, 1]`` returns the **leftmost** support point ``x`` such that
+    ``CDF(x) ≥ q`` (step-quantile).
+
+    Requires
+    --------
+    distribution._support : discrete support container (iterable or cursor-like).
+
+    Parameters
+    ----------
+    distribution : Distribution
+    **options : Any
+        Unused (kept for a uniform API with continuous fitters).
+
+    Returns
+    -------
+    FittedComputationMethod[float, float]
+        Fitted ``cdf -> ppf`` conversion for discrete 1D distributions.
+    """
+    support = getattr(distribution, "_support", None)
+    if support is None:
+        raise RuntimeError("Discrete support is required for cdf->ppf (missing _support).")
+
+    cdf_func = _resolve(distribution, CDF)
+
+    xs = _collect_support_values(support)  # sorted float array
+    if xs.size == 0:
+        raise RuntimeError("Discrete support is empty.")
+
+    # Pre-compute CDF on support and enforce monotonicity (safety against FP noise)
+    cdf_vals = np.asarray([float(cdf_func(float(x))) for x in xs], dtype=float)
+    cdf_vals = np.clip(np.maximum.accumulate(cdf_vals), 0.0, 1.0)
+
+    def _ppf(q: float) -> float:
+        if not isfinite(q):
+            return float("nan")
+        q = float(q)
+        if q <= 0.0:
+            return float(xs[0])
+        if q >= 1.0:
+            return float(xs[-1])
+        idx = int(np.searchsorted(cdf_vals, q, side="left"))
+        if idx >= xs.size:
+            idx = xs.size - 1
+        return float(xs[idx])
+
+    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=_ppf)
+
+
+def fit_ppf_to_cdf_1D(
+    distribution: "Distribution", /, **options: Any
+) -> FittedComputationMethod[float, float]:
+    """
+    Fit **discrete** CDF using only a resolvable PPF via bisection on ``q``.
+
+    Semantics
+    ---------
+    ``CDF(x) = sup { q ∈ [0,1] : PPF(q) ≤ x }``
+
+    We implement this as a monotone predicate on ``q``:
+      ``f(q) := (PPF(q) ≤ x)``, and find the largest ``q`` with ``f(q) = True``.
+
+    Parameters
+    ----------
+    distribution : Distribution
+    **options : Any
+        Optional tuning:
+        - q_tol : float, default 1e-12
+        - max_iter : int, default 100
+
+    Returns
+    -------
+    FittedComputationMethod[float, float]
+        Fitted ``ppf -> cdf`` conversion for discrete 1D distributions.
+    """
+    ppf_func = _resolve(distribution, PPF)
+    q_tol: float = float(options.get("q_tol", 1e-12))
+    max_iter: int = int(options.get("max_iter", 100))
+
+    # Quick edge probes (robust to weird PPF endpoints)
+    try:
+        p0 = float(ppf_func(0.0))
+    except Exception:
+        p0 = float("-inf")
+    try:
+        p1 = float(ppf_func(1.0 - 1e-15))
+    except Exception:
+        p1 = float("inf")
+
+    def _cdf(x: float) -> float:
+        if not isfinite(x):
+            return float("nan")
+        # Hard clamps from endpoint probes
+        if x < p0:
+            return 0.0
+        if x >= p1:
+            return 1.0
+
+        lo, hi = 0.0, 1.0
+        it = 0
+        while hi - lo > q_tol and it < max_iter:
+            it += 1
+            mid = 0.5 * (lo + hi)
+            try:
+                y = float(ppf_func(mid))
+            except Exception:
+                # If PPF fails at mid, shrink conservatively towards lo
+                hi = mid
+                continue
+            if y <= x:
+                lo = mid  # still True region
+            else:
+                hi = mid  # crossed threshold
+        return float(np.clip(lo, 0.0, 1.0))
+
+    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf)
