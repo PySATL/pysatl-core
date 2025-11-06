@@ -581,7 +581,6 @@ class RegistryView:
         defs = self.definitive_characteristics
         if len(defs) <= 1:
             return True
-
         start = next(iter(defs))
         fwd = self._reachable_from(start, allowed=defs)
         if fwd != (defs - {start}):
@@ -610,7 +609,6 @@ class RegistryView:
         indefs = self.indefinitive_characteristics
         if not indefs:
             return True
-
         total: set[GenericCharacteristicName] = set()
         for d in self.definitive_characteristics:
             total |= self._reachable_from(d)
