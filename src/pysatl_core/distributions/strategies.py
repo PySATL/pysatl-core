@@ -29,12 +29,11 @@ from pysatl_core.distributions.computation import (
     AnalyticalComputation,
     FittedComputationMethod,
 )
+from pysatl_core.distributions.registry import characteristic_registry
+from pysatl_core.distributions.sampling import ArraySample, Sample
 from pysatl_core.types import (
     GenericCharacteristicName,
 )
-
-from .registry import distribution_type_register
-from .sampling import ArraySample, Sample
 
 if TYPE_CHECKING:
     from .distribution import Distribution
@@ -135,7 +134,7 @@ class DefaultComputationStrategy[In, Out]:
                 "Distribution provides no analytical computations to ground conversions."
             )
 
-        reg = distribution_type_register().get(distr.distribution_type)
+        reg = characteristic_registry().view(distr)
 
         self._push_guard(distr, state)
         try:
