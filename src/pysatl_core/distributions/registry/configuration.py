@@ -84,11 +84,17 @@ def _configure(reg: CharacteristicRegistry) -> None:
         name="pdf",
         is_definitive=True,
         definitive_constraint=NodeConstraint(kinds=kind_continuous),
+        # TODO: Maybe it SHOULD be present even in discrete case and every other definitive char
+        #  would have constant zero computation method to it
+        presence_constraint=NodeConstraint(kinds=kind_continuous),
     )
     reg.add_characteristic(
         name="pmf",
         is_definitive=True,
         definitive_constraint=NodeConstraint(kinds=kind_discrete),
+        # TODO: Maybe it SHOULD be present even in continuous case and every other definitive char
+        #  would have constant zero computation method to it
+        presence_constraint=NodeConstraint(kinds=kind_discrete),
     )
 
     edge_cont_dim1 = EdgeConstraint(
