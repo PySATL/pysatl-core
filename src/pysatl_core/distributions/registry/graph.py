@@ -101,7 +101,7 @@ class CharacteristicRegistry:
         # adjacency: src -> dst -> label -> EdgeMeta
         self._adj: dict[
             GenericCharacteristicName,
-            dict[GenericCharacteristicName, dict[str, EdgeMeta]],
+            dict[GenericCharacteristicName, dict[str, list[EdgeMeta]]],
         ] = {}
         # declared nodes
         self._all_nodes: set[GenericCharacteristicName] = set()
@@ -240,9 +240,14 @@ class CharacteristicRegistry:
             raise ValueError("Source characteristic or destination characteristic is invalid.")
 
         self._adj[src].setdefault(dst, {})
-        self._adj[src][dst][label] = EdgeMeta(
-            method=method,
-            constraint=constraint or EdgeConstraint(),
+        # TODO: We need to be careful here if some constraint more general and with the same label
+        #  than other it can consume it
+        self._adj[src][dst].setdefault(label, [])
+        self._adj[src][dst][label].append(
+            EdgeMeta(
+                method=method,
+                constraint=constraint or EdgeConstraint(),
+            )
         )
 
     def add_characteristic(
@@ -363,9 +368,14 @@ class CharacteristicRegistry:
         for src, d in self._adj.items():
             for dst, variants in d.items():
                 kept: dict[str, EdgeMeta] = {}
-                for label, meta in variants.items():
-                    if (meta.constraint or EdgeConstraint()).allows(distr):
-                        kept[label] = meta
+                for label, metas in variants.items():
+                    for edge in metas:
+                        if (edge.constraint or EdgeConstraint()).allows(distr):
+                            kept[label] = edge
+                            # TODO: It is possible that there are two edges under the same label
+                            #  that fit the same distribution, this should not be the case.
+                            #  Taking the first one for now
+                            break
                 if kept:
                     adj.setdefault(src, {}).setdefault(dst, {}).update(kept)
 

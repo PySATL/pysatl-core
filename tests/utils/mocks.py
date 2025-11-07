@@ -1,4 +1,6 @@
-from collections.abc import Iterable, Mapping
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,15 +29,6 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
     """
     Minimal standalone univariate Euclidean distribution.
 
-    Parameters
-    ----------
-    kind : Kind
-        ``Kind.CONTINUOUS`` or ``Kind.DISCRETE``.
-    analytical_computations : \
-        Iterable[AnalyticalComputation] or Mapping[str, AnalyticalComputation], optional
-        Analytical characteristics provided by the distribution. If an iterable
-        is given, items are keyed by their ``target`` attribute.
-
     Notes
     -----
     - Dimension is fixed to 1.
@@ -52,7 +45,7 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
             Iterable[AnalyticalComputation[Any, Any]]
             | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
         ) = (),
-    ):
+    ) -> None:
         self._distribution_type = EuclideanDistributionType(kind, 1)
         if isinstance(analytical_computations, Mapping):
             self._analytical = dict(analytical_computations)
@@ -85,17 +78,6 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         """
         Compute the log-likelihood of the given batch.
 
-        Parameters
-        ----------
-        batch : Sample
-            2D sample of shape ``(n, 1)``.
-
-        Returns
-        -------
-        float
-            Sum of ``log(pdf(x_i))`` for continuous distributions or
-            ``log(pmf(x_i))`` for discrete ones.
-
         Notes
         -----
         Characteristic functions are assumed to be scalar (``float -> float``);
@@ -108,3 +90,65 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         if np.any(vals <= 0.0):
             return float("-inf")
         return float(np.sum(np.log(vals)))
+
+
+# ---------------------------------------------------------------------------
+# Optional discrete specialization with explicit support
+# ---------------------------------------------------------------------------
+
+
+class StandaloneDiscreteUnivariateDistribution(StandaloneEuclideanUnivariateDistribution):
+    """Discrete standalone distribution with optional `_support` for tests."""
+
+    _support: DiscreteSupport | None
+
+    def __init__(
+        self,
+        analytical_computations: (
+            Iterable[AnalyticalComputation[Any, Any]]
+            | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
+        ) = (),
+    ) -> None:
+        super().__init__(kind=Kind.DISCRETE, analytical_computations=analytical_computations)
+        self._support = None
+
+
+# --- Discrete support helpers for tests --------------------------------------
+
+
+class DiscreteSupport:
+    """
+    Simple discrete support to aid tests of discrete fitters.
+
+    - Iterable over support points.
+    - iter_leq(x): iterate values <= x.
+    - prev(x): immediate predecessor of x (or None).
+    """
+
+    _values: list[float]
+
+    def __init__(self, values: Iterable[float]) -> None:
+        xs = sorted(float(v) for v in values)
+        self._values = []
+        last: float | None = None
+        for v in xs:
+            if last is None or v != last:
+                self._values.append(v)
+                last = v
+
+    def __iter__(self) -> Iterator[float]:
+        return iter(self._values)
+
+    def iter_leq(self, x: float) -> Iterator[float]:
+        for v in self._values:
+            if v <= x:
+                yield v
+
+    def prev(self, x: float) -> float | None:
+        p: float | None = None
+        for v in self._values:
+            if v < x + 1e-15:
+                p = v
+            else:
+                break
+        return p
