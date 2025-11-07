@@ -30,7 +30,7 @@ Notes
   disambiguation flags (e.g., ``most_left``), etc.
 """
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -174,26 +174,3 @@ class ComputationMethod[In, Out]:
     def fit(self, distribution: "Distribution", **options: Any) -> FittedComputationMethod[In, Out]:
         """Fit and return a :class:`FittedComputationMethod`."""
         return self.fitter(distribution, **options)
-
-
-# ---- Realizations (1C: univariate continuous) --------------------------------
-
-# Import fitters at the bottom to avoid circular imports during module import time.
-
-from pysatl_core.distributions.fitters import (  # noqa: E402
-    fit_cdf_to_pdf_1C,
-    fit_cdf_to_ppf_1C,
-    fit_pdf_to_cdf_1C,
-    fit_ppf_to_cdf_1C,
-)
-
-# Characteristic keys
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-
-# Public conversion descriptors
-pdf_to_cdf_1C = ComputationMethod[float, float](target=CDF, sources=[PDF], fitter=fit_pdf_to_cdf_1C)
-cdf_to_pdf_1C = ComputationMethod[float, float](target=PDF, sources=[CDF], fitter=fit_cdf_to_pdf_1C)
-cdf_to_ppf_1C = ComputationMethod[float, float](target=PPF, sources=[CDF], fitter=fit_cdf_to_ppf_1C)
-ppf_to_cdf_1C = ComputationMethod[float, float](target=CDF, sources=[PPF], fitter=fit_ppf_to_cdf_1C)
