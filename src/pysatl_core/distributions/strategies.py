@@ -17,7 +17,7 @@ Notes
 - The default computation strategy can optionally cache fitted conversions.
 """
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -29,12 +29,11 @@ from pysatl_core.distributions.computation import (
     AnalyticalComputation,
     FittedComputationMethod,
 )
+from pysatl_core.distributions.registry import characteristic_registry
+from pysatl_core.distributions.sampling import ArraySample, Sample
 from pysatl_core.types import (
     GenericCharacteristicName,
 )
-
-from .registry import distribution_type_register
-from .sampling import ArraySample, Sample
 
 if TYPE_CHECKING:
     from .distribution import Distribution
@@ -135,7 +134,7 @@ class DefaultComputationStrategy[In, Out]:
                 "Distribution provides no analytical computations to ground conversions."
             )
 
-        reg = distribution_type_register().get(distr.distribution_type)
+        reg = characteristic_registry().view(distr)
 
         self._push_guard(distr, state)
         try:
@@ -186,7 +185,7 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
     """
 
     def sample(self, n: int, distr: "Distribution", **options: Any) -> ArraySample:
-        ppf = distr.computation_strategy.query_method("ppf", distr, **options)
+        ppf = distr.query_method("ppf", **options)
         rng = np.random.default_rng()
         U = rng.random(n)
         vals = np.array([ppf(Ui) for Ui in U], dtype=np.float64).reshape(n, 1)

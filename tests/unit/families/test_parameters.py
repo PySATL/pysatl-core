@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+__author__ = "Leonid Elkin, Mikhail Mikhailov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
 from typing import Any
 
 from pysatl_core.families import (

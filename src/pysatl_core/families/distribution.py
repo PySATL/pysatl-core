@@ -9,7 +9,7 @@ specific parameter sets.
 
 from __future__ import annotations
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -20,11 +20,13 @@ from typing import TYPE_CHECKING, Any
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
+    Distribution,
     Sample,
     SamplingStrategy,
 )
 from pysatl_core.families.parametrizations import Parametrization
 from pysatl_core.families.registry import ParametricFamilyRegister
+from pysatl_core.families.support import Support
 from pysatl_core.types import (
     DistributionType,
     GenericCharacteristicName,
@@ -34,8 +36,8 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
 
 
-@dataclass
-class ParametricFamilyDistribution:
+@dataclass(slots=True)
+class ParametricFamilyDistribution(Distribution):
     """
     A specific distribution instance from a parametric family.
 
@@ -44,17 +46,21 @@ class ParametricFamilyDistribution:
 
     Attributes
     ----------
-    distr_name : str
+    family_name : str
         Name of the distribution family.
-    distribution_type : DistributionType
+    _distribution_type : DistributionType
         Type of this distribution.
     parameters : Parametrization
         Parameter values for this distribution.
     """
 
-    distr_name: str
-    distribution_type: DistributionType
+    family_name: str
+    _distribution_type: DistributionType
     parameters: Parametrization
+
+    @property
+    def distribution_type(self) -> DistributionType:
+        return self._distribution_type
 
     @property
     def family(self) -> ParametricFamily:
@@ -66,7 +72,7 @@ class ParametricFamilyDistribution:
         ParametricFamily
             The parametric family of this distribution.
         """
-        return ParametricFamilyRegister.get(self.distr_name)
+        return ParametricFamilyRegister.get(self.family_name)
 
     @property
     def analytical_computations(
@@ -116,6 +122,10 @@ class ParametricFamilyDistribution:
             Strategy for computing characteristics of this distribution.
         """
         return self.family.computation_strategy
+
+    @property
+    def _support(self) -> Support:
+        return self.family._support_resolver(self.parameters)
 
     def log_likelihood(self, batch: Sample) -> float:
         raise NotImplementedError
