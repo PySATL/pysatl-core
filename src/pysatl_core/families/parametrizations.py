@@ -13,20 +13,17 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC
-from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from functools import wraps
 from inspect import isfunction
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ClassVar,
-    ParamSpec,
-)
+from typing import TYPE_CHECKING, ParamSpec
 
 from pysatl_core.types import ParametrizationName
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any, ClassVar
+
     from pysatl_core.families.parametric_family import ParametricFamily
 
 

@@ -11,24 +11,30 @@ PySATL Core:
 - pluggable strategies (:mod:`.strategies`).
 """
 
-from __future__ import annotations
-
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
+
 from .computation import (
     AnalyticalComputation,
     ComputationMethod,
     FittedComputationMethod,
 )
 from .distribution import Distribution
-from .registry import DEFAULT_COMPUTATION_KEY
+from .registry import *
+from .registry import __all__ as _registry_all
 from .sampling import ArraySample, Sample
 from .strategies import (
     ComputationStrategy,
     DefaultComputationStrategy,
     DefaultSamplingUnivariateStrategy,
     SamplingStrategy,
+)
+from .support import (
+    DiscreteSupport,
+    ExplicitTableDiscreteSupport,
+    IntegerLatticeDiscreteSupport,
+    Support,
 )
 
 __all__ = [
@@ -47,5 +53,12 @@ __all__ = [
     "SamplingStrategy",
     "DefaultSamplingUnivariateStrategy",
     # registry
-    "DEFAULT_COMPUTATION_KEY",
+    *_registry_all,
+    # support
+    "ExplicitTableDiscreteSupport",
+    "IntegerLatticeDiscreteSupport",
+    "DiscreteSupport",
+    "Support",
 ]
+
+del _registry_all

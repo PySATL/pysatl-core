@@ -13,28 +13,33 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Callable
-from functools import partial
-from typing import Any
 
-from pysatl_core.distributions import (
-    ComputationStrategy,
+from functools import partial
+from typing import TYPE_CHECKING
+
+from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.strategies import (
     DefaultComputationStrategy,
     DefaultSamplingUnivariateStrategy,
-    SamplingStrategy,
 )
-from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
-from pysatl_core.families.parametrizations import Parametrization
-from pysatl_core.families.support import Support
-from pysatl_core.types import (
-    DistributionType,
-    GenericCharacteristicName,
-    ParametrizationName,
-)
 
-type ParametrizedFunction = Callable[[Parametrization, Any], Any]
-type SupportArg = Callable[[Parametrization], Support | None] | None
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
+    from pysatl_core.distributions.support import Support
+    from pysatl_core.families.parametrizations import Parametrization
+    from pysatl_core.types import (
+        DistributionType,
+        GenericCharacteristicName,
+        ParametrizationName,
+    )
+
+    type ParametrizedFunction = Callable[[Parametrization, Any], Any]
+    type SupportArg = Callable[[Parametrization], Support | None] | None
+    type SupportResolver = Callable[[Parametrization], Support | None]
 
 
 class ParametricFamily:
@@ -113,7 +118,7 @@ class ParametricFamily:
         )
 
         if support_by_parametrization is None:
-            self._support_resolver: Callable[[Parametrization], Support | None]
+            self._support_resolver: SupportResolver
             self._support_resolver = lambda _params: None
         else:
             self._support_resolver = support_by_parametrization
@@ -198,6 +203,10 @@ class ParametricFamily:
             raise ValueError(
                 f"Base parametrization '{self.base_parametrization_name}' is not registered."
             ) from exc
+
+    @property
+    def support_resolver(self) -> SupportResolver:
+        return self._support_resolver
 
     def register_parametrization(
         self,
@@ -340,7 +349,9 @@ class ParametricFamily:
         base_parameters = self.to_base(parameters)
         parameters.validate()
         distribution_type = self._distr_type(base_parameters)
-        return ParametricFamilyDistribution(self.name, distribution_type, parameters)
+        return ParametricFamilyDistribution(
+            self.name, distribution_type, parameters, self.support_resolver(parameters)
+        )
 
     def parametrization(
         self,

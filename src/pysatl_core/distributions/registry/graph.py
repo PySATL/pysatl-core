@@ -43,7 +43,6 @@ import warnings
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
-from pysatl_core.distributions.computation import ComputationMethod
 from pysatl_core.distributions.registry.constraint import (
     EdgeConstraint,
     NodeConstraint,
@@ -53,10 +52,12 @@ from pysatl_core.distributions.registry.graph_primitives import (
     EdgeMeta,
     GraphInvariantError,
 )
-from pysatl_core.types import GenericCharacteristicName
 
 if TYPE_CHECKING:
+    from pysatl_core.distributions.computation import ComputationMethod
     from pysatl_core.distributions.distribution import Distribution
+    from pysatl_core.types import GenericCharacteristicName
+
 
 # --------------------------------------------------------------------------- #
 # Registry (singleton)

@@ -12,10 +12,12 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .parametric_family import ParametricFamily
+    from typing import ClassVar
+
+    from pysatl_core.families.parametric_family import ParametricFamily
 
 
 class ParametricFamilyRegister:

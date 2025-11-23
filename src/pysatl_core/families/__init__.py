@@ -12,15 +12,15 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
-from pysatl_core.families.distribution import ParametricFamilyDistribution
-from pysatl_core.families.parametric_family import ParametricFamily
-from pysatl_core.families.parametrizations import (
+from .distribution import ParametricFamilyDistribution
+from .parametric_family import ParametricFamily
+from .parametrizations import (
     Parametrization,
     ParametrizationConstraint,
     constraint,
     parametrization,
 )
-from pysatl_core.families.registry import ParametricFamilyRegister
+from .registry import ParametricFamilyRegister
 
 __all__ = [
     "ParametricFamilyRegister",

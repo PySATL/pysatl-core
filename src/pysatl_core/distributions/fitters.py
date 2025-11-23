@@ -20,6 +20,8 @@ Notes
   non-negative values where appropriate.
 """
 
+from __future__ import annotations
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
@@ -36,10 +38,13 @@ from scipy import (
 )
 
 from pysatl_core.distributions.computation import FittedComputationMethod
-from pysatl_core.types import GenericCharacteristicName, ScalarFunc
+from pysatl_core.distributions.support import DiscreteSupport
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from pysatl_core.distributions.distribution import Distribution
+    from pysatl_core.types import GenericCharacteristicName, ScalarFunc
 
 PDF = "pdf"
 CDF = "cdf"
@@ -47,7 +52,7 @@ PPF = "ppf"
 PMF = "pmf"
 
 
-def _resolve(distribution: "Distribution", name: GenericCharacteristicName) -> ScalarFunc:
+def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> ScalarFunc:
     """
     Resolve a scalar characteristic from the distribution.
 
@@ -238,7 +243,7 @@ def _num_derivative(f: ScalarFunc, x: float, h: float = 1e-5) -> float:
 
 
 def fit_pdf_to_cdf_1C(
-    distribution: "Distribution", /, **kwargs: Any
+    distribution: Distribution, /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``cdf`` from an analytical or resolvable ``pdf`` via numerical integration.
@@ -265,7 +270,7 @@ def fit_pdf_to_cdf_1C(
 
 
 def fit_cdf_to_pdf_1C(
-    distribution: "Distribution", /, **kwargs: Any
+    distribution: Distribution, /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``pdf`` as a clipped numerical derivative of ``cdf``.
@@ -293,7 +298,7 @@ def fit_cdf_to_pdf_1C(
 
 
 def fit_cdf_to_ppf_1C(
-    distribution: "Distribution", /, **options: Any
+    distribution: Distribution, /, **options: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``ppf`` from a resolvable ``cdf`` using a robust bracketing procedure.
@@ -322,7 +327,7 @@ def fit_cdf_to_ppf_1C(
 
 
 def fit_ppf_to_cdf_1C(
-    distribution: "Distribution", /, **kwargs: Any
+    distribution: Distribution, /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``cdf`` by numerically inverting a resolvable ``ppf`` with a root solver.
@@ -362,7 +367,7 @@ def fit_ppf_to_cdf_1C(
 
 
 def fit_pmf_to_cdf_1D(
-    distribution: "Distribution", /, **_: Any
+    distribution: Distribution, /, **_: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Build CDF from PMF on a discrete support by partial summation.
@@ -370,7 +375,7 @@ def fit_pmf_to_cdf_1D(
     Parameters
     ----------
     distribution : Distribution
-        Distribution exposing a discrete support on ``._support`` and a scalar
+        Distribution exposing a discrete support on ``support`` and a scalar
         ``pmf`` via the computation strategy.
 
     Returns
@@ -383,8 +388,8 @@ def fit_pmf_to_cdf_1D(
     RuntimeError
         If the distribution does not expose a discrete support.
     """
-    support = getattr(distribution, "_support", None)
-    if support is None:
+    support = distribution.support
+    if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for pmf->cdf.")
     pmf_func = _resolve(distribution, PMF)
 
@@ -398,7 +403,7 @@ def fit_pmf_to_cdf_1D(
 
 
 def fit_cdf_to_pmf_1D(
-    distribution: "Distribution", /, **_: Any
+    distribution: Distribution, /, **_: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Extract PMF from CDF on a discrete support as jump sizes.
@@ -406,7 +411,7 @@ def fit_cdf_to_pmf_1D(
     Parameters
     ----------
     distribution : Distribution
-        Distribution exposing a discrete support on ``._support`` and a scalar
+        Distribution exposing a discrete support on ``.support`` and a scalar
         ``cdf`` via the computation strategy.
 
     Returns
@@ -424,8 +429,8 @@ def fit_cdf_to_pmf_1D(
     ``pmf(x) = cdf(x) - cdf(prev(x))``, where ``prev(x)`` is the predecessor on
     the support (with ``cdf(prev) := 0`` if no predecessor exists).
     """
-    support = getattr(distribution, "_support", None)
-    if support is None:
+    support = distribution.support
+    if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for cdf->pmf.")
     cdf_func = _resolve(distribution, CDF)
 
@@ -501,7 +506,7 @@ def _collect_support_values(support: Any) -> np.ndarray:
 
 
 def fit_cdf_to_ppf_1D(
-    distribution: "Distribution", /, **options: Any
+    distribution: Distribution, /, **options: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit **discrete** PPF from a resolvable CDF and explicit discrete support.
@@ -513,7 +518,7 @@ def fit_cdf_to_ppf_1D(
 
     Requires
     --------
-    distribution._support : discrete support container (iterable or cursor-like).
+    distribution.support : discrete support container (iterable or cursor-like).
 
     Parameters
     ----------
@@ -526,9 +531,9 @@ def fit_cdf_to_ppf_1D(
     FittedComputationMethod[float, float]
         Fitted ``cdf -> ppf`` conversion for discrete 1D distributions.
     """
-    support = getattr(distribution, "_support", None)
+    support = distribution.support
     if support is None:
-        raise RuntimeError("Discrete support is required for cdf->ppf (missing _support).")
+        raise RuntimeError("Discrete support is required for cdf->ppf (missing support).")
 
     cdf_func = _resolve(distribution, CDF)
 
@@ -557,7 +562,7 @@ def fit_cdf_to_ppf_1D(
 
 
 def fit_ppf_to_cdf_1D(
-    distribution: "Distribution", /, **options: Any
+    distribution: Distribution, /, **options: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit **discrete** CDF using only a resolvable PPF via bisection on ``q``.

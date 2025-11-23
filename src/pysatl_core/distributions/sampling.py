@@ -17,11 +17,15 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Iterator
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
-import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import Any
+
+    import numpy.typing as npt
 
 
 class Sample(Protocol):

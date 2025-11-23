@@ -17,26 +17,26 @@ Notes
 - The default computation strategy can optionally cache fitted conversions.
 """
 
+from __future__ import annotations
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
-from pysatl_core.distributions.computation import (
-    AnalyticalComputation,
-    FittedComputationMethod,
-)
 from pysatl_core.distributions.registry import characteristic_registry
-from pysatl_core.distributions.sampling import ArraySample, Sample
-from pysatl_core.types import (
-    GenericCharacteristicName,
-)
+from pysatl_core.distributions.sampling import ArraySample
 
 if TYPE_CHECKING:
-    from .distribution import Distribution
+    from typing import Any
+
+    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+    from pysatl_core.distributions.distribution import Distribution
+    from pysatl_core.distributions.sampling import Sample
+    from pysatl_core.types import GenericCharacteristicName
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 
@@ -47,7 +47,7 @@ class ComputationStrategy[In, Out](Protocol):
     enable_caching: bool
 
     def query_method(
-        self, state: GenericCharacteristicName, distr: "Distribution", **options: Any
+        self, state: GenericCharacteristicName, distr: Distribution, **options: Any
     ) -> Method[In, Out]: ...
 
 
@@ -83,7 +83,7 @@ class DefaultComputationStrategy[In, Out]:
         self._cache: dict[GenericCharacteristicName, FittedComputationMethod[In, Out]] = {}
         self._resolving: dict[int, set[GenericCharacteristicName]] = {}
 
-    def _push_guard(self, distr: "Distribution", state: GenericCharacteristicName) -> None:
+    def _push_guard(self, distr: Distribution, state: GenericCharacteristicName) -> None:
         key = id(distr)
         seen = self._resolving.setdefault(key, set())
         if state in seen:
@@ -93,7 +93,7 @@ class DefaultComputationStrategy[In, Out]:
             )
         seen.add(state)
 
-    def _pop_guard(self, distr: "Distribution", state: GenericCharacteristicName) -> None:
+    def _pop_guard(self, distr: Distribution, state: GenericCharacteristicName) -> None:
         key = id(distr)
         seen = self._resolving.get(key)
         if seen is not None:
@@ -102,7 +102,7 @@ class DefaultComputationStrategy[In, Out]:
                 self._resolving.pop(key, None)
 
     def query_method(
-        self, state: GenericCharacteristicName, distr: "Distribution", **options: Any
+        self, state: GenericCharacteristicName, distr: Distribution, **options: Any
     ) -> Method[In, Out]:
         """
         Resolve an analytical or fitted method for ``state``.
@@ -168,7 +168,7 @@ class DefaultComputationStrategy[In, Out]:
 class SamplingStrategy(Protocol):
     """Protocol for sampling strategies (return a :class:`Sample`)."""
 
-    def sample(self, n: int, distr: "Distribution", **options: Any) -> Sample: ...
+    def sample(self, n: int, distr: Distribution, **options: Any) -> Sample: ...
 
 
 class DefaultSamplingUnivariateStrategy(SamplingStrategy):
@@ -184,7 +184,7 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
         A 2D sample of shape ``(n, 1)``.
     """
 
-    def sample(self, n: int, distr: "Distribution", **options: Any) -> ArraySample:
+    def sample(self, n: int, distr: Distribution, **options: Any) -> ArraySample:
         ppf = distr.query_method("ppf", **options)
         rng = np.random.default_rng()
         U = rng.random(n)
