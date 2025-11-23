@@ -14,8 +14,8 @@ from pysatl_core.distributions.computation import ComputationMethod, FittedCompu
 from pysatl_core.distributions.registry import (
     DEFAULT_COMPUTATION_KEY,
     CharacteristicRegistry,
-    EdgeConstraint,
     GraphInvariantError,
+    GraphPrimitiveConstraint,
     NumericConstraint,
     characteristic_registry,
     reset_characteristic_registry,
@@ -110,7 +110,11 @@ class TestCharacteristicRegistry(DistributionTestBase):
         reg.add_characteristic("A", is_definitive=True)
         reg.add_characteristic("B", is_definitive=True)
 
-        cons_dim2 = EdgeConstraint(dims=NumericConstraint(allowed=frozenset({2})))
+        cons_dim2 = GraphPrimitiveConstraint(
+            distribution_type_feature_constraints={
+                "dimension": NumericConstraint(allowed=frozenset({2}))
+            }
+        )
         m_ab: ComputationMethod[Any, Any] = ComputationMethod(
             target="B", sources=["A"], fitter=lambda *_a, **_k: _fitted_const(None)
         )

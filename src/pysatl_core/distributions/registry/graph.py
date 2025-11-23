@@ -43,10 +43,7 @@ import warnings
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
-from pysatl_core.distributions.registry.constraint import (
-    EdgeConstraint,
-    NodeConstraint,
-)
+from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
 from pysatl_core.distributions.registry.graph_primitives import (
     DEFAULT_COMPUTATION_KEY,
     EdgeMeta,
@@ -107,8 +104,8 @@ class CharacteristicRegistry:
         # declared nodes
         self._all_nodes: set[GenericCharacteristicName] = set()
         # node rules
-        self._presence_rules: dict[GenericCharacteristicName, NodeConstraint] = {}
-        self._def_rules: dict[GenericCharacteristicName, NodeConstraint] = {}
+        self._presence_rules: dict[GenericCharacteristicName, GraphPrimitiveConstraint] = {}
+        self._def_rules: dict[GenericCharacteristicName, GraphPrimitiveConstraint] = {}
         # label preference is retained for external consumers (not used internally here)
         self.label_preference: tuple[str, ...] = (DEFAULT_COMPUTATION_KEY,)
         self._initialized = True
@@ -144,7 +141,7 @@ class CharacteristicRegistry:
         return node in self._all_nodes
 
     def _add_presence_rule(
-        self, name: GenericCharacteristicName, constraint: NodeConstraint | None
+        self, name: GenericCharacteristicName, constraint: GraphPrimitiveConstraint | None
     ) -> None:
         """
         Register a presence rule for a node.
@@ -168,11 +165,11 @@ class CharacteristicRegistry:
             )
             return
         self._presence_rules.setdefault(
-            name, constraint if constraint is not None else NodeConstraint()
+            name, constraint if constraint is not None else GraphPrimitiveConstraint()
         )
 
     def _add_definitive_rule(
-        self, name: GenericCharacteristicName, constraint: NodeConstraint | None
+        self, name: GenericCharacteristicName, constraint: GraphPrimitiveConstraint | None
     ) -> None:
         """
         Register a definitiveness rule for a node.
@@ -195,7 +192,9 @@ class CharacteristicRegistry:
                 stacklevel=3,
             )
             return
-        self._def_rules.setdefault(name, constraint if constraint is not None else NodeConstraint())
+        self._def_rules.setdefault(
+            name, constraint if constraint is not None else GraphPrimitiveConstraint()
+        )
 
     # --------------------------------------------------------------------- #
     # Public API
@@ -206,7 +205,7 @@ class CharacteristicRegistry:
         method: ComputationMethod[Any, Any],
         *,
         label: str = DEFAULT_COMPUTATION_KEY,
-        constraint: EdgeConstraint | None = None,
+        constraint: GraphPrimitiveConstraint | None = None,
     ) -> None:
         """
         Add a labeled **unary** computation edge.
@@ -247,7 +246,7 @@ class CharacteristicRegistry:
         self._adj[src][dst][label].append(
             EdgeMeta(
                 method=method,
-                constraint=constraint or EdgeConstraint(),
+                constraint=constraint or GraphPrimitiveConstraint(),
             )
         )
 
@@ -256,8 +255,8 @@ class CharacteristicRegistry:
         name: GenericCharacteristicName,
         is_definitive: bool,
         *,
-        presence_constraint: NodeConstraint | None = None,
-        definitive_constraint: NodeConstraint | None = None,
+        presence_constraint: GraphPrimitiveConstraint | None = None,
+        definitive_constraint: GraphPrimitiveConstraint | None = None,
     ) -> None:
         """
         Declare a characteristic node with presence and optional definitiveness.
@@ -371,7 +370,7 @@ class CharacteristicRegistry:
                 kept: dict[str, EdgeMeta] = {}
                 for label, metas in variants.items():
                     for edge in metas:
-                        if (edge.constraint or EdgeConstraint()).allows(distr):
+                        if (edge.constraint or GraphPrimitiveConstraint()).allows(distr):
                             kept[label] = edge
                             # TODO: It is possible that there are two edges under the same label
                             #  that fit the same distribution, this should not be the case.

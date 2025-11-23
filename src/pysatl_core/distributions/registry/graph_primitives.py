@@ -11,7 +11,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.registry.constraint import _GraphPrimitiveConstraint
+from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
 
 if TYPE_CHECKING:
     from typing import Any
@@ -24,7 +24,7 @@ DEFAULT_COMPUTATION_KEY: str = "PySATL_default_computation"
 @dataclass(frozen=True, slots=True)
 class EdgeMeta:
     method: ComputationMethod[Any, Any]
-    constraint: _GraphPrimitiveConstraint = field(default_factory=_GraphPrimitiveConstraint)
+    constraint: GraphPrimitiveConstraint = field(default_factory=GraphPrimitiveConstraint)
 
 
 class GraphInvariantError(RuntimeError):

@@ -23,8 +23,7 @@ from .configuration import (
 # Constraint layer
 from .constraint import (
     Constraint,
-    EdgeConstraint,
-    NodeConstraint,
+    GraphPrimitiveConstraint,
     NumericConstraint,
     SetConstraint,
 )
@@ -51,8 +50,7 @@ __all__ = [
     "Constraint",
     "SetConstraint",
     "NumericConstraint",
-    "EdgeConstraint",
-    "NodeConstraint",
+    "GraphPrimitiveConstraint",
     # graph
     "CharacteristicRegistry",
     "RegistryView",
