@@ -67,5 +67,3 @@ class Distribution(Protocol):
 
     def sample(self, n: int, **options: Any) -> Sample:
         return self.sampling_strategy.sample(n, distr=self, **options)
-
-    def log_likelihood(self, batch: Sample) -> float: ...

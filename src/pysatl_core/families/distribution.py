@@ -127,9 +127,6 @@ class ParametricFamilyDistribution(Distribution):
     def _support(self) -> Support:
         return self.family._support_resolver(self.parameters)
 
-    def log_likelihood(self, batch: Sample) -> float:
-        raise NotImplementedError
-
     def sample(self, n: int, **options: Any) -> Sample:
         """
         Generate samples from this distribution.

@@ -20,6 +20,7 @@ from typing import Any
 from pysatl_core.distributions import (
     ComputationStrategy,
     DefaultComputationStrategy,
+    DefaultSamplingUnivariateStrategy,
     SamplingStrategy,
 )
 from pysatl_core.distributions.computation import AnalyticalComputation
@@ -76,8 +77,8 @@ class ParametricFamily:
             GenericCharacteristicName,
             dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
         ],
-        sampling_strategy: SamplingStrategy,
-        computation_strategy: ComputationStrategy[Any, Any] = DefaultComputationStrategy(),
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy[Any, Any] | None = None,
         support_by_parametrization: SupportArg = None,
     ):
         """
@@ -107,6 +108,10 @@ class ParametricFamily:
             (lambda params: distr_type) if isinstance(distr_type, DistributionType) else distr_type
         )
 
+        self.computation_strategy = (
+            DefaultComputationStrategy() if computation_strategy is None else computation_strategy
+        )
+
         if support_by_parametrization is None:
             self._support_resolver: Callable[[Parametrization], Support | None]
             self._support_resolver = lambda _params: None
@@ -120,8 +125,9 @@ class ParametricFamily:
         # Runtime registry of parametrization classes (formerly in ParametrizationSpec)
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
 
-        self.sampling_strategy = sampling_strategy
-        self.computation_strategy = computation_strategy
+        self.sampling_strategy = (
+            DefaultSamplingUnivariateStrategy() if sampling_strategy is None else sampling_strategy
+        )
 
         def _process_char_val(
             value: dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
