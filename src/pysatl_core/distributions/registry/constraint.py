@@ -26,7 +26,6 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol
@@ -37,6 +36,7 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.distribution import Distribution
 
+
 # --------------------------------------------------------------------------- #
 # Value-level constraints (do not depend on a distribution)
 # --------------------------------------------------------------------------- #
@@ -46,6 +46,21 @@ class Constraint(Protocol):
     """Protocol for value-level constraints."""
 
     def allows(self, value: Any) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NonNullConstraint:
+    """
+    Constraint that accepts any value except None.
+
+    Semantics
+    ---------
+    - value is None  -> False
+    - otherwise      -> True
+    """
+
+    def allows(self, value: Any) -> bool:
+        return value is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,64 +125,48 @@ class NumericConstraint:
 
 
 @dataclass(frozen=True, slots=True)
-class _GraphPrimitiveConstraint(ABC):
+class GraphPrimitiveConstraint:
     """
-    Abstract base for applicability constraints that depend on a distribution.
-    Subclasses must implement `allows(distr: Distribution) -> bool`.
+    Base for applicability constraints that depend on a distribution.
+
+    All type-level constraints are expressed via `distribution_type_feature_constraints`.
+    Keys are feature names obtained from the distribution type.
     """
 
-    kinds: SetConstraint | None = None
-    dims: NumericConstraint | None = None
-    feature_constraints: Mapping[str, Constraint] = field(
+    distribution_type_feature_constraints: Mapping[str, Constraint] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+    distribution_instance_feature_constraints: Mapping[str, Constraint] = field(
         default_factory=lambda: MappingProxyType({})
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.feature_constraints, MappingProxyType):
+        """Wrap provided mappings into read-only proxies for immutability."""
+        if not isinstance(self.distribution_type_feature_constraints, MappingProxyType):
             object.__setattr__(
                 self,
-                "feature_constraints",
-                MappingProxyType(dict(self.feature_constraints)),
+                "distribution_type_feature_constraints",
+                MappingProxyType(dict(self.distribution_type_feature_constraints)),
+            )
+        if not isinstance(self.distribution_instance_feature_constraints, MappingProxyType):
+            object.__setattr__(
+                self,
+                "distribution_instance_feature_constraints",
+                MappingProxyType(dict(self.distribution_instance_feature_constraints)),
             )
 
-    @staticmethod
-    def _get_feature(distr: Distribution, key: str) -> Any:
-        dt = getattr(distr, "distribution_type", None)
-        if dt is not None and hasattr(dt, key):
-            return getattr(dt, key)
-        return getattr(distr, key, None)
+    def allows(self, distr: Distribution) -> bool:
+        features = distr.distribution_type.registry_features
 
-    def _base_allows(self, distr: Distribution) -> bool:
-        if self.kinds is not None:
-            k = self._get_feature(distr, "kind")
-            if not self.kinds.allows(k):
+        for name, cons in self.distribution_type_feature_constraints.items():
+            value = features.get(name, None)
+            if not cons.allows(value):
                 return False
-        if self.dims is not None:
-            d = self._get_feature(distr, "dim") or self._get_feature(distr, "dimension")
-            if not self.dims.allows(d):
+
+        for name, cons in self.distribution_instance_feature_constraints.items():
+            value = getattr(distr, name, None)
+            if not cons.allows(value):
                 return False
-        for key, cons in self.feature_constraints.items():
-            v = self._get_feature(distr, key)
-            if not cons.allows(v):
-                return False
+
         return True
-
-    @abstractmethod
-    def allows(self, distr: Distribution) -> bool:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True, slots=True)
-class NodeConstraint(_GraphPrimitiveConstraint):
-    def allows(self, distr: Distribution) -> bool:
-        return self._base_allows(distr)
-
-
-@dataclass(frozen=True, slots=True)
-class EdgeConstraint(_GraphPrimitiveConstraint):
-    requires_support: bool = False
-
-    def allows(self, distr: Distribution) -> bool:
-        if not self._base_allows(distr):
-            return False
-        return not (self.requires_support and getattr(distr, "_support", None) is None)
