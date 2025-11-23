@@ -30,23 +30,23 @@ Notes
   disambiguation flags (e.g., ``most_left``), etc.
 """
 
+from __future__ import annotations
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
-
-from mypy_extensions import KwArg
-
-from pysatl_core.types import (
-    GenericCharacteristicName,
-)
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+    from typing import Any
+
+    from mypy_extensions import KwArg
+
     from pysatl_core.distributions.distribution import Distribution
+    from pysatl_core.types import GenericCharacteristicName
 
 
 @runtime_checkable
@@ -97,7 +97,7 @@ class ComputationMethodProtocol[In, Out](Protocol):
     @property
     def sources(self) -> Sequence[GenericCharacteristicName]: ...
     def fit(
-        self, distribution: "Distribution", **options: Any
+        self, distribution: Distribution, **options: Any
     ) -> FittedComputationMethodProtocol[In, Out]: ...
 
 
@@ -169,8 +169,8 @@ class ComputationMethod[In, Out]:
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    fitter: Callable[["Distribution", KwArg(Any)], FittedComputationMethod[In, Out]]
+    fitter: Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
 
-    def fit(self, distribution: "Distribution", **options: Any) -> FittedComputationMethod[In, Out]:
+    def fit(self, distribution: Distribution, **options: Any) -> FittedComputationMethod[In, Out]:
         """Fit and return a :class:`FittedComputationMethod`."""
         return self.fitter(distribution, **options)

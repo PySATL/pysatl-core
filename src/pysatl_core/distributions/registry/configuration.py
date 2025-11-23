@@ -15,7 +15,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from functools import lru_cache
 
-from pysatl_core.distributions import ComputationMethod
+from pysatl_core.distributions.computation import ComputationMethod
 from pysatl_core.distributions.fitters import (
     fit_cdf_to_pdf_1C,
     fit_cdf_to_pmf_1D,

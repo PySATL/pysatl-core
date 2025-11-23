@@ -22,20 +22,24 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from pysatl_core.distributions.computation import AnalyticalComputation
-from pysatl_core.distributions.sampling import Sample
-from pysatl_core.distributions.strategies import (
-    ComputationStrategy,
-    Method,
-    SamplingStrategy,
-)
-from pysatl_core.types import (
-    DistributionType,
-    GenericCharacteristicName,
-)
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import Any
+
+    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.sampling import Sample
+    from pysatl_core.distributions.strategies import (
+        ComputationStrategy,
+        Method,
+        SamplingStrategy,
+    )
+    from pysatl_core.distributions.support import Support
+    from pysatl_core.types import (
+        DistributionType,
+        GenericCharacteristicName,
+    )
 
 
 @runtime_checkable
@@ -54,6 +58,9 @@ class Distribution(Protocol):
     def sampling_strategy(self) -> SamplingStrategy: ...
     @property
     def computation_strategy(self) -> ComputationStrategy[Any, Any]: ...
+
+    @property
+    def support(self) -> Support | None: ...
 
     def query_method(
         self, characteristic_name: GenericCharacteristicName, **options: Any

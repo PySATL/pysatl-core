@@ -78,22 +78,9 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         """Computation strategy instance."""
         return DefaultComputationStrategy()
 
-    def log_likelihood(self, batch: Sample) -> float:
-        """
-        Compute the log-likelihood of the given batch.
-
-        Notes
-        -----
-        Characteristic functions are assumed to be scalar (``float -> float``);
-        hence values are computed element-wise.
-        """
-        name = "pdf" if self.distribution_type.kind == "continuous" else "pmf"
-        method = self.query_method(name)
-        xs = np.asarray(batch.array, dtype=np.float64).ravel()
-        vals = np.fromiter((float(method(float(x))) for x in xs), dtype=np.float64, count=xs.size)
-        if np.any(vals <= 0.0):
-            return float("-inf")
-        return float(np.sum(np.log(vals)))
+    @property
+    def support(self):
+        return None
 
 
 # ---------------------------------------------------------------------------

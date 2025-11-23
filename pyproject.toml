@@ -68,6 +68,7 @@ format.line-ending = "lf"
 
 lint.select = [ "B", "C4", "E", "F", "I", "ISC", "PIE", "SIM", "TID", "UP" ]
 lint.ignore = [ "B008", "E203" ]
+lint.per-file-ignores."__init__.py" = [ "F403" ]
 lint.fixable = [ "ALL" ]
 lint.unfixable = [  ]
 

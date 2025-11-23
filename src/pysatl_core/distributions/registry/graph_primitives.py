@@ -9,10 +9,14 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.computation import ComputationMethod
 from pysatl_core.distributions.registry.constraint import _GraphPrimitiveConstraint
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from pysatl_core.distributions.computation import ComputationMethod
 
 DEFAULT_COMPUTATION_KEY: str = "PySATL_default_computation"
 

@@ -30,8 +30,10 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import bisect
-from collections.abc import Iterable, Iterator
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 
 class Support(Protocol):

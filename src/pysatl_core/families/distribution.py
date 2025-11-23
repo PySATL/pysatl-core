@@ -13,27 +13,27 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
 
-from pysatl_core.distributions import (
-    AnalyticalComputation,
-    ComputationStrategy,
-    Distribution,
-    Sample,
-    SamplingStrategy,
-)
-from pysatl_core.families.parametrizations import Parametrization
-from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.families.support import Support
-from pysatl_core.types import (
-    DistributionType,
-    GenericCharacteristicName,
-)
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from pysatl_core.distributions.distribution import Distribution
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import Any
+
+    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.sampling import Sample
+    from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
+    from pysatl_core.distributions.support import Support
     from pysatl_core.families.parametric_family import ParametricFamily
+    from pysatl_core.families.parametrizations import Parametrization
+    from pysatl_core.families.registry import ParametricFamilyRegister
+    from pysatl_core.types import (
+        DistributionType,
+        GenericCharacteristicName,
+    )
 
 
 @dataclass(slots=True)
@@ -57,6 +57,7 @@ class ParametricFamilyDistribution(Distribution):
     family_name: str
     _distribution_type: DistributionType
     parameters: Parametrization
+    _support: Support | None
 
     @property
     def distribution_type(self) -> DistributionType:
@@ -124,8 +125,8 @@ class ParametricFamilyDistribution(Distribution):
         return self.family.computation_strategy
 
     @property
-    def _support(self) -> Support:
-        return self.family._support_resolver(self.parameters)
+    def support(self) -> Support | None:
+        return self.family.support_resolver(self.parameters)
 
     def sample(self, n: int, **options: Any) -> Sample:
         """
