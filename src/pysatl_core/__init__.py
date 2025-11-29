@@ -16,10 +16,13 @@ from .distributions import *
 from .distributions import __all__ as _distr_all
 from .families import *
 from .families import __all__ as _family_all
+from .types import *
+from .types import __all__ as _types_all
 
 __version__ = version("pysatl-core")
 __all__ = [
     "__version__",
     *_distr_all,
     *_family_all,
+    *_types_all,
 ]

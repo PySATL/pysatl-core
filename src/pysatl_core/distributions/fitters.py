@@ -38,7 +38,11 @@ from scipy import (
 )
 
 from pysatl_core.distributions.computation import FittedComputationMethod
-from pysatl_core.distributions.support import DiscreteSupport
+from pysatl_core.distributions.support import (
+    DiscreteSupport,
+    ExplicitTableDiscreteSupport,
+    IntegerLatticeDiscreteSupport,
+)
 
 if TYPE_CHECKING:
     from typing import Any
@@ -372,34 +376,77 @@ def fit_pmf_to_cdf_1D(
     """
     Build CDF from PMF on a discrete support by partial summation.
 
-    Parameters
-    ----------
-    distribution : Distribution
-        Distribution exposing a discrete support on ``support`` and a scalar
-        ``pmf`` via the computation strategy.
+    The behaviour depends on the kind of discrete support:
 
-    Returns
-    -------
-    FittedComputationMethod[float, float]
-        Fitted ``pmf -> cdf`` conversion.
+    * For table-like supports and left-bounded integer lattices, the CDF is
+      constructed as a prefix sum over all support points ``k <= x``.
+    * For right-bounded integer lattices (support extends to ``-inf``), the CDF
+      is computed via a *tail* sum:
 
-    Raises
-    ------
-    RuntimeError
-        If the distribution does not expose a discrete support.
+          CDF(x) = 1 - sum_{k > x} pmf(k),
+
+      which only involves finitely many points.
+    * Two-sided infinite integer lattices are not supported by this fitter —
+      a numerically truncated algorithm would require additional configuration
+      and is left for future work.
     """
     support = distribution.support
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for pmf->cdf.")
+
     pmf_func = _resolve(distribution, PMF)
 
-    def _cdf(x: float) -> float:
+    # Special case: right-bounded integer lattice
+    if isinstance(support, IntegerLatticeDiscreteSupport):
+        # Two-sided infinite lattice: exact pmf->cdf is not feasible without
+        # additional truncation policy.
+        if not support.is_left_bounded and not support.is_right_bounded:
+            raise RuntimeError(
+                "pmf->cdf for a two-sided infinite integer lattice is not supported "
+                "by the generic fitter. Provide an analytical CDF or a custom fitter."
+            )
+
+        # Right-bounded, left-unbounded: use tail summation.
+        if not support.is_left_bounded and support.max_k is not None:
+            max_k = support.max_k
+
+            def _cdf(x: float) -> float:
+                # Everything to the right of the upper bound has CDF == 1.
+                if x >= max_k:
+                    return 1.0
+
+                import math
+
+                # First integer strictly greater than x
+                threshold = int(math.floor(float(x)))
+                k = threshold + 1
+                if k > max_k:
+                    return 1.0
+
+                # Align to the lattice: smallest k >= candidate with k ≡ residue (mod modulus)
+                offset = (k - support.residue) % support.modulus
+                if offset != 0:
+                    k += support.modulus - offset
+                if k > max_k:
+                    return 1.0
+
+                tail = 0.0
+                cur = k
+                while cur <= max_k:
+                    tail += float(pmf_func(float(cur)))
+                    cur += support.modulus
+
+                return float(np.clip(1.0 - tail, 0.0, 1.0))
+
+            return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf)
+
+    def _cdf_prefix(x: float) -> float:
         s = 0.0
         for k in support.iter_leq(x):
             s += float(pmf_func(float(k)))
         return float(np.clip(s, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf)
+    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_prefix)
 
 
 def fit_cdf_to_pmf_1D(
@@ -451,10 +498,16 @@ def _collect_support_values(support: Any) -> np.ndarray:
     """
     Try to extract a sorted array of support values from a discrete support object.
 
-    Accepted shapes (auto-detected in order):
-      * iterable support: for x in support
-      * support.values() / support.to_list()
-      * cursor API: support.first()/next(x)
+    For built-in discrete supports:
+
+    * ExplicitTableDiscreteSupport -> uses ``.points`` (already sorted and unique).
+    * IntegerLatticeDiscreteSupport with finite bounds -> explicit ``arange`` over the grid.
+
+    For user-defined supports, the following shapes are auto-detected in order:
+
+    * iterable support: ``for x in support``
+    * ``support.values()`` / ``support.to_list()``
+    * cursor API: ``support.first()`` / ``support.next(x)``
 
     Returns
     -------
@@ -464,16 +517,36 @@ def _collect_support_values(support: Any) -> np.ndarray:
     Raises
     ------
     RuntimeError
-        If the support cannot be iterated by any of the strategies.
+        If the support cannot be iterated by any of the strategies or if it
+        corresponds to an unbounded integer lattice that cannot be enumerated.
     """
-    xs: list[float] = []
+    # 0) Built-in explicit table support: finite, sorted, unique.
+    if isinstance(support, ExplicitTableDiscreteSupport):
+        xs = np.asarray(support.points, dtype=float)
+        return xs
+
+    # 0.1) Built-in integer lattice with finite bounds: finite grid.
+    if isinstance(support, IntegerLatticeDiscreteSupport):
+        if support.min_k is not None and support.max_k is not None:
+            first = support.first()
+            if first is None:
+                return np.asarray([], dtype=float)
+            xs = np.arange(first, support.max_k + 1, support.modulus, dtype=float)
+            return xs
+
+        raise RuntimeError(
+            "Cannot collect all support values for an unbounded IntegerLatticeDiscreteSupport. "
+            "Use lattice-aware fitters instead of _collect_support_values."
+        )
+
+    xs_list: list[float] = []
 
     # 1) Direct iteration
     try:
         it = iter(support)  # may raise TypeError
-        xs = [float(v) for v in it]
-        if xs:
-            return np.asarray(sorted(xs), dtype=float)
+        xs_list = [float(v) for v in it]
+        if xs_list:
+            return np.asarray(sorted(xs_list), dtype=float)
     except Exception:
         pass
 
@@ -482,9 +555,9 @@ def _collect_support_values(support: Any) -> np.ndarray:
         if hasattr(support, name):
             try:
                 seq = getattr(support, name)()
-                xs = [float(v) for v in seq]
-                if xs:
-                    return np.asarray(sorted(xs), dtype=float)
+                xs_list = [float(v) for v in seq]
+                if xs_list:
+                    return np.asarray(sorted(xs_list), dtype=float)
             except Exception:
                 pass
 
@@ -492,13 +565,13 @@ def _collect_support_values(support: Any) -> np.ndarray:
     if hasattr(support, "first") and hasattr(support, "next"):
         try:
             cur = support.first()
-            seen = set()
+            seen: set[Any] = set()
             while cur is not None and cur not in seen:
                 seen.add(cur)
-                xs.append(float(cur))
+                xs_list.append(float(cur))
                 cur = support.next(cur)
-            if xs:
-                return np.asarray(sorted(xs), dtype=float)
+            if xs_list:
+                return np.asarray(sorted(xs_list), dtype=float)
         except Exception:
             pass
 
@@ -532,8 +605,8 @@ def fit_cdf_to_ppf_1D(
         Fitted ``cdf -> ppf`` conversion for discrete 1D distributions.
     """
     support = distribution.support
-    if support is None:
-        raise RuntimeError("Discrete support is required for cdf->ppf (missing support).")
+    if support is None or not isinstance(support, DiscreteSupport):
+        raise RuntimeError("Discrete support is required for cdf->ppf.")
 
     cdf_func = _resolve(distribution, CDF)
 

@@ -1,270 +1,272 @@
-"""
-Support primitives for distribution families.
-
-This module defines concrete implementations of the base `DiscreteSupport`
-protocol that provide ordered access to discrete supports (sets of points)
-required for robust conversions between distribution characteristics
-(e.g., PMF ↔ CDF) in discrete settings.
-
-Maybe it'll be Support for other kinds of distributions soon
-
-Classes
--------
-ExplicitTableDiscreteSupport
-    Finite, explicitly provided, ordered set of support points.
-
-IntegerLatticeDiscreteSupport
-    Integer lattice support of the form { start + n * step | n ∈ Z },
-    optionally bounded to a finite interval.
-
-Notes
------
-These implementations are intentionally minimal and agnostic to any particular
-family; they provide only the ordered traversal primitives needed by fitters.
-"""
-
 from __future__ import annotations
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-import bisect
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from dataclasses import dataclass
+from math import floor
+from typing import TYPE_CHECKING, Protocol, cast, overload, runtime_checkable
+
+import numpy as np
+
+from pysatl_core.types import BoolArray, Interval1D, Number, NumericArray
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
 
+@runtime_checkable
 class Support(Protocol):
-    """Marker protocol for any support object."""
+    @overload
+    def contains(self, x: Number) -> bool: ...
+    @overload
+    def contains(self, x: NumericArray) -> BoolArray: ...
+
+
+class ContinuousSupport(Interval1D, Support): ...
 
 
 @runtime_checkable
 class DiscreteSupport(Support, Protocol):
-    """
-    Protocol for ordered access to discrete supports.
+    def iter_points(self) -> Iterator[Number]: ...
 
-    Methods
-    -------
-    iter_points() -> Iterable[int | float]
-        Iterate over all support points in non-decreasing order.
+    def iter_leq(self, x: Number) -> Iterator[Number]: ...
 
-    iter_leq(x: int | float) -> Iterable[int | float]
-        Iterate over support points that are less than or equal to `x`.
-
-    prev(x: int | float) -> int | float | None
-        Return the greatest support point strictly less than `x`, or `None`
-        if such a point does not exist.
-    """
-
-    def iter_points(self) -> Iterable[int | float]: ...
-    def iter_leq(self, x: int | float) -> Iterable[int | float]: ...
-    def prev(self, x: int | float) -> int | float | None: ...
+    def prev(self, x: Number) -> Number | None: ...
 
 
 class ExplicitTableDiscreteSupport(DiscreteSupport):
-    """
-    Finite discrete support defined by an explicit list of points.
-
-    Parameters
-    ----------
-    points : Iterable[int | float]
-        Collection of support points. Duplicates are allowed but not recommended.
-    assume_sorted : bool, default False
-        If `True`, the input `points` are assumed to be already sorted
-        in non-decreasing order. If `False`, the constructor sorts them.
-
-    Attributes
-    ----------
-    _points : list[int | float]
-        Sorted list of support points.
-
-    Notes
-    -----
-    - `iter_points` returns an iterator over the entire support.
-    - `iter_leq(x)` returns an iterator over the prefix `<= x`.
-    - `prev(x)` returns the largest support point strictly less than `x`,
-      or `None` if no such point exists.
-    """
-
     __slots__ = ("_points",)
 
-    def __init__(self, points: Iterable[int | float]) -> None:
-        points_list = list(points)
-        points_list.sort()
-        self._points: list[int | float] = points_list
+    def __init__(self, points: Iterable[Number], assume_sorted: bool = False) -> None:
+        arr = np.array(points)
 
-    def iter_points(self) -> Iterable[int | float]:
-        """
-        Iterate over the entire set of support points.
+        if arr.size == 0:
+            raise ValueError("Points must be non-empty")
 
-        Returns
-        -------
-        Iterable[int | float]
-            Iterator over all points in non-decreasing order.
-        """
+        if not assume_sorted:
+            arr.sort()
+
+        unique_mask = np.empty(arr.size, dtype=bool)
+        unique_mask[0] = True
+        unique_mask[1:] = arr[1:] != arr[:-1]
+
+        self._points = arr[unique_mask]
+
+    @overload
+    def contains(self, x: Number) -> bool: ...
+    @overload
+    def contains(self, x: NumericArray) -> BoolArray: ...
+
+    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        arr = np.asarray(x)
+        idx = np.searchsorted(self._points, arr, side="left")
+
+        size = self._points.size
+        in_bounds = (idx >= 0) & (idx < size)
+
+        idx_clipped = np.minimum(idx, size - 1)
+        eq = self._points[idx_clipped] == arr
+
+        result = in_bounds & eq
+
+        if np.ndim(arr) == 0:
+            return bool(result)
+        return cast(BoolArray, result)
+
+    def __contains__(self, x: object) -> bool:
+        return bool(self.contains(cast(Number, x)))
+
+    def iter_points(self) -> Iterator[Number]:
         return iter(self._points)
 
-    def iter_leq(self, x: int | float) -> Iterable[int | float]:
-        """
-        Iterate over support points less than or equal to `x`.
+    def iter_leq(self, x: Number) -> Iterator[Number]:
+        return iter(self._points[: np.searchsorted(self._points, x, side="right")])
 
-        Parameters
-        ----------
-        x : int | float
-            Threshold value.
-
-        Returns
-        -------
-        Iterable[int | float]
-            Iterator over the prefix of points `<= x`.
-        """
-        last_index = bisect.bisect_right(self._points, x) - 1
-        if last_index < 0:
-            return iter(())
-        return iter(self._points[: last_index + 1])
-
-    def prev(self, x: int | float) -> int | float | None:
-        """
-        Return the greatest support point strictly less than `x`.
-
-        Parameters
-        ----------
-        x : int | float
-            Reference value.
-
-        Returns
-        -------
-        int | float | None
-            The greatest point `< x`, or `None` if none exists.
-        """
-        insertion_index = bisect.bisect_left(self._points, x)
-        if insertion_index <= 0:
+    def prev(self, x: Number) -> Number | None:
+        idx = np.searchsorted(self._points, x, side="left")
+        if idx == 0:
             return None
-        return self._points[insertion_index - 1]
+        return cast(Number, self._points[idx - 1])
+
+    def first(self) -> Number:
+        return cast(Number, self._points[0])
+
+    def next(self, current: Number) -> Number | None:
+        idx = np.searchsorted(self._points, current, side="right")
+        if idx == self._points.size:
+            return None
+        return cast(Number, self._points[idx])
+
+    @property
+    def points(self) -> NumericArray:
+        return cast(NumericArray, self._points.copy())
+
+    __iter__ = iter_points
 
 
+@dataclass(slots=True)
 class IntegerLatticeDiscreteSupport(DiscreteSupport):
-    """
-    Discrete support on an integer lattice with optional finite bounds.
+    residue: int
+    modulus: int
+    min_k: int | None = None
+    max_k: int | None = None
 
-    The support is defined as:
-        S = { start + n * step | n ∈ Z }
-    and can be restricted to an interval by `min_k` and/or `max_k`.
+    def __post_init__(self) -> None:
+        if self.modulus <= 0:
+            raise ValueError("modulus must be a positive integer.")
 
-    Parameters
-    ----------
-    start : int
-        Lattice origin.
-    step : int, default 1
-        Positive lattice step.
-    min_k : int | None, optional
-        Inclusive lower bound on support values. If not aligned to the lattice,
-        the first yielded value will be the smallest lattice point `>= min_k`.
-    max_k : int | None, optional
-        Inclusive upper bound on support values.
+    @overload
+    def contains(self, x: Number) -> bool: ...
+    @overload
+    def contains(self, x: NumericArray) -> BoolArray: ...
 
-    Attributes
-    ----------
-    start : int
-        Lattice origin.
-    step : int
-        Positive lattice step.
-    min_k : int | None
-        Inclusive lower bound on support values (may be unaligned).
-    max_k : int | None
-        Inclusive upper bound on support values.
+    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        xf = np.asarray(x, dtype=float)
+        v = np.floor(xf).astype(int)
+        is_integer = xf == v
 
-    Notes
-    -----
-    - `iter_points` yields all lattice points within bounds in ascending order.
-    - `iter_leq(x)` yields all bounded lattice points `<= x`.
-    - `prev(x)` returns the largest lattice point strictly less than `x`,
-      or `None` if it falls below `min_k`.
-    """
+        mask = is_integer
+        if self.min_k is not None:
+            mask &= v >= self.min_k
+        if self.max_k is not None:
+            mask &= v <= self.max_k
 
-    __slots__ = ("start", "step", "min_k", "max_k")
+        step_ok = ((v - self.residue) % self.modulus) == 0
+        mask &= step_ok
 
-    def __init__(
-        self,
-        start: int,
-        step: int = 1,
-        *,
-        min_k: int | None = None,
-        max_k: int | None = None,
-    ) -> None:
-        if step <= 0:
-            raise ValueError("step must be positive")
-        self.start: int = int(start)
-        self.step: int = int(step)
-        self.min_k: int | None = None if min_k is None else int(min_k)
-        self.max_k: int | None = None if max_k is None else int(max_k)
+        result = mask.astype(bool)
 
-    def iter_points(self) -> Iterable[int]:
-        """
-        Iterate over all lattice points subject to bounds.
+        if np.ndim(xf) == 0:
+            return bool(result)
+        return cast(BoolArray, result)
 
-        Returns
-        -------
-        Iterable[int]
-            Iterator over bounded lattice points in ascending order.
-        """
-        first_value = self.min_k if self.min_k is not None else self.start
-        if (first_value - self.start) % self.step != 0:
-            alignment_offset = (self.step - ((first_value - self.start) % self.step)) % self.step
-            first_value = first_value + alignment_offset
+    def __contains__(self, x: object) -> bool:
+        return bool(self.contains(cast(Number, x)))
 
-        current_value = first_value
-        while self.max_k is None or current_value <= self.max_k:
-            yield current_value
-            current_value += self.step
+    def iter_points(self) -> Iterator[int]:
+        first = self.first()
+        last = self.last()
 
-    def iter_leq(self, x: int | float) -> Iterable[int]:
-        """
-        Iterate over lattice points less than or equal to `x`.
-
-        Parameters
-        ----------
-        x : int | float
-            Threshold value.
-
-        Returns
-        -------
-        Iterable[int]
-            Iterator over lattice points `<= x` within bounds.
-        """
-        smallest_value = self.min_k if self.min_k is not None else self.start
-        if x < smallest_value:
+        if first is not None and last is not None and first > last:
             return iter(())
 
-        def generate() -> Iterator[int]:
-            for support_value in self.iter_points():
-                if support_value <= int(x):
-                    yield support_value
-                else:
-                    break
+        if first is not None:
 
-        return generate()
+            def _gen_lr() -> Iterator[int]:
+                current = first
+                while self.max_k is None or current <= self.max_k:
+                    yield current
+                    current += self.modulus
 
-    def prev(self, x: int | float) -> int | None:
-        """
-        Return the greatest lattice point strictly less than `x`.
+            return _gen_lr()
 
-        Parameters
-        ----------
-        x : int | float
-            Reference value.
+        if last is not None:
 
-        Returns
-        -------
-        int | None
-            The lattice point `< x` with the largest value, or `None` if it
-            would be below `min_k`.
-        """
-        x_int = int(x)
-        target_value = x_int - 1
-        candidate_value = self.start + ((target_value - self.start) // self.step) * self.step
-        if self.min_k is not None and candidate_value < self.min_k:
+            def _gen_rl() -> Iterator[int]:
+                current = last
+                while self.min_k is None or current >= self.min_k:
+                    yield current
+                    current -= self.modulus
+
+            return _gen_rl()
+
+        raise RuntimeError(
+            "Cannot iterate points for an unbounded IntegerLatticeDiscreteSupport "
+            "(both min_k and max_k are None). Provide at least one bound to enable enumeration."
+        )
+
+    def iter_leq(self, x: Number) -> Iterator[int]:
+        if self.min_k is None:
+            raise RuntimeError(
+                "iter_leq is not supported for left-unbounded IntegerLatticeDiscreteSupport. "
+                "Provide min_k to enable iter_leq."
+            )
+        first = self.first()
+        if first is None:
+            return iter(())
+
+        threshold = int(floor(float(x)))
+        if threshold < first:
+            return iter(())
+        last = threshold
+        if self.max_k is not None and last > self.max_k:
+            last = self.max_k
+        offset = (last - self.residue) % self.modulus
+        last = last - offset
+        if last < first:
+            return iter(())
+
+        def _gen() -> Iterator[int]:
+            current = first
+            while current <= last:
+                yield current
+                current += self.modulus
+
+        return _gen()
+
+    def prev(self, x: Number) -> int | None:
+        if self.min_k is not None and float(x) <= self.min_k:
             return None
-        return candidate_value
+        target = int(floor(float(x))) - 1
+        if self.max_k is not None and target > self.max_k:
+            target = self.max_k
+        if self.min_k is not None and target < self.min_k:
+            return None
+        candidate = self.residue + ((target - self.residue) // self.modulus) * self.modulus
+        if self.min_k is not None and candidate < self.min_k:
+            return None
+        if self.max_k is not None and candidate > self.max_k:
+            return None
+        return candidate
+
+    def first(self) -> int | None:
+        if self.min_k is None:
+            return None
+        first = self.min_k
+        offset = (first - self.residue) % self.modulus
+        if offset != 0:
+            first = first + (self.modulus - offset)
+        if self.max_k is not None and first > self.max_k:
+            return None
+        return first
+
+    def last(self) -> int | None:
+        if self.max_k is None:
+            return None
+        last = self.max_k
+        offset = (last - self.residue) % self.modulus
+        last = last - offset
+        if self.min_k is not None and last < self.min_k:
+            return None
+        return last
+
+    def next(self, current: int) -> int | None:
+        nxt = current + self.modulus
+        if self.max_k is not None and nxt > self.max_k:
+            return None
+        if self.min_k is not None and nxt < self.min_k:
+            return None
+        return nxt
+
+    @property
+    def is_left_bounded(self) -> bool:
+        return self.min_k is not None
+
+    @property
+    def is_right_bounded(self) -> bool:
+        return self.max_k is not None
+
+    __iter__ = iter_points
+
+
+__all__ = [
+    # Base support protocol
+    "Support",
+    "ContinuousSupport",
+    # Discrete support protocol and implementations
+    "DiscreteSupport",
+    "ExplicitTableDiscreteSupport",
+    "IntegerLatticeDiscreteSupport",
+]
