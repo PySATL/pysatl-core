@@ -9,8 +9,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: [ "3.12", "3.13" ]
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -51,15 +51,6 @@ jobs:
 
       - name: Pre-commit (all files)
         run: poetry run pre-commit run --all-files
-
-      - name: Ruff (lint)
-        run: poetry run ruff check .
-
-      - name: Ruff (format check)
-        run: poetry run ruff format --check .
-
-      - name: Mypy
-        run: poetry run mypy src
 
       - name: Pytest
         run: poetry run pytest --cov
