@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 # SciPy numerical routines (types ignored on import)
-from scipy import (  # type: ignore[import-untyped]
+from scipy import (
     integrate as _sp_integrate,
     optimize as _sp_optimize,
 )
@@ -334,7 +334,10 @@ def fit_ppf_to_cdf_1C(
             return 0.0
         if fhi < 0.0:
             return 1.0
-        q = float(_sp_optimize.brentq(f, lo, hi, maxiter=256))
+        # Anyway will be refactored. If it'll be a need to remove "ignore",
+        # use unusual *_args: Any, **_kwargs: Any and change return type to
+        # float | np.floating[Any] | np.integer[Any] | np.bool_
+        q = float(_sp_optimize.brentq(f, lo, hi, maxiter=256))  # type: ignore[arg-type]
         return float(np.clip(q, 0.0, 1.0))
 
     return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf)

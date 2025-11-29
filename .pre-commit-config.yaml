@@ -66,3 +66,4 @@ repos:
           - numpy>=2
           - scipy>=1.13
           - pytest>=8
+          - scipy-stubs>=1.13
