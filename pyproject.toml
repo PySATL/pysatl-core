@@ -54,6 +54,7 @@ pytest-cov = ">=5"
 coverage = { version = ">=7.5", extras = [ "toml" ] }
 pre-commit = ">=3.6"
 types-setuptools = "*"
+scipy-stubs = ">=1.13.0.0"
 
 [tool.poetry.group.docs.dependencies]
 jupyter = "^1.1.1"
