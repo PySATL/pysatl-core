@@ -7,11 +7,12 @@ multiple parameterizations, constraint validation, and automatic conversion
 between different parameter formats.
 """
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Leonid Elkin, Mikhail, Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
+from pysatl_core.families.config import configure_family_register
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
@@ -30,4 +31,5 @@ __all__ = [
     "ParametricFamilyDistribution",
     "constraint",
     "parametrization",
+    "configure_family_register",
 ]
