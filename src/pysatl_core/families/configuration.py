@@ -16,15 +16,20 @@ Notes
 
 from __future__ import annotations
 
+__author__ = "Fedor Myznikov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
 import math
 from dataclasses import dataclass
-from typing import Any, cast
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import numpy.typing as npt
 from scipy.special import erf, erfinv
 
-from pysatl_core.distributions import DefaultSamplingUnivariateStrategy
+from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
@@ -34,20 +39,8 @@ from pysatl_core.families.parametrizations import (
 from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import UnivariateContinuous
 
-__author__ = "Fedor Myznikov"
-__copyright__ = "Copyright (c) 2025 PySATL project"
-__license__ = "SPDX-License-Identifier: MIT"
-
-
-def configure_family_register() -> None:
-    """
-    Configure and register all distribution families in the global registry.
-
-    This function initializes all parametric families with their respective
-    parameterizations, characteristics, and sampling strategies. It should be
-    called during application startup to make distributions available.
-    """
-    _configure_normal_family()
+if TYPE_CHECKING:
+    from typing import Any
 
 
 PDF = "pdf"
@@ -61,8 +54,26 @@ RAWKURT = "raw_kurtosis"
 EXKURT = "excess_kurtosis"
 
 
+@lru_cache(maxsize=1)
+def configure_family_register() -> ParametricFamilyRegister:
+    """
+    Configure and register all distribution families in the global registry.
+
+    This function initializes all parametric families with their respective
+    parameterizations, characteristics, and sampling strategies. It should be
+    called during application startup to make distributions available.
+
+    Returns
+    -------
+    ParametricFamilyRegister
+        The global registry of parametric families.
+    """
+    _configure_normal_family()
+    return ParametricFamilyRegister()
+
+
 @dataclass
-class MeanVarParametrization(Parametrization):
+class NormalMeanVarParametrization(Parametrization):
     """
     Mean-variance parametrization of normal distribution.
 
@@ -84,7 +95,7 @@ class MeanVarParametrization(Parametrization):
 
 
 @dataclass
-class MeanPrecParametrization(Parametrization):
+class NormalMeanPrecParametrization(Parametrization):
     """
     Mean-precision parametrization of normal distribution.
 
@@ -114,11 +125,11 @@ class MeanPrecParametrization(Parametrization):
             Mean-variance parametrization instance
         """
         sigma = math.sqrt(1 / self.tau)
-        return MeanVarParametrization(mu=self.mu, sigma=sigma)
+        return NormalMeanVarParametrization(mu=self.mu, sigma=sigma)
 
 
 @dataclass
-class ExpParametrization(Parametrization):
+class NormalExpParametrization(Parametrization):
     """
     Exponential family parametrization of normal distribution.
         Uses the form: y = exp(a*x² + b*x + c)
@@ -161,7 +172,7 @@ class ExpParametrization(Parametrization):
         """
         mu = -self.b / (2 * self.a)
         sigma = math.sqrt(-1 / (2 * self.a))
-        return MeanVarParametrization(mu=mu, sigma=sigma)
+        return NormalMeanVarParametrization(mu=mu, sigma=sigma)
 
 
 def _configure_normal_family() -> None:
@@ -199,7 +210,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probability density values at points x
         """
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
@@ -229,7 +240,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probabilities P(X ≤ x) for each point x
         """
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
 
         z = (x - parameters.mu) / (parameters.sigma * np.sqrt(2))
         return cast(npt.NDArray[np.float64], 0.5 * (1 + erf(z)))
@@ -262,7 +273,7 @@ def _configure_normal_family() -> None:
         if np.any((p < 0) | (p > 1)):
             raise ValueError("Probability must be in [0, 1]")
 
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
 
         return cast(
             npt.NDArray[np.float64],
@@ -289,31 +300,31 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.complex128]
             Characteristic function values at points x
         """
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
         return cast(npt.NDArray[np.complex128], np.exp(1j * mu * x - 0.5 * (sigma * x) ** 2))
 
-    def mean_func(parameters: Parametrization, __: Any = None) -> float:
+    def mean_func(parameters: Parametrization, _: Any = None) -> float:
         """Mean of normal distribution."""
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
         return parameters.mu
 
-    def var_func(parameters: Parametrization, __: Any = None) -> float:
+    def var_func(parameters: Parametrization, _: Any = None) -> float:
         """Variance of normal distribution."""
-        parameters = cast(MeanVarParametrization, parameters)
+        parameters = cast(NormalMeanVarParametrization, parameters)
         return parameters.sigma**2
 
-    def skew_func(_: Parametrization, __: Any = None) -> int:
+    def skew_func(_1: Parametrization, _2: Any = None) -> int:
         """Skewness of normal distribution (always 0)."""
         return 0
 
-    def raw_kurt_func(_: Parametrization, __: Any = None) -> int:
+    def raw_kurt_func(_1: Parametrization, _2: Any = None) -> int:
         """Raw kurtosis of normal distribution (always 3)."""
         return 3
 
-    def ex_kurt_func(_: Parametrization, __: Any) -> int:
+    def ex_kurt_func(_1: Parametrization, _2: Any = None) -> int:
         """Excess kurtosis of normal distribution (always 0)."""
         return 0
 
@@ -336,8 +347,8 @@ def _configure_normal_family() -> None:
     )
     Normal.__doc__ = NORMAL_DOC
 
-    parametrization(family=Normal, name="meanVar")(MeanVarParametrization)
-    parametrization(family=Normal, name="meanPrec")(MeanPrecParametrization)
-    parametrization(family=Normal, name="exponential")(ExpParametrization)
+    parametrization(family=Normal, name="meanVar")(NormalMeanVarParametrization)
+    parametrization(family=Normal, name="meanPrec")(NormalMeanPrecParametrization)
+    parametrization(family=Normal, name="exponential")(NormalExpParametrization)
 
     ParametricFamilyRegister.register(Normal)

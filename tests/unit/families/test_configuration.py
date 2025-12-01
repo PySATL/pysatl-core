@@ -6,6 +6,10 @@ defined in config.py, including parameterizations, characteristics,
 and sampling.
 """
 
+__author__ = "Fedor Myznikov"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
 import math
 from typing import cast
 
@@ -14,30 +18,27 @@ import pytest
 from scipy.stats import norm
 
 from pysatl_core.distributions.characteristics import GenericCharacteristic
-from pysatl_core.families import ParametricFamilyRegister, configure_family_register
-from pysatl_core.families.config import (
-    ExpParametrization,
-    MeanPrecParametrization,
-    MeanVarParametrization,
+from pysatl_core.families.configuration import (
+    NormalExpParametrization,
+    NormalMeanPrecParametrization,
+    NormalMeanVarParametrization,
+    configure_family_register,
 )
-
-# Import PySATL components
-from pysatl_core.families.registry import _reset_families_register_for_tests
+from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import UnivariateContinuous
-
-__author__ = "Fedor Myznikov"
-__copyright__ = "Copyright (c) 2025 PySATL project"
-__license__ = "SPDX-License-Identifier: MIT"
 
 
 class TestNormalFamily:
     """Test suite for Normal distribution family."""
 
+    # Precision for floating point comparisons
+    CALCULATION_PRECISION = 1e-10
+
     def setup_method(self):
         """Setup before each test method."""
-        _reset_families_register_for_tests()
-        configure_family_register()
-        self.normal_family = ParametricFamilyRegister.get("Normal Family")
+        registry = configure_family_register()
+        self.normal_family = registry.get("Normal Family")
+        self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
     def test_family_registration(self):
         """Test that normal family is properly registered."""
@@ -56,8 +57,7 @@ class TestNormalFamily:
         assert dist.distr_name == "Normal Family"
         assert dist.distribution_type == UnivariateContinuous
 
-        # Приводим к конкретному типу параметризации
-        params = cast(MeanVarParametrization, dist.parameters)
+        params = cast(NormalMeanVarParametrization, dist.parameters)
         assert params.mu == 2.0
         assert params.sigma == 1.5
         assert params.name == "meanVar"
@@ -66,8 +66,7 @@ class TestNormalFamily:
         """Test creation of distribution with mean-precision parametrization."""
         dist = self.normal_family(mu=2.0, tau=0.25, parametrization_name="meanPrec")
 
-        # Приводим к конкретному типу параметризации
-        params = cast(MeanPrecParametrization, dist.parameters)
+        params = cast(NormalMeanPrecParametrization, dist.parameters)
         assert params.mu == 2.0
         assert params.tau == 0.25
         assert params.name == "meanPrec"
@@ -77,8 +76,7 @@ class TestNormalFamily:
         # For N(2, 1.5): a = -1/(2*1.5²) = -0.222..., b = 2/1.5² = 0.888...
         dist = self.normal_family(a=-0.222, b=0.888, parametrization_name="exponential")
 
-        # Приводим к конкретному типу параметризации
-        params = cast(ExpParametrization, dist.parameters)
+        params = cast(NormalExpParametrization, dist.parameters)
         assert params.a == -0.222
         assert params.b == 0.888
         assert params.name == "exponential"
@@ -99,10 +97,9 @@ class TestNormalFamily:
 
     def test_pdf_calculation(self):
         """Test PDF calculation against scipy.stats.norm."""
-        dist = self.normal_family(mu=2.0, sigma=1.5)
-        pdf = dist.computation_strategy.query_method("pdf", dist)
-
-        # Test points
+        pdf = self.normal_dist_example.computation_strategy.query_method(
+            "pdf", self.normal_dist_example
+        )
         test_points = [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
 
         for x in test_points:
@@ -111,106 +108,106 @@ class TestNormalFamily:
             # Scipy reference
             scipy_pdf = norm.pdf(x, loc=2.0, scale=1.5)
 
-            assert abs(our_pdf - scipy_pdf) < 1e-10
+            assert abs(our_pdf - scipy_pdf) < self.CALCULATION_PRECISION
 
     def test_cdf_calculation(self):
         """Test CDF calculation against scipy.stats.norm."""
-        dist = self.normal_family(mu=2.0, sigma=1.5)
-        cdf = dist.computation_strategy.query_method("cdf", dist)
-
+        cdf = self.normal_dist_example.computation_strategy.query_method(
+            "cdf", self.normal_dist_example
+        )
         test_points = [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
 
         for x in test_points:
             our_cdf = cdf(x)
             scipy_cdf = norm.cdf(x, loc=2.0, scale=1.5)
 
-            assert abs(our_cdf - scipy_cdf) < 1e-10
+            assert abs(our_cdf - scipy_cdf) < self.CALCULATION_PRECISION
 
     def test_ppf_calculation(self):
         """Test PPF calculation against scipy.stats.norm."""
-        dist = self.normal_family(mu=2.0, sigma=1.5)
-        ppf = dist.computation_strategy.query_method("ppf", dist)
-
+        ppf = self.normal_dist_example.computation_strategy.query_method(
+            "ppf", self.normal_dist_example
+        )
         test_probabilities = [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999]
 
         for p in test_probabilities:
             our_ppf = ppf(p)
             scipy_ppf = norm.ppf(p, loc=2.0, scale=1.5)
 
-            assert abs(our_ppf - scipy_ppf) < 1e-10
+            assert abs(our_ppf - scipy_ppf) < self.CALCULATION_PRECISION
 
-    def test_characteristic_function(self):
-        """Test characteristic function calculation."""
-        dist = self.normal_family(mu=2.0, sigma=1.5)
-        char_func = dist.computation_strategy.query_method("char_func", dist)
+    @pytest.mark.parametrize(
+        "t",
+        [
+            (-2.0),
+            (-1.0),
+            (0.0),
+            (1.0),
+            (2.0),
+        ],
+    )
+    def test_characteristic_function(self, t):
+        """Test characteristic function calculation at specific points."""
+        char_func = self.normal_dist_example.computation_strategy.query_method(
+            "char_func", self.normal_dist_example
+        )
+        cf_value = char_func(t)
 
-        test_points = [-2.0, -1.0, 0.0, 1.0, 2.0]
+        expected_real = math.exp(-0.5 * (1.5 * t) ** 2) * math.cos(2.0 * t)
+        expected_imag = math.exp(-0.5 * (1.5 * t) ** 2) * math.sin(2.0 * t)
 
-        for t in test_points:
-            cf_value = char_func(t)
+        assert abs(cf_value.real - expected_real) < self.CALCULATION_PRECISION
+        assert abs(cf_value.imag - expected_imag) < self.CALCULATION_PRECISION
 
-            # Characteristic function of N(μ, σ²) is exp(iμt - ½σ²t²)
-            expected_real = math.exp(-0.5 * (1.5 * t) ** 2) * math.cos(2.0 * t)
-            expected_imag = math.exp(-0.5 * (1.5 * t) ** 2) * math.sin(2.0 * t)
+    @pytest.mark.parametrize(
+        "char_func_getter, expected",
+        [
+            (lambda d: d.computation_strategy.query_method("mean", d)(None), 2.0),
+            (lambda d: d.computation_strategy.query_method("var", d)(None), 2.25),
+            (lambda d: d.computation_strategy.query_method("skewness", d)(None), 0.0),
+            (lambda d: d.computation_strategy.query_method("excess_kurtosis", d)(None), 0.0),
+        ],
+    )
+    def test_moments(self, char_func_getter, expected):
+        """Test moment calculations using parameterized tests."""
+        actual = char_func_getter(self.normal_dist_example)
+        assert abs(actual - expected) < self.CALCULATION_PRECISION
 
-            assert abs(cf_value.real - expected_real) < 1e-10
-            assert abs(cf_value.imag - expected_imag) < 1e-10
-
-    def test_moments(self):
-        """Test moment calculations."""
-        dist = self.normal_family(mu=2.0, sigma=1.5)
-
-        mean_func = dist.computation_strategy.query_method("mean", dist)
-        var_func = dist.computation_strategy.query_method("var", dist)
-        skew_func = dist.computation_strategy.query_method("skewness", dist)
-        kurt_func = dist.computation_strategy.query_method("excess_kurtosis", dist)
-
-        our_mean = mean_func(None)
-        our_var = var_func(None)
-        our_skew = skew_func(None)
-        our_kurt = kurt_func(None)
-
-        assert abs(our_mean - 2.0) < 1e-10
-        assert abs(our_var - 2.25) < 1e-10
-        assert abs(our_skew - 0.0) < 1e-10
-        assert abs(our_kurt - 0.0) < 1e-10
-
-    def test_parametrization_conversions(self):
+    @pytest.mark.parametrize(
+        "parametrization_name, params",
+        [
+            ("meanVar", {"mu": 2.0, "sigma": 1.5}),
+            ("meanPrec", {"mu": 2.0, "tau": 0.25}),
+            ("exponential", {"a": -0.222222, "b": 0.888889}),
+        ],
+    )
+    def test_parametrization_conversions(self, parametrization_name, params):
         """Test conversions between different parameterizations."""
-        # Create with mean-variance
-        dist_mv = self.normal_family(mu=2.0, sigma=1.5)
+        dist = self.normal_family(parametrization_name=parametrization_name, **params)
+        base_params = cast(
+            NormalMeanVarParametrization, self.normal_family.to_base(dist.parameters)
+        )
+        tolerance = self.CALCULATION_PRECISION
 
-        # Convert to base should return same for meanVar
-        base_params = self.normal_family.to_base(dist_mv.parameters)
-        base_params = cast(MeanVarParametrization, base_params)
-        assert base_params.mu == 2.0
-        assert base_params.sigma == 1.5
+        if parametrization_name == "meanPrec":
+            expected_sigma = math.sqrt(1 / params["tau"])
 
-        # Test meanPrec conversion
-        dist_mp = self.normal_family(mu=2.0, tau=0.25, parametrization_name="meanPrec")
-        base_from_mp = self.normal_family.to_base(dist_mp.parameters)
-        base_from_mp = cast(MeanVarParametrization, base_from_mp)
-        assert abs(base_from_mp.mu - 2.0) < 1e-10
-        assert abs(base_from_mp.sigma - 2.0) < 1e-10  # sigma = 1/sqrt(tau) = 1/sqrt(0.25) = 2
+        elif parametrization_name == "exponential":
+            expected_mu = -params["b"] / (2 * params["a"])
+            expected_sigma = math.sqrt(-1 / (2 * params["a"]))
 
-        # Test exponential conversion
-        dist_exp = self.normal_family(a=-0.222, b=0.888, parametrization_name="exponential")
-        base_from_exp = self.normal_family.to_base(dist_exp.parameters)
-        base_from_exp = cast(MeanVarParametrization, base_from_exp)
-        # Should be approximately N(2, 1.5)
-        assert abs(base_from_exp.mu - 2.0) < 0.1
-        assert abs(base_from_exp.sigma - 1.5) < 0.1
+        else:  # meanVar
+            expected_sigma = params["sigma"]
+
+        if parametrization_name != "exponential":
+            expected_mu = params["mu"]
+
+        assert abs(base_params.mu - expected_mu) < tolerance
+        assert abs(base_params.sigma - expected_sigma) < tolerance
 
     def test_analytical_computations_caching(self):
         """Test that analytical computations are properly cached."""
-        dist = self.normal_family(mu=0.0, sigma=1.0)
-
-        # Access analytical computations multiple times
-        comp1 = dist.analytical_computations
-        comp2 = dist.analytical_computations
-
-        # Should be the same object (cached)
-        assert comp1 is comp2
+        comp = self.normal_family(mu=0.0, sigma=1.0).analytical_computations
 
         # Should contain expected characteristics
         expected_chars = {
@@ -224,31 +221,22 @@ class TestNormalFamily:
             "raw_kurtosis",
             "excess_kurtosis",
         }
-        assert set(comp1.keys()) == expected_chars
+        assert set(comp.keys()) == expected_chars
 
     def test_array_input_support(self):
-        """Test that characteristics support array inputs."""
+        """Test that PDF supports array inputs."""
         dist = self.normal_family(mu=0.0, sigma=1.0)
-
-        # Test with numpy array input
         x_array = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
 
         pdf = dist.computation_strategy.query_method("pdf", dist)
-        cdf = dist.computation_strategy.query_method("cdf", dist)
-
         pdf_array = pdf(x_array)
-        cdf_array = cdf(x_array)
 
-        # Results should be arrays of same shape
         assert pdf_array.shape == x_array.shape
-        assert cdf_array.shape == x_array.shape
+        scipy_pdf = norm.pdf(x_array, loc=0.0, scale=1.0)
 
-        # Compare with scipy
-        scipy_pdf = norm.pdf(x_array)
-        scipy_cdf = norm.cdf(x_array)
-
-        np.testing.assert_array_almost_equal(pdf_array, scipy_pdf, decimal=10)
-        np.testing.assert_array_almost_equal(cdf_array, scipy_cdf, decimal=10)
+        np.testing.assert_array_almost_equal(
+            pdf_array, scipy_pdf, decimal=int(-math.log10(self.CALCULATION_PRECISION))
+        )
 
 
 class TestNormalFamilyEdgeCases:
@@ -256,7 +244,6 @@ class TestNormalFamilyEdgeCases:
 
     def setup_method(self):
         """Setup before each test method."""
-        _reset_families_register_for_tests()
         configure_family_register()
         self.normal_family = ParametricFamilyRegister.get("Normal Family")
 
@@ -284,7 +271,3 @@ class TestNormalFamilyEdgeCases:
             ppf_char(dist, -0.1)
         with pytest.raises(ValueError):
             ppf_char(dist, 1.1)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

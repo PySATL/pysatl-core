@@ -8,7 +8,7 @@ application. The registry follows the singleton pattern to ensure consistency.
 
 from __future__ import annotations
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Leonid Elkin, Mikhail, Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -93,7 +93,26 @@ class ParametricFamilyRegister:
             raise ValueError(f"Family {family.name} already found in register")
         self._registered_families[family.name] = family
 
+    @classmethod
+    def clear(cls) -> None:
+        """
+        Clear the registry (for testing purposes).
+
+        This method removes all registered families and resets the singleton instance.
+        It should only be used in tests.
+        """
+        if cls._instance is not None:
+            cls._instance._registered_families.clear()
+        cls._instance = None
+
 
 def _reset_families_register_for_tests() -> None:
     """Reset the cached distribution type register (test helper)."""
-    ParametricFamilyRegister._instance = None
+    ParametricFamilyRegister.clear()
+
+    try:
+        from pysatl_core.families.configuration import configure_family_register
+
+        configure_family_register.cache_clear()
+    except ImportError:
+        pass
