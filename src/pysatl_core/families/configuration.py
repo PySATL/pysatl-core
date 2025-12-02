@@ -23,7 +23,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 import math
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -55,7 +55,7 @@ EXKURT = "excess_kurtosis"
 
 
 @lru_cache(maxsize=1)
-def configure_family_register() -> ParametricFamilyRegister:
+def configure_families_register() -> ParametricFamilyRegister:
     """
     Configure and register all distribution families in the global registry.
 
@@ -306,25 +306,25 @@ def _configure_normal_family() -> None:
         mu = parameters.mu
         return cast(npt.NDArray[np.complex128], np.exp(1j * mu * x - 0.5 * (sigma * x) ** 2))
 
-    def mean_func(parameters: Parametrization, _: Any = None) -> float:
+    def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
         parameters = cast(NormalMeanVarParametrization, parameters)
         return parameters.mu
 
-    def var_func(parameters: Parametrization, _: Any = None) -> float:
+    def var_func(parameters: Parametrization, _: Any) -> float:
         """Variance of normal distribution."""
         parameters = cast(NormalMeanVarParametrization, parameters)
         return parameters.sigma**2
 
-    def skew_func(_1: Parametrization, _2: Any = None) -> int:
+    def skew_func(_1: Parametrization, _2: Any) -> int:
         """Skewness of normal distribution (always 0)."""
         return 0
 
-    def raw_kurt_func(_1: Parametrization, _2: Any = None) -> int:
+    def raw_kurt_func(_1: Parametrization, _2: Any) -> int:
         """Raw kurtosis of normal distribution (always 3)."""
         return 3
 
-    def ex_kurt_func(_1: Parametrization, _2: Any = None) -> int:
+    def ex_kurt_func(_1: Parametrization, _2: Any) -> int:
         """Excess kurtosis of normal distribution (always 0)."""
         return 0
 
@@ -352,3 +352,8 @@ def _configure_normal_family() -> None:
     parametrization(family=Normal, name="exponential")(NormalExpParametrization)
 
     ParametricFamilyRegister.register(Normal)
+
+
+def reset_families_register() -> None:
+    configure_families_register.cache_clear()
+    ParametricFamilyRegister._reset()

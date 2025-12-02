@@ -94,7 +94,7 @@ class ParametricFamilyRegister:
         self._registered_families[family.name] = family
 
     @classmethod
-    def clear(cls) -> None:
+    def _reset(cls) -> None:
         """
         Clear the registry (for testing purposes).
 
@@ -104,15 +104,3 @@ class ParametricFamilyRegister:
         if cls._instance is not None:
             cls._instance._registered_families.clear()
         cls._instance = None
-
-
-def _reset_families_register_for_tests() -> None:
-    """Reset the cached distribution type register (test helper)."""
-    ParametricFamilyRegister.clear()
-
-    try:
-        from pysatl_core.families.configuration import configure_family_register
-
-        configure_family_register.cache_clear()
-    except ImportError:
-        pass

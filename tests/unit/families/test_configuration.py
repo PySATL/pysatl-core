@@ -22,7 +22,7 @@ from pysatl_core.families.configuration import (
     NormalExpParametrization,
     NormalMeanPrecParametrization,
     NormalMeanVarParametrization,
-    configure_family_register,
+    configure_families_register,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import UnivariateContinuous
@@ -36,7 +36,7 @@ class TestNormalFamily:
 
     def setup_method(self):
         """Setup before each test method."""
-        registry = configure_family_register()
+        registry = configure_families_register()
         self.normal_family = registry.get("Normal Family")
         self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
@@ -137,24 +137,24 @@ class TestNormalFamily:
             assert abs(our_ppf - scipy_ppf) < self.CALCULATION_PRECISION
 
     @pytest.mark.parametrize(
-        "t",
+        "char_func_arg",
         [
-            (-2.0),
-            (-1.0),
-            (0.0),
-            (1.0),
-            (2.0),
+            -2.0,
+            -1.0,
+            0.0,
+            1.0,
+            2.0,
         ],
     )
-    def test_characteristic_function(self, t):
+    def test_characteristic_function(self, char_func_arg):
         """Test characteristic function calculation at specific points."""
         char_func = self.normal_dist_example.computation_strategy.query_method(
             "char_func", self.normal_dist_example
         )
-        cf_value = char_func(t)
+        cf_value = char_func(char_func_arg)
 
-        expected_real = math.exp(-0.5 * (1.5 * t) ** 2) * math.cos(2.0 * t)
-        expected_imag = math.exp(-0.5 * (1.5 * t) ** 2) * math.sin(2.0 * t)
+        expected_real = math.exp(-0.5 * (1.5 * char_func_arg) ** 2) * math.cos(2.0 * char_func_arg)
+        expected_imag = math.exp(-0.5 * (1.5 * char_func_arg) ** 2) * math.sin(2.0 * char_func_arg)
 
         assert abs(cf_value.real - expected_real) < self.CALCULATION_PRECISION
         assert abs(cf_value.imag - expected_imag) < self.CALCULATION_PRECISION
@@ -162,10 +162,15 @@ class TestNormalFamily:
     @pytest.mark.parametrize(
         "char_func_getter, expected",
         [
-            (lambda d: d.computation_strategy.query_method("mean", d)(None), 2.0),
-            (lambda d: d.computation_strategy.query_method("var", d)(None), 2.25),
-            (lambda d: d.computation_strategy.query_method("skewness", d)(None), 0.0),
-            (lambda d: d.computation_strategy.query_method("excess_kurtosis", d)(None), 0.0),
+            (lambda distr: distr.computation_strategy.query_method("mean", distr)(None), 2.0),
+            (lambda distr: distr.computation_strategy.query_method("var", distr)(None), 2.25),
+            (lambda distr: distr.computation_strategy.query_method("skewness", distr)(None), 0.0),
+            (
+                lambda distr: distr.computation_strategy.query_method("excess_kurtosis", distr)(
+                    None
+                ),
+                0.0,
+            ),
         ],
     )
     def test_moments(self, char_func_getter, expected):
@@ -174,42 +179,31 @@ class TestNormalFamily:
         assert abs(actual - expected) < self.CALCULATION_PRECISION
 
     @pytest.mark.parametrize(
-        "parametrization_name, params",
+        "parametrization_name, params, expected_mu, expected_sigma",
         [
-            ("meanVar", {"mu": 2.0, "sigma": 1.5}),
-            ("meanPrec", {"mu": 2.0, "tau": 0.25}),
-            ("exponential", {"a": -0.222222, "b": 0.888889}),
+            ("meanVar", {"mu": 2.0, "sigma": 1.5}, 2.0, 1.5),
+            ("meanPrec", {"mu": 2.0, "tau": 0.25}, 2.0, math.sqrt(1 / 0.25)),
+            ("exponential", {"a": -1 / (2 * 1.5**2), "b": 2 / (1.5**2)}, 2.0, 1.5),
         ],
     )
-    def test_parametrization_conversions(self, parametrization_name, params):
+    def test_parametrization_conversions(
+        self, parametrization_name, params, expected_mu, expected_sigma
+    ):
         """Test conversions between different parameterizations."""
-        dist = self.normal_family(parametrization_name=parametrization_name, **params)
         base_params = cast(
-            NormalMeanVarParametrization, self.normal_family.to_base(dist.parameters)
+            NormalMeanVarParametrization,
+            self.normal_family.to_base(
+                self.normal_family.get_parametrization(parametrization_name)(**params)
+            ),
         )
-        tolerance = self.CALCULATION_PRECISION
 
-        if parametrization_name == "meanPrec":
-            expected_sigma = math.sqrt(1 / params["tau"])
-
-        elif parametrization_name == "exponential":
-            expected_mu = -params["b"] / (2 * params["a"])
-            expected_sigma = math.sqrt(-1 / (2 * params["a"]))
-
-        else:  # meanVar
-            expected_sigma = params["sigma"]
-
-        if parametrization_name != "exponential":
-            expected_mu = params["mu"]
-
-        assert abs(base_params.mu - expected_mu) < tolerance
-        assert abs(base_params.sigma - expected_sigma) < tolerance
+        assert abs(base_params.mu - expected_mu) < self.CALCULATION_PRECISION
+        assert abs(base_params.sigma - expected_sigma) < self.CALCULATION_PRECISION
 
     def test_analytical_computations_caching(self):
         """Test that analytical computations are properly cached."""
         comp = self.normal_family(mu=0.0, sigma=1.0).analytical_computations
 
-        # Should contain expected characteristics
         expected_chars = {
             "pdf",
             "cdf",
@@ -244,7 +238,7 @@ class TestNormalFamilyEdgeCases:
 
     def setup_method(self):
         """Setup before each test method."""
-        configure_family_register()
+        configure_families_register()
         self.normal_family = ParametricFamilyRegister.get("Normal Family")
 
     def test_invalid_parameterization(self):
