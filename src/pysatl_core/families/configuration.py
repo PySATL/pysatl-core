@@ -73,9 +73,9 @@ def configure_families_register() -> ParametricFamilyRegister:
 
 
 @dataclass
-class NormalMeanVarParametrization(Parametrization):
+class NormalMeanStdParametrization(Parametrization):
     """
-    Mean-variance parametrization of normal distribution.
+    Standard parametrization of normal distribution.
 
     Parameters
     ----------
@@ -117,15 +117,15 @@ class NormalMeanPrecParametrization(Parametrization):
 
     def transform_to_base_parametrization(self) -> Parametrization:
         """
-        Transform to mean-variance parametrization.
+        Transform to Standard parametrization.
 
         Returns
         -------
         Parametrization
-            Mean-variance parametrization instance
+            Standard parametrization instance
         """
         sigma = math.sqrt(1 / self.tau)
-        return NormalMeanVarParametrization(mu=self.mu, sigma=sigma)
+        return NormalMeanStdParametrization(mu=self.mu, sigma=sigma)
 
 
 @dataclass
@@ -146,7 +146,7 @@ class NormalExpParametrization(Parametrization):
     b: float
 
     @property
-    def calculate_c(self) -> float:
+    def c(self) -> float:
         """
         Calculate the normalization constant c.
 
@@ -164,15 +164,15 @@ class NormalExpParametrization(Parametrization):
 
     def transform_to_base_parametrization(self) -> Parametrization:
         """
-        Transform to mean-variance parametrization.
+        Transform to Standard parametrization.
         Returns
         -------
         Parametrization
-            Mean-variance parametrization instance
+            Standard parametrization instance
         """
         mu = -self.b / (2 * self.a)
         sigma = math.sqrt(-1 / (2 * self.a))
-        return NormalMeanVarParametrization(mu=mu, sigma=sigma)
+        return NormalMeanStdParametrization(mu=mu, sigma=sigma)
 
 
 def _configure_normal_family() -> None:
@@ -210,12 +210,12 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probability density values at points x
         """
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
 
-        coefficient = 1.0 / (sigma * np.sqrt(2.0 * np.pi))
+        coefficient = 1.0 / (sigma * np.sqrt(2 * np.pi))
         exponent = -((x - mu) ** 2) / (2 * sigma**2)
 
         return cast(npt.NDArray[np.float64], coefficient * np.exp(exponent))
@@ -240,7 +240,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probabilities P(X ≤ x) for each point x
         """
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
 
         z = (x - parameters.mu) / (parameters.sigma * np.sqrt(2))
         return cast(npt.NDArray[np.float64], 0.5 * (1 + erf(z)))
@@ -264,6 +264,7 @@ def _configure_normal_family() -> None:
         -------
         npt.NDArray[np.float64]
             Quantiles corresponding to probabilities p
+            If p[i] is 0 or 1, then the result[i] is -inf and inf correspondingly
 
         Raises
         ------
@@ -273,15 +274,16 @@ def _configure_normal_family() -> None:
         if np.any((p < 0) | (p > 1)):
             raise ValueError("Probability must be in [0, 1]")
 
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
 
-        return cast(
+        result = cast(
             npt.NDArray[np.float64],
             parameters.mu + parameters.sigma * np.sqrt(2) * erfinv(2 * p - 1),
         )
+        return result
 
     def normal_char_func(
-        parameters: Parametrization, x: npt.NDArray[np.complex128]
+        parameters: Parametrization, t: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.complex128]:
         """
         Characteristic function of normal distribution.
@@ -292,7 +294,7 @@ def _configure_normal_family() -> None:
             Distribution parameters object with fields:
             - mu: float (mean)
             - sigma: float (standard deviation)
-        x : npt.NDArray[np.complex128]
+        x : npt.NDArray[np.float64]
             Points at which to evaluate the characteristic function
 
         Returns
@@ -300,20 +302,20 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.complex128]
             Characteristic function values at points x
         """
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
-        return cast(npt.NDArray[np.complex128], np.exp(1j * mu * x - 0.5 * (sigma * x) ** 2))
+        return cast(npt.NDArray[np.complex128], np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
         return parameters.mu
 
     def var_func(parameters: Parametrization, _: Any) -> float:
         """Variance of normal distribution."""
-        parameters = cast(NormalMeanVarParametrization, parameters)
+        parameters = cast(NormalMeanStdParametrization, parameters)
         return parameters.sigma**2
 
     def skew_func(_1: Parametrization, _2: Any) -> int:
@@ -331,7 +333,7 @@ def _configure_normal_family() -> None:
     Normal = ParametricFamily(
         name="Normal Family",
         distr_type=UnivariateContinuous,
-        distr_parametrizations=["meanVar", "meanPrec", "exponential"],
+        distr_parametrizations=["meanStd", "meanPrec", "exponential"],
         distr_characteristics={
             PDF: normal_pdf,
             CDF: normal_cdf,
@@ -347,7 +349,7 @@ def _configure_normal_family() -> None:
     )
     Normal.__doc__ = NORMAL_DOC
 
-    parametrization(family=Normal, name="meanVar")(NormalMeanVarParametrization)
+    parametrization(family=Normal, name="meanStd")(NormalMeanStdParametrization)
     parametrization(family=Normal, name="meanPrec")(NormalMeanPrecParametrization)
     parametrization(family=Normal, name="exponential")(NormalExpParametrization)
 

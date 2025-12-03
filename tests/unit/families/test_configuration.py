@@ -21,7 +21,7 @@ from pysatl_core.distributions.characteristics import GenericCharacteristic
 from pysatl_core.families.configuration import (
     NormalExpParametrization,
     NormalMeanPrecParametrization,
-    NormalMeanVarParametrization,
+    NormalMeanStdParametrization,
     configure_families_register,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
@@ -46,21 +46,21 @@ class TestNormalFamily:
         assert family.name == "Normal Family"
 
         # Check parameterizations
-        expected_parametrizations = {"meanVar", "meanPrec", "exponential"}
+        expected_parametrizations = {"meanStd", "meanPrec", "exponential"}
         assert set(family.parametrization_names) == expected_parametrizations
-        assert family.base_parametrization_name == "meanVar"
+        assert family.base_parametrization_name == "meanStd"
 
     def test_mean_var_parametrization_creation(self):
-        """Test creation of distribution with mean-variance parametrization."""
+        """Test creation of distribution with standard parametrization."""
         dist = self.normal_family(mu=2.0, sigma=1.5)
 
         assert dist.distr_name == "Normal Family"
         assert dist.distribution_type == UnivariateContinuous
 
-        params = cast(NormalMeanVarParametrization, dist.parameters)
+        params = cast(NormalMeanStdParametrization, dist.parameters)
         assert params.mu == 2.0
         assert params.sigma == 1.5
-        assert params.name == "meanVar"
+        assert params.name == "meanStd"
 
     def test_mean_prec_parametrization_creation(self):
         """Test creation of distribution with mean-precision parametrization."""
@@ -181,7 +181,7 @@ class TestNormalFamily:
     @pytest.mark.parametrize(
         "parametrization_name, params, expected_mu, expected_sigma",
         [
-            ("meanVar", {"mu": 2.0, "sigma": 1.5}, 2.0, 1.5),
+            ("meanStd", {"mu": 2.0, "sigma": 1.5}, 2.0, 1.5),
             ("meanPrec", {"mu": 2.0, "tau": 0.25}, 2.0, math.sqrt(1 / 0.25)),
             ("exponential", {"a": -1 / (2 * 1.5**2), "b": 2 / (1.5**2)}, 2.0, 1.5),
         ],
@@ -191,7 +191,7 @@ class TestNormalFamily:
     ):
         """Test conversions between different parameterizations."""
         base_params = cast(
-            NormalMeanVarParametrization,
+            NormalMeanStdParametrization,
             self.normal_family.to_base(
                 self.normal_family.get_parametrization(parametrization_name)(**params)
             ),
