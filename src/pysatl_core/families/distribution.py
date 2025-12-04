@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pysatl_core.distributions.distribution import Distribution
+from pysatl_core.families.registry import ParametricFamilyRegister
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -29,7 +30,6 @@ if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
     from pysatl_core.families.parametric_family import ParametricFamily
     from pysatl_core.families.parametrizations import Parametrization
-    from pysatl_core.families.registry import ParametricFamilyRegister
     from pysatl_core.types import (
         DistributionType,
         GenericCharacteristicName,
