@@ -24,12 +24,12 @@ __author__ = "Leonid Elkin, Mikhail, Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from math import isfinite
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-
-# SciPy numerical routines (types ignored on import)
+from mypy_extensions import KwArg
 from scipy import (
     integrate as _sp_integrate,
     optimize as _sp_optimize,
@@ -74,8 +74,8 @@ def _resolve(distribution: "Distribution", name: GenericCharacteristicName) -> S
             "Distribution must provide computation_strategy.querry_method(name, distribution)."
         ) from e
 
-    def _wrap(x: float) -> float:
-        return float(fn(x))
+    def _wrap(x: float, **kwargs: Any) -> float:
+        return float(fn(x, **kwargs))
 
     return _wrap
 
@@ -172,7 +172,7 @@ def _ppf_brentq_from_cdf(
 
         return L, R, FL, FR
 
-    def _ppf(q: float) -> float:
+    def _ppf(q: float, **kwargs: Any) -> float:
         if q <= 0.0:
             return float("-inf")
         if q >= 1.0:
@@ -237,7 +237,7 @@ def _num_derivative(f: ScalarFunc, x: float, h: float = 1e-5) -> float:
 
 
 def fit_pdf_to_cdf_1C(
-    distribution: "Distribution", /, **_: Any
+    distribution: "Distribution", /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``cdf`` from an analytical or resolvable ``pdf`` via numerical integration.
@@ -253,15 +253,18 @@ def fit_pdf_to_cdf_1C(
     """
     pdf_func = _resolve(distribution, PDF)
 
-    def _cdf(x: float) -> float:
-        val, _ = _sp_integrate.quad(lambda t: float(pdf_func(t)), float("-inf"), x, limit=200)
+    def _cdf(x: float, **options: Any) -> float:
+        val, _ = _sp_integrate.quad(
+            lambda t: float(pdf_func(t, **options)), float("-inf"), x, limit=200
+        )
         return float(np.clip(val, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PDF], func=_cdf)
+    cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
+    return FittedComputationMethod[float, float](target=CDF, sources=[PDF], func=cdf_func)
 
 
 def fit_cdf_to_pdf_1C(
-    distribution: "Distribution", /, **_: Any
+    distribution: "Distribution", /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``pdf`` as a clipped numerical derivative of ``cdf``.
@@ -277,11 +280,15 @@ def fit_cdf_to_pdf_1C(
     """
     cdf_func = _resolve(distribution, CDF)
 
-    def _pdf(x: float) -> float:
-        d = _num_derivative(cdf_func, x, h=1e-5)
+    def _pdf(x: float, **options: Any) -> float:
+        def wrapped_cdf(t: float) -> float:
+            return cdf_func(t, **options)
+
+        d = _num_derivative(wrapped_cdf, x, h=1e-5)
         return float(max(d, 0.0))
 
-    return FittedComputationMethod[float, float](target=PDF, sources=[CDF], func=_pdf)
+    pdf_func = cast(Callable[[float, KwArg(Any)], float], _pdf)
+    return FittedComputationMethod[float, float](target=PDF, sources=[CDF], func=pdf_func)
 
 
 def fit_cdf_to_ppf_1C(
@@ -300,12 +307,21 @@ def fit_cdf_to_ppf_1C(
         Fitted ``cdf -> ppf`` conversion.
     """
     cdf_func = _resolve(distribution, CDF)
-    ppf_func = _ppf_brentq_from_cdf(cdf_func, **options)
-    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=ppf_func)
+
+    def cdf_with_options(x: float) -> float:
+        return cdf_func(x, **options)
+
+    ppf_func = _ppf_brentq_from_cdf(cdf_with_options, **options)
+
+    def _ppf(q: float, **kwargs: Any) -> float:
+        return ppf_func(q)
+
+    ppf_cast = cast(Callable[[float, KwArg(Any)], float], _ppf)
+    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=ppf_cast)
 
 
 def fit_ppf_to_cdf_1C(
-    distribution: "Distribution", /, **_: Any
+    distribution: "Distribution", /, **kwargs: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``cdf`` by numerically inverting a resolvable ``ppf`` with a root solver.
@@ -321,12 +337,12 @@ def fit_ppf_to_cdf_1C(
     """
     ppf_func = _resolve(distribution, PPF)
 
-    def _cdf(x: float) -> float:
+    def _cdf(x: float, **options: Any) -> float:
         if not isfinite(x):
             return 0.0 if x == float("-inf") else 1.0
 
         def f(q: float) -> float:
-            return float(ppf_func(q) - x)
+            return float(ppf_func(q, **options) - x)
 
         lo, hi = 1e-12, 1.0 - 1e-12
         flo, fhi = f(lo), f(hi)
@@ -334,10 +350,8 @@ def fit_ppf_to_cdf_1C(
             return 0.0
         if fhi < 0.0:
             return 1.0
-        # Anyway will be refactored. If it'll be a need to remove "ignore",
-        # use unusual *_args: Any, **_kwargs: Any and change return type to
-        # float | np.floating[Any] | np.integer[Any] | np.bool_
         q = float(_sp_optimize.brentq(f, lo, hi, maxiter=256))  # type: ignore[arg-type]
         return float(np.clip(q, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf)
+    cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
+    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=cdf_func)
