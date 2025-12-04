@@ -2,13 +2,8 @@
 Sampling Interfaces
 ===================
 
-This module defines the sampling protocol and a concrete array-backed
-implementation for un/structured samples.
-
-Notes
------
-- :class:`ArraySample` strictly requires a **2D** array of shape ``(n, d)``.
-  For univariate distributions, ``d == 1``.
+This module defines protocols and implementations for sample containers
+used in distribution sampling.
 """
 
 from __future__ import annotations
@@ -29,7 +24,16 @@ if TYPE_CHECKING:
 
 
 class Sample(Protocol):
-    """Protocol for sample-like containers."""
+    """
+    Protocol for sample containers.
+
+    Attributes
+    ----------
+    array : numpy.ndarray
+        Array representation of the samples.
+    shape : tuple[int, ...]
+        Shape of the sample array.
+    """
 
     def __len__(self) -> int: ...
     @property
@@ -38,26 +42,29 @@ class Sample(Protocol):
     def shape(self) -> tuple[int, ...]: ...
 
 
-class ArraySample(Sample):
+class ArraySample:
     """
-    Array-backed sample.
+    Array-backed sample container.
+
+    This implementation stores samples as a 2D floating-point array
+    of shape (n_samples, n_dimensions).
 
     Parameters
     ----------
     data : numpy.ndarray
-        2D floating array of shape ``(n, d)``.
+        2D floating-point array of shape (n, d).
 
     Attributes
     ----------
     data : numpy.ndarray
-        Backing array.
+        Backing array containing the samples.
     dimension : int
-        Dimensionality ``d``.
+        Dimensionality of the samples (d).
 
     Raises
     ------
     ValueError
-        If ``data`` is not 2D.
+        If data is not 2D.
     """
 
     dimension: int
@@ -70,16 +77,16 @@ class ArraySample(Sample):
         self.dimension = int(data.shape[1])
 
     def __len__(self) -> int:
-        """Number of rows ``n``."""
+        """Return the number of samples (n)."""
         return int(self.data.shape[0])
 
     @property
     def dim(self) -> int:
-        """Alias for :attr:`dimension`."""
+        """Alias for dimension attribute."""
         return self.dimension
 
     def __iter__(self) -> Iterator[npt.NDArray[np.floating[Any]]]:
-        """Iterate over rows."""
+        """Iterate over samples (rows of the array)."""
         yield from self.data
 
     @property
@@ -89,6 +96,6 @@ class ArraySample(Sample):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        """Return ``(n, d)``."""
+        """Return the shape of the sample array (n, d)."""
         n, d = self.data.shape
         return int(n), int(d)

@@ -2,35 +2,19 @@
 Characteristic Graph (global) + View (per distribution profile)
 ==============================================================
 
-This module defines a *single* global directed graph over characteristic names
-(PDF, CDF, etc.) and a per-profile **view** derived from it.
+This module defines the global characteristic registry and per-distribution views.
 
-Node rules are guarded by declarative :class: `NodeConstraint`.
-Edge rules are guarded by declarative :class: `EdgeConstraint`.
-Node applicability is split into two parallel branches:
+The CharacteristicRegistry maintains a directed graph over characteristic names
+(PDF, CDF, PPF, PMF, etc.) with nodes and edges guarded by constraints. Each
+distribution profile sees a filtered view of this graph based on its specific
+features (kind, dimension, etc.).
 
-(A) Presence constraints — whether a node **exists** in a given profile.
-(B) Definitiveness constraints — whether a node is **definitive** in a given
-    profile (only meaningful if the node is present).
-
-A concrete distribution/profile sees a filtered **view** of this graph; that
-view is validated against invariants immediately upon construction.
-
-Invariants (per view)
----------------------
-1. The subgraph induced by definitive characteristics is **strongly connected**.
-2. Every non-definitive characteristic is reachable from at least one definitive.
-3. There is **no path** from any non-definitive characteristic **to** any definitive.
-
-Design notes
-------------
-* Only **unary** computations are supported (1 source -> 1 target).
-* Nodes must be **declared explicitly** via :meth:`CharacteristicRegistry.add_characteristic`.
-  Nodes without a presence rule are considered **absent** by design.
-* If a node has no definitiveness rule, it is treated as **non-definitive**.
-* The registry is a **singleton** (see ``__new__``).
-* Label variants are preserved; the view holds adjacency as ``src -> dst -> label``.
-* Invariants are enforced **per view** (not during mutation of the registry).
+Core concepts:
+- **Nodes**: Characteristics (PDF, CDF, etc.) with presence and definitiveness rules
+- **Edges**: Unary computation methods between characteristics
+- **Constraints**: Rules that determine when nodes/edges are applicable
+- **View**: A filtered subgraph for a specific distribution
+- **Definitive characteristics**: Starting points for computations
 """
 
 from __future__ import annotations
@@ -65,24 +49,30 @@ class CharacteristicRegistry:
     """
     Global characteristic graph with constraint-guarded nodes and edges.
 
-    Responsibilities
-    ----------------
-    * Store nodes (characteristics) with **presence** and **definitiveness** rules.
-    * Store labeled unary computations (edges) guarded by constraints.
-    * Produce per-profile views (see :class:`RegistryView`).
+    This registry maintains the complete graph of characteristics and computation
+    methods. It serves as a singleton that can be configured once and then used
+    to create filtered views for specific distributions.
 
-    Public API
-    ----------
+    Invariants (enforced per view):
+    1. The subgraph induced by definitive characteristics is strongly connected
+    2. Every non-definitive characteristic is reachable from at least one definitive
+    3. No path exists from any non-definitive characteristic to any definitive
+
+    Methods
+    -------
     add_characteristic(name, is_definitive, presence_constraint=None, definitive_constraint=None)
-        Declare a characteristic node with presence (mandatory) and optional definitiveness.
-    add_computation(method, *, label=DEFAULT_COMPUTATION_KEY, constraint=None)
-        Add a **unary** computation edge between already-declared nodes.
+        Declare a characteristic with presence and optional definitiveness rules.
+    add_computation(method, label=DEFAULT_COMPUTATION_KEY, constraint=None)
+        Add a unary computation edge between declared nodes.
+    view(distr)
+        Create a filtered view for the given distribution.
 
     Notes
     -----
-    * Nodes **must** be declared before adding computations.
-    * No invariant validation happens during mutation; invariants are checked when a
-      :class:`RegistryView` is constructed (on ``view(...)``).
+    - Nodes must be declared before adding computations
+    - Only unary computations (1 source → 1 target) are supported
+    - No invariant validation happens during mutation; validation occurs when
+      creating a view with view()
     """
 
     _instance: ClassVar[Self | None] = None
@@ -96,18 +86,21 @@ class CharacteristicRegistry:
     def __init__(self) -> None:
         if getattr(self, "_initialized", False):
             return
-        # adjacency: src -> dst -> label -> EdgeMeta
+
+        # Adjacency: src → dst → label → [EdgeMeta]
         self._adj: dict[
             GenericCharacteristicName,
             dict[GenericCharacteristicName, dict[str, list[EdgeMeta]]],
         ] = {}
-        # declared nodes
         self._all_nodes: set[GenericCharacteristicName] = set()
-        # node rules
+
+        # Node constraints
         self._presence_rules: dict[GenericCharacteristicName, GraphPrimitiveConstraint] = {}
         self._def_rules: dict[GenericCharacteristicName, GraphPrimitiveConstraint] = {}
-        # label preference is retained for external consumers (not used internally here)
+
+        # Label preference for path finding
         self.label_preference: tuple[str, ...] = (DEFAULT_COMPUTATION_KEY,)
+
         self._initialized = True
 
     def __copy__(self) -> Self:
@@ -115,21 +108,17 @@ class CharacteristicRegistry:
         return self
 
     def __deepcopy__(self, memo: dict[Any, Any]) -> Self:
-        """Singleton deepcopy returns the same instance (no duplication)."""
+        """Singleton deepcopy returns the same instance."""
         return self
 
     def __reduce__(self) -> tuple[type[Self], tuple[()]]:
-        """Ensure pickling keeps the singleton semantics."""
+        """Ensure pickling preserves singleton semantics."""
         return self.__class__, ()
 
     @classmethod
     def _reset(cls) -> None:
-        """Reset the singleton (test helper)."""
+        """Reset the singleton"""
         cls._instance = None
-
-    # --------------------------------------------------------------------- #
-    # Registration API
-    # --------------------------------------------------------------------- #
 
     def _add_node(self, node: GenericCharacteristicName) -> None:
         """Insert node into the registry (idempotent)."""
@@ -137,7 +126,7 @@ class CharacteristicRegistry:
         self._all_nodes.add(node)
 
     def _ensure_node(self, node: GenericCharacteristicName) -> bool:
-        """Check that a node has been declared via :meth:`add_characteristic`."""
+        """Check if a node has been declared via add_characteristic()."""
         return node in self._all_nodes
 
     def _add_presence_rule(
@@ -146,26 +135,17 @@ class CharacteristicRegistry:
         """
         Register a presence rule for a node.
 
-        Parameters
-        ----------
-        name
-            Characteristic name.
-        constraint
-            Node presence constraint. If ``None``, a pass-through constraint is used.
-
-        Notes
-        -----
-        * Duplicate calls for the same node are ignored with a warning.
+        Warns if the node already has a presence rule.
         """
         if name in self._presence_rules:
             warnings.warn(
-                f"Node {name} have been already added. Constraint will not be taken into account",
+                f"Node {name} already has a presence rule. New constraint will be ignored.",
                 UserWarning,
                 stacklevel=3,
             )
             return
-        self._presence_rules.setdefault(
-            name, constraint if constraint is not None else GraphPrimitiveConstraint()
+        self._presence_rules[name] = (
+            constraint if constraint is not None else GraphPrimitiveConstraint()
         )
 
     def _add_definitive_rule(
@@ -174,31 +154,16 @@ class CharacteristicRegistry:
         """
         Register a definitiveness rule for a node.
 
-        Parameters
-        ----------
-        name
-            Characteristic name.
-        constraint
-            Node definitiveness constraint. If ``None``, a pass-through constraint is used.
-
-        Notes
-        -----
-        * Duplicate calls for the same node are ignored with a warning.
+        Warns if the node already has a definitiveness rule.
         """
         if name in self._def_rules and constraint is not None:
             warnings.warn(
-                f"Node {name} have been already added. Constraint will not be taken into account",
+                f"Node {name} already has a definitiveness rule. New constraint will be ignored.",
                 UserWarning,
                 stacklevel=3,
             )
             return
-        self._def_rules.setdefault(
-            name, constraint if constraint is not None else GraphPrimitiveConstraint()
-        )
-
-    # --------------------------------------------------------------------- #
-    # Public API
-    # --------------------------------------------------------------------- #
+        self._def_rules[name] = constraint if constraint is not None else GraphPrimitiveConstraint()
 
     def add_computation(
         self,
@@ -208,30 +173,29 @@ class CharacteristicRegistry:
         constraint: GraphPrimitiveConstraint | None = None,
     ) -> None:
         """
-        Add a labeled **unary** computation edge.
+        Add a labeled unary computation edge.
 
         Parameters
         ----------
-        method
-            A computation object with ``sources: list[GenericCharacteristicName]`` of length 1
-            and ``target: GenericCharacteristicName``.
-        label
-            Variant label for the (src -> dst) edge.
-        constraint
-            Edge-level applicability constraint. If ``None``, a pass-through constraint is used.
+        method : ComputationMethod
+            Computation object with exactly one source and one target.
+        label : str, default=DEFAULT_COMPUTATION_KEY
+            Variant label for the edge.
+        constraint : GraphPrimitiveConstraint, optional
+            Edge applicability constraint. If None, a pass-through constraint is used.
 
         Raises
         ------
         ValueError
-            If method is not unary, or source/target nodes have not been declared.
+            If method is not unary, or source/target nodes are not declared.
 
         Notes
         -----
-        * Label variants for the same (src, dst) pair are preserved side-by-side.
-        * No invariant validation is performed here; it happens in :class:`RegistryView`.
+        - Multiple edges with different labels can exist between the same nodes
+        - The first matching edge for each label is kept when creating views
         """
         if len(method.sources) != 1:
-            raise ValueError("Only unary computations are supported (1 source -> 1 target).")
+            raise ValueError("Only unary computations are supported (1 source → 1 target).")
 
         src = method.sources[0]
         dst = method.target
@@ -241,7 +205,8 @@ class CharacteristicRegistry:
 
         self._adj[src].setdefault(dst, {})
         # TODO: We need to be careful here if some constraint more general and with the same label
-        #  than other it can consume it
+        #  than other it can consume it. Actually, the same label methods should not intersect their
+        #  constraints
         self._adj[src][dst].setdefault(label, [])
         self._adj[src][dst][label].append(
             EdgeMeta(
@@ -259,34 +224,38 @@ class CharacteristicRegistry:
         definitive_constraint: GraphPrimitiveConstraint | None = None,
     ) -> None:
         """
-        Declare a characteristic node with presence and optional definitiveness.
+        Declare a characteristic with presence and optional definitiveness rules.
 
         Parameters
         ----------
-        name
-            Characteristic name to declare.
-        is_definitive
-            If ``True``, also register a definitiveness rule for this node.
-        presence_constraint
-            Presence constraint for the node. If ``None``, a pass-through constraint is used.
-        definitive_constraint
-            Definitiveness constraint if ``is_definitive`` is ``True``. Ignored otherwise.
+        name : str
+            Characteristic name (e.g., "pdf", "cdf").
+        is_definitive : bool
+            Whether this characteristic can serve as a starting point for computations.
+        presence_constraint : GraphPrimitiveConstraint, optional
+            Constraint determining when this characteristic exists for a distribution.
+        definitive_constraint : GraphPrimitiveConstraint, optional
+            Constraint determining when this characteristic is definitive.
+            Ignored if is_definitive is False.
 
         Notes
         -----
-        * This call both **registers** the node and **attaches** its presence/definitiveness rules.
-        * If ``is_definitive`` is ``False`` yet a ``definitive_constraint`` is passed, it is ignored
-          with a warning.
+        - If is_definitive is False but definitive_constraint is provided,
+          a warning is issued and the constraint is ignored
+        - Presence constraints are required; without one, the characteristic
+          will never appear in any view
         """
         self._add_node(name)
         self._add_presence_rule(name, presence_constraint)
+
         if not is_definitive and definitive_constraint is not None:
             warnings.warn(
-                f"Node {name} have been added as indefinitive but definitive constraint is "
-                f"provided. Constraint will not be taken into account",
+                f"Node {name} is non-definitive but has a definitive constraint. "
+                "Constraint will be ignored.",
                 UserWarning,
                 stacklevel=2,
             )
+
         if is_definitive:
             self._add_definitive_rule(name, definitive_constraint)
 
@@ -296,22 +265,12 @@ class CharacteristicRegistry:
 
     def _compute_present_nodes(self, distr: Distribution) -> set[GenericCharacteristicName]:
         """
-        Compute the set of **present** nodes for a given profile.
-
-        Parameters
-        ----------
-        distr
-            A distribution-like object whose features are consulted by constraints.
+        Compute characteristics present for the given distribution.
 
         Returns
         -------
-        set of GenericCharacteristicName
-            All nodes whose presence constraints allow the given profile.
-
-        Notes
-        -----
-        Only nodes with explicitly registered presence rules are considered. Nodes
-        that have not been declared via :meth:`add_characteristic` are absent by design.
+        set of str
+            Characteristics whose presence constraints allow this distribution.
         """
         present: set[GenericCharacteristicName] = set()
         for name, constraint in self._presence_rules.items():
@@ -321,17 +280,12 @@ class CharacteristicRegistry:
 
     def _compute_definitive_nodes(self, distr: Distribution) -> set[GenericCharacteristicName]:
         """
-        Compute the set of **definitive** nodes for a given profile.
-
-        Parameters
-        ----------
-        distr
-            A distribution-like object whose features are consulted by constraints.
+        Compute definitive characteristics for the given distribution.
 
         Returns
         -------
-        set of GenericCharacteristicName
-            All nodes whose definitiveness constraints allow the given profile.
+        set of str
+            Characteristics whose definitiveness constraints allow this distribution.
         """
         definitive: set[GenericCharacteristicName] = set()
         for name, constraint in self._def_rules.items():
@@ -341,27 +295,26 @@ class CharacteristicRegistry:
 
     def view(self, distr: Distribution) -> RegistryView:
         """
-        Build a per-profile view that preserves label variants and enforces invariants.
+        Create a filtered view of the graph for the given distribution.
 
         Parameters
         ----------
-        distr
-            A distribution-like profile.
+        distr : Distribution
+            Distribution profile to filter for.
 
         Returns
         -------
         RegistryView
-            A filtered adjacency (preserving label variants) together with sets of
-            present and definitive characteristics.
+            Filtered view containing only applicable nodes and edges.
 
         Notes
         -----
-        1) Edges are filtered by their constraints (``EdgeConstraint``).
-        2) Edges touching **absent** nodes are removed; isolated present nodes are kept.
-        3) Definitive nodes are intersected with present nodes.
-        4) The constructed view is **validated** immediately (see :class:`RegistryView`).
+        1. Filters edges by their constraints
+        2. Removes edges touching absent nodes
+        3. Computes definitive nodes from the remaining present nodes
+        4. Validates graph invariants
         """
-        # 1) Filter edges by applicability; keep all label variants
+        # 1) Filter edges by applicability
         adj: dict[
             GenericCharacteristicName, dict[GenericCharacteristicName, dict[str, EdgeMeta]]
         ] = {}
@@ -370,7 +323,7 @@ class CharacteristicRegistry:
                 kept: dict[str, EdgeMeta] = {}
                 for label, metas in variants.items():
                     for edge in metas:
-                        if (edge.constraint or GraphPrimitiveConstraint()).allows(distr):
+                        if edge.constraint.allows(distr):
                             kept[label] = edge
                             # TODO: It is possible that there are two edges under the same label
                             #  that fit the same distribution, this should not be the case.
@@ -379,19 +332,19 @@ class CharacteristicRegistry:
                 if kept:
                     adj.setdefault(src, {}).setdefault(dst, {}).update(kept)
 
-        # 2) Apply node presence filtering (drop edges touching absent nodes)
+        # 2) Filter by node presence
         present_nodes = self._compute_present_nodes(distr)
         if present_nodes:
             adj = {
-                s: {t: dict(variants) for t, variants in d.items() if t in present_nodes}
-                for s, d in adj.items()
-                if s in present_nodes
+                src: {dst: dict(variants) for dst, variants in d.items() if dst in present_nodes}
+                for src, d in adj.items()
+                if src in present_nodes
             }
-        # ensure isolated present nodes are preserved
-        for n in present_nodes:
-            adj.setdefault(n, {})
+        # Ensure isolated present nodes are preserved
+        for node in present_nodes:
+            adj.setdefault(node, {})
 
-        # 3) Compute definitive nodes and intersect with presence
+        # 3) Compute definitive nodes (must be present)
         definitive_nodes = self._compute_definitive_nodes(distr) & present_nodes
 
         return RegistryView(adj, definitive_nodes, present_nodes)
@@ -404,21 +357,31 @@ class CharacteristicRegistry:
 
 class RegistryView:
     """
-    A per-profile filtered view of the global graph that **preserves label variants**.
+    Filtered view of the characteristic graph for a specific distribution.
+
+    This view contains only the nodes and edges applicable to a particular
+    distribution profile, with all graph invariants validated.
 
     Parameters
     ----------
     adj : Mapping[src, Mapping[dst, Mapping[label, EdgeMeta]]]
-        Multi-edge adjacency with label variants kept intact.
-    definitive_nodes : set of GenericCharacteristicName
-        Nodes considered definitive in this view.
-    present_nodes : set of GenericCharacteristicName
-        Nodes that exist in this view (after presence filtering).
+        Filtered adjacency preserving label variants.
+    definitive_nodes : set of str
+        Definitive characteristics in this view.
+    present_nodes : set of str
+        All present characteristics in this view.
 
-    Notes
-    -----
-    * Invariants are validated in ``__init__``. A violation raises :class:`GraphInvariantError`.
-    * Path search honors label priority (see :meth:`find_path`).
+    Raises
+    ------
+    GraphInvariantError
+        If any graph invariant is violated.
+
+    Attributes
+    ----------
+    definitive_characteristics : set of str
+        Definitive characteristics for this distribution.
+    all_characteristics : set of str
+        All present characteristics for this distribution.
     """
 
     def __init__(
@@ -430,30 +393,28 @@ class RegistryView:
         definitive_nodes: set[GenericCharacteristicName],
         present_nodes: set[GenericCharacteristicName],
     ) -> None:
-        # normalize adjacency to dict-of-dict-of-dicts
+        # Deep copy adjacency to ensure immutability
         self._adj: dict[
             GenericCharacteristicName, dict[GenericCharacteristicName, dict[str, EdgeMeta]]
         ] = {}
-        for s, d in adj.items():
-            self._adj[s] = {t: dict(variants) for t, variants in d.items()}
+        for src, d in adj.items():
+            self._adj[src] = {dst: dict(variants) for dst, variants in d.items()}
 
-        # characteristics sets
         self.definitive_characteristics: set[GenericCharacteristicName] = set(definitive_nodes)
         self.all_characteristics: set[GenericCharacteristicName] = set(present_nodes)
 
-        # validate invariants immediately; if this fails — the global graph is inconsistent
+        # Validate invariants immediately
         self._validate_invariants()
-
-    # ---------------- public convenience ----------------
 
     @property
     def indefinitive_characteristics(self) -> set[GenericCharacteristicName]:
         """
-        Present-but-not-definitive characteristics.
+        Present but non-definitive characteristics.
 
         Returns
         -------
-        set of GenericCharacteristicName
+        set of str
+            Characteristics that exist but are not definitive.
         """
         return self.all_characteristics - self.definitive_characteristics
 
@@ -461,71 +422,73 @@ class RegistryView:
         self, v: GenericCharacteristicName
     ) -> Mapping[GenericCharacteristicName, Mapping[str, EdgeMeta]]:
         """
-        Outgoing edges grouped by destination, each with its ``label -> EdgeMeta`` map.
+        Get outgoing edges from a characteristic.
 
         Parameters
         ----------
-        v
+        v : str
             Source characteristic.
 
         Returns
         -------
-        Mapping[GenericCharacteristicName, Mapping[str, EdgeMeta]]
+        Mapping[str, Mapping[str, EdgeMeta]]
+            Destination → label → edge metadata.
         """
         return self._adj.get(v, {})
 
     def successors_nodes(self, v: GenericCharacteristicName) -> set[GenericCharacteristicName]:
         """
-        Set of reachable neighbors from ``v`` (labels ignored).
+        Get directly reachable characteristics from v.
 
         Parameters
         ----------
-        v
+        v : str
             Source characteristic.
 
         Returns
         -------
-        set of GenericCharacteristicName
+        set of str
+            Characteristics directly reachable from v.
         """
         return set(self._adj.get(v, {}).keys())
 
     def predecessors(self, v: GenericCharacteristicName) -> set[GenericCharacteristicName]:
         """
-        Nodes that have at least one labeled edge into ``v``.
+        Get characteristics with edges to v.
 
         Parameters
         ----------
-        v
+        v : str
             Destination characteristic.
 
         Returns
         -------
-        set of GenericCharacteristicName
+        set of str
+            Characteristics that can reach v directly.
         """
         res: set[GenericCharacteristicName] = set()
-        for s, d in self._adj.items():
+        for src, d in self._adj.items():
             if v in d and d[v]:
-                res.add(s)
+                res.add(src)
         return res
 
     def variants(
         self, src: GenericCharacteristicName, dst: GenericCharacteristicName
     ) -> Mapping[str, EdgeMeta]:
         """
-        Label->EdgeMeta mapping for a fixed pair (src, dst).
+        Get all labeled edges between two characteristics.
 
         Parameters
         ----------
-        src, dst
+        src, dst : str
             Edge endpoints.
 
         Returns
         -------
         Mapping[str, EdgeMeta]
+            Label → edge metadata mapping.
         """
         return self._adj.get(src, {}).get(dst, {})
-
-    # ---------------- path search (labels honored) ----------------
 
     def find_path(
         self,
@@ -535,24 +498,26 @@ class RegistryView:
         prefer_label: str | None = None,
     ) -> list[Any] | None:
         """
-        Find a conversion chain ``src -> ... -> dst`` using BFS.
-
-        Label selection policy per (v -> w):
-          1) use ``prefer_label`` if present;
-          2) else use :data:`DEFAULT_COMPUTATION_KEY` if present;
-          3) else use the lexicographically smallest label (deterministic fallback).
+        Find a computation path from src to dst using BFS.
 
         Parameters
         ----------
-        src, dst
-            Endpoints of the desired path.
-        prefer_label
-            Optional preferred label.
+        src, dst : str
+            Source and destination characteristics.
+        prefer_label : str, optional
+            Preferred edge label to use when multiple options exist.
 
         Returns
         -------
-        list[Any] | None
-            Ordered list of methods (edge payloads) if a path exists, otherwise ``None``.
+        list of ComputationMethod or None
+            List of computation methods forming the path, or None if no path exists.
+
+        Notes
+        -----
+        Label selection priority:
+        1. prefer_label if present
+        2. DEFAULT_COMPUTATION_KEY if present
+        3. Lexicographically smallest label
         """
         if src == dst:
             return []
@@ -572,7 +537,7 @@ class RegistryView:
                 visited.add(w)
                 parent[w] = (v, method)
                 if w == dst:
-                    # reconstruct
+                    # Reconstruct path
                     path: list[Any] = []
                     cur = dst
                     while cur != src:
@@ -584,17 +549,14 @@ class RegistryView:
                 queue.append(w)
         return None
 
-    # ---------------- invariants: public trigger ----------------
-
     def _validate_invariants(self) -> None:
         """
-        Validate all graph invariants; raise :class:`GraphInvariantError` on failure.
+        Validate all graph invariants.
 
-        Invariants (per view)
-        ---------------------
-        1) Definitive subgraph is strongly connected.
-        2) Every non-definitive is reachable from some definitive.
-        3) No path from any non-definitive back to any definitive.
+        Raises
+        ------
+        GraphInvariantError
+            If any invariant is violated.
         """
         if not self._definitive_strongly_connected():
             raise GraphInvariantError("Definitive subgraph must be strongly connected.")
@@ -607,24 +569,25 @@ class RegistryView:
                 "No path from any indefinitive characteristic back to a definitive is allowed."
             )
 
-    # ---------------- invariants: helpers (no external params) ----------------
-
     def _definitive_strongly_connected(self) -> bool:
         """
-        Check strong connectivity within the definitive subgraph.
+        Check if definitive characteristics form a strongly connected subgraph.
 
         Returns
         -------
         bool
+            True if strongly connected.
         """
         defs = self.definitive_characteristics
         if len(defs) <= 1:
             return True
+
         start = next(iter(defs))
         fwd = self._reachable_from(start, allowed=defs)
         if fwd != (defs - {start}):
             return False
-        # reverse reachability within defs
+
+        # Check reverse reachability
         seen: set[GenericCharacteristicName] = {start}
         stack = [start]
         while stack:
@@ -637,15 +600,17 @@ class RegistryView:
 
     def _all_indefinitives_reachable_from_definitives(self) -> bool:
         """
-        Check that every non-definitive node is reachable from some definitive.
+        Check that all non-definitive nodes are reachable from definitive nodes.
 
         Returns
         -------
         bool
+            True if all indefinitives are reachable.
         """
         indefs = self.indefinitive_characteristics
         if not indefs:
             return True
+
         total: set[GenericCharacteristicName] = set()
         for d in self.definitive_characteristics:
             total |= self._reachable_from(d)
@@ -653,16 +618,15 @@ class RegistryView:
 
     def _exists_path_from_indefinitive_to_definitive(self) -> bool:
         """
-        Check that no indefinitive node reaches any definitive node.
+        Check if any non-definitive node can reach a definitive node.
 
         Returns
         -------
         bool
+            True if such a path exists (which would violate invariants).
         """
         defs = self.definitive_characteristics
         return any(self._reachable_from(i) & defs for i in self.indefinitive_characteristics)
-
-    # ---------------- reachability (labels ignored) ----------------
 
     def _reachable_from(
         self,
@@ -671,21 +635,23 @@ class RegistryView:
         allowed: set[GenericCharacteristicName] | None = None,
     ) -> set[GenericCharacteristicName]:
         """
-        Forward reachability from ``src``.
+        Compute forward reachable nodes from src.
 
         Parameters
         ----------
-        src
-            Start node.
-        allowed
-            Optional restriction to a subset of nodes.
+        src : str
+            Starting node.
+        allowed : set of str, optional
+            Restrict to this set of nodes.
 
         Returns
         -------
-        set of GenericCharacteristicName
+        set of str
+            Nodes reachable from src (excluding src itself).
         """
         if allowed is not None and src not in allowed:
             return set()
+
         visited: set[GenericCharacteristicName] = set()
         stack = [src]
         while stack:
@@ -701,38 +667,29 @@ class RegistryView:
         visited.discard(src)
         return visited
 
-    # ---------------- label picking ----------------
-
     @staticmethod
     def _pick_method(
         variants: Mapping[str, EdgeMeta],
         prefer_label: str | None,
     ) -> Any:
         """
-        Pick the payload method from a ``label -> EdgeMeta`` mapping.
-
-        Selection priority
-        ------------------
-        1) ``prefer_label`` if present;
-        2) :data:`DEFAULT_COMPUTATION_KEY` if present;
-        3) lexicographically smallest label.
+        Select a method from label variants.
 
         Parameters
         ----------
-        variants
-            Mapping of label to edge metadata.
-        prefer_label
-            Optional preferred label.
+        variants : Mapping[str, EdgeMeta]
+            Available edge variants.
+        prefer_label : str, optional
+            Preferred label.
 
         Returns
         -------
         Any
-            The selected edge payload (usually a computation method).
+            Selected computation method.
         """
         if prefer_label and prefer_label in variants:
             return variants[prefer_label].method
         if DEFAULT_COMPUTATION_KEY in variants:
             return variants[DEFAULT_COMPUTATION_KEY].method
-        # deterministic fallback
         label = sorted(variants.keys())[0]
         return variants[label].method

@@ -1,3 +1,14 @@
+"""
+Support Structures for Probability Distributions
+================================================
+
+This module defines support structures for probability distributions,
+including continuous intervals and discrete point sets.
+
+Support defines the set of values where a probability distribution
+is defined (non-zero probability for discrete, non-zero density for continuous).
+"""
+
 from __future__ import annotations
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
@@ -18,25 +29,88 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Support(Protocol):
+    """
+    Protocol for distribution support structures.
+
+    Support defines the set of values where a distribution is defined.
+    """
+
     @overload
     def contains(self, x: Number) -> bool: ...
     @overload
     def contains(self, x: NumericArray) -> BoolArray: ...
 
 
-class ContinuousSupport(Interval1D, Support): ...
+class ContinuousSupport(Interval1D, Support):
+    """
+    Support for continuous distributions represented as an interval.
+
+    This class inherits from Interval1D and implements the Support protocol
+    for continuous distributions defined on an interval [left, right].
+    """
 
 
 @runtime_checkable
 class DiscreteSupport(Support, Protocol):
-    def iter_points(self) -> Iterator[Number]: ...
+    """
+    Protocol for discrete distribution supports.
 
-    def iter_leq(self, x: Number) -> Iterator[Number]: ...
+    Discrete supports consist of distinct points where the distribution
+    has non-zero probability mass.
+    """
 
-    def prev(self, x: Number) -> Number | None: ...
+    def iter_points(self) -> Iterator[Number]:
+        """Iterate through all points in the support."""
+        ...
+
+    def iter_leq(self, x: Number) -> Iterator[Number]:
+        """
+        Iterate through points less than or equal to x.
+
+        Parameters
+        ----------
+        x : Number
+            Upper bound for points to iterate.
+        """
+        ...
+
+    def prev(self, x: Number) -> Number | None:
+        """
+        Find the largest point strictly less than x.
+
+        Parameters
+        ----------
+        x : Number
+            Reference point.
+
+        Returns
+        -------
+        Number or None
+            Previous point if it exists, None otherwise.
+        """
+        ...
 
 
 class ExplicitTableDiscreteSupport(DiscreteSupport):
+    """
+    Discrete support defined by an explicit list of points.
+
+    This implementation stores points in a sorted array for efficient
+    membership testing and iteration.
+
+    Parameters
+    ----------
+    points : Iterable[Number]
+        Points in the support.
+    assume_sorted : bool, default=False
+        If True, assume points are already sorted and unique.
+
+    Attributes
+    ----------
+    _points : numpy.ndarray
+        Sorted unique points array.
+    """
+
     __slots__ = ("_points",)
 
     def __init__(self, points: Iterable[Number], assume_sorted: bool = False) -> None:
@@ -48,6 +122,7 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
         if not assume_sorted:
             arr.sort()
 
+        # Remove duplicates
         unique_mask = np.empty(arr.size, dtype=bool)
         unique_mask[0] = True
         unique_mask[1:] = arr[1:] != arr[:-1]
@@ -60,6 +135,19 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
     def contains(self, x: NumericArray) -> BoolArray: ...
 
     def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        """
+        Check if point(s) are in the support.
+
+        Parameters
+        ----------
+        x : Number or NumericArray
+            Point(s) to check.
+
+        Returns
+        -------
+        bool or BoolArray
+            True for points in the support, False otherwise.
+        """
         arr = np.asarray(x)
         idx = np.searchsorted(self._points, arr, side="left")
 
@@ -76,24 +164,51 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
         return cast(BoolArray, result)
 
     def __contains__(self, x: object) -> bool:
+        """Check if a point is in the support."""
         return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[Number]:
+        """Iterate through all points in the support."""
         return iter(self._points)
 
     def iter_leq(self, x: Number) -> Iterator[Number]:
+        """
+        Iterate through points less than or equal to x.
+
+        Parameters
+        ----------
+        x : Number
+            Upper bound.
+        """
         return iter(self._points[: np.searchsorted(self._points, x, side="right")])
 
     def prev(self, x: Number) -> Number | None:
+        """
+        Find the largest point strictly less than x.
+
+        Parameters
+        ----------
+        x : Number
+            Reference point.
+        """
         idx = np.searchsorted(self._points, x, side="left")
         if idx == 0:
             return None
         return cast(Number, self._points[idx - 1])
 
     def first(self) -> Number:
+        """Get the smallest point in the support."""
         return cast(Number, self._points[0])
 
     def next(self, current: Number) -> Number | None:
+        """
+        Find the smallest point strictly greater than current.
+
+        Parameters
+        ----------
+        current : Number
+            Reference point.
+        """
         idx = np.searchsorted(self._points, current, side="right")
         if idx == self._points.size:
             return None
@@ -101,6 +216,7 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
 
     @property
     def points(self) -> NumericArray:
+        """Get a copy of the points array."""
         return cast(NumericArray, self._points.copy())
 
     __iter__ = iter_points
@@ -108,6 +224,26 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
 
 @dataclass(slots=True)
 class IntegerLatticeDiscreteSupport(DiscreteSupport):
+    """
+    Discrete support defined by an integer lattice: {residue + k * modulus}.
+
+    Parameters
+    ----------
+    residue : int
+        Base value for the lattice.
+    modulus : int
+        Step size between lattice points (must be positive).
+    min_k : int, optional
+        Minimum k value (inclusive).
+    max_k : int, optional
+        Maximum k value (inclusive).
+
+    Raises
+    ------
+    ValueError
+        If modulus is not positive.
+    """
+
     residue: int
     modulus: int
     min_k: int | None = None
@@ -123,6 +259,12 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     def contains(self, x: NumericArray) -> BoolArray: ...
 
     def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        """
+        Check if point(s) are in the integer lattice support.
+
+        Points must be integers satisfying: x = residue (mod modulus)
+        and be within bounds if min_k/max_k are specified.
+        """
         xf = np.asarray(x, dtype=float)
         v = np.floor(xf).astype(int)
         is_integer = xf == v
@@ -143,9 +285,18 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         return cast(BoolArray, result)
 
     def __contains__(self, x: object) -> bool:
+        """Check if a point is in the integer lattice support."""
         return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[int]:
+        """
+        Iterate through all points in the integer lattice support.
+
+        Raises
+        ------
+        RuntimeError
+            If both min_k and max_k are None (unbounded both ways).
+        """
         first = self.first()
         last = self.last()
 
@@ -178,6 +329,14 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         )
 
     def iter_leq(self, x: Number) -> Iterator[int]:
+        """
+        Iterate through points less than or equal to x.
+
+        Raises
+        ------
+        RuntimeError
+            If min_k is None (left-unbounded support).
+        """
         if self.min_k is None:
             raise RuntimeError(
                 "iter_leq is not supported for left-unbounded IntegerLatticeDiscreteSupport. "
@@ -207,6 +366,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         return _gen()
 
     def prev(self, x: Number) -> int | None:
+        """Find the largest point strictly less than x."""
         if self.min_k is not None and float(x) <= self.min_k:
             return None
         target = int(floor(float(x))) - 1
@@ -222,6 +382,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         return candidate
 
     def first(self) -> int | None:
+        """Get the smallest point in the support, or None if unbounded left."""
         if self.min_k is None:
             return None
         first = self.min_k
@@ -233,6 +394,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         return first
 
     def last(self) -> int | None:
+        """Get the largest point in the support, or None if unbounded right."""
         if self.max_k is None:
             return None
         last = self.max_k
@@ -243,6 +405,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         return last
 
     def next(self, current: int) -> int | None:
+        """Find the smallest point strictly greater than current."""
         nxt = current + self.modulus
         if self.max_k is not None and nxt > self.max_k:
             return None
@@ -252,10 +415,12 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
 
     @property
     def is_left_bounded(self) -> bool:
+        """Check if the support is bounded on the left."""
         return self.min_k is not None
 
     @property
     def is_right_bounded(self) -> bool:
+        """Check if the support is bounded on the right."""
         return self.max_k is not None
 
     __iter__ = iter_points

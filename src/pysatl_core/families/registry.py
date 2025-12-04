@@ -3,7 +3,7 @@ Global registry for parametric distribution families using singleton pattern.
 
 This module implements a centralized registry that maintains references to all
 defined parametric families, enabling easy access and management across the
-application. The registry follows the singleton pattern to ensure consistency.
+application.
 """
 
 from __future__ import annotations
@@ -24,27 +24,15 @@ class ParametricFamilyRegister:
     """
     Singleton registry for parametric distribution families.
 
-    This class maintains a global registry of all parametric families,
-    allowing them to be accessed by name from anywhere in the codebase.
-
-    Examples
-    --------
-    >>> registry = ParametricFamilyRegister()
-    >>> family = registry.get('Lognormal Family')
+    Maintains a global registry of all parametric families, allowing
+    them to be accessed by name.
     """
 
     _instance: ClassVar[ParametricFamilyRegister | None] = None
     _registered_families: dict[str, ParametricFamily]
 
     def __new__(cls) -> ParametricFamilyRegister:
-        """
-        Create or return the singleton instance.
-
-        Returns
-        -------
-        ParametricFamiliesRegister
-            The singleton registry instance.
-        """
+        """Create or return the singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._registered_families = {}
@@ -58,7 +46,7 @@ class ParametricFamilyRegister:
         Parameters
         ----------
         name : str
-            The name of the family to retrieve.
+            Name of the family to retrieve.
 
         Returns
         -------
@@ -68,7 +56,7 @@ class ParametricFamilyRegister:
         Raises
         ------
         ValueError
-            If no family with the given name exists in the registry.
+            If no family with the given name exists.
         """
         self = cls()
         if name not in self._registered_families:
@@ -88,7 +76,7 @@ class ParametricFamilyRegister:
         Raises
         ------
         ValueError
-            If family with the same name already was registered
+            If a family with the same name is already registered.
         """
         self = cls()
         if family.name in self._registered_families:

@@ -3,7 +3,7 @@ Default configuration and cached accessor for the global characteristic registry
 
 - No auto-configuration in constructor.
 - Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
-  singleton instance and seeds it with a minimal set of edges (PDF, CDF, PPF, PMF).
+  singleton instance and seeds it with a set of edges.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ PMF = "pmf"
 
 
 def _configure(reg: CharacteristicRegistry) -> None:
+    """Default PySATL configuration for characteristic registry."""
     pdf_to_cdf_1C = ComputationMethod[float, float](
         target=CDF, sources=[PDF], fitter=fit_pdf_to_cdf_1C
     )

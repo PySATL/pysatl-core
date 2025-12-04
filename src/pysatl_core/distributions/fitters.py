@@ -1,25 +1,3 @@
-"""
-Fitters for Conversions Between PDF, CDF and PPF
-================================================
-
-Numerical fitters that construct scalar conversions between univariate
-continuous characteristics:
-
-- ``pdf -> cdf`` via numerical integration;
-- ``cdf -> pdf`` via numerical differentiation;
-- ``cdf -> ppf`` via a bracketing + bisection-like root finder;
-- ``ppf -> cdf`` via numerical inversion using a root solver.
-
-The returned objects are :class:`~pysatl_core.distributions.computation.FittedComputationMethod`
-instances with scalar callables (``float -> float``).
-
-Notes
------
-- SciPy is used for integration (``quad``) and root finding (``brentq``).
-- Small numerical artefacts (e.g., tiny negative derivatives) are clipped to
-  non-negative values where appropriate.
-"""
-
 from __future__ import annotations
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"

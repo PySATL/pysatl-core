@@ -1,19 +1,9 @@
 """
-Distribution Interfaces and a Standalone Univariate Implementation
-==================================================================
+Distribution Interface
+=====================
 
-This module defines the public :class:`Distribution` protocol and a concrete
-standalone univariate Euclidean distribution:
-
-- :class:`Distribution` protocol – abstract interface used throughout the core.
-- :class:`StandaloneEuclideanUnivariateDistribution` – a minimal implementation
-  that plugs default computation and sampling strategies.
-
-Notes
------
-- The univariate sampling strategy draws from the distribution's ``ppf``.
-- Log-likelihood is computed element-wise using ``pdf`` (continuous) or ``pmf``
-  (discrete), assuming scalar characteristic functions (``float -> float``).
+This module defines the public Distribution protocol that serves as the
+abstract interface for all probability distributions in the system.
 """
 
 from __future__ import annotations
@@ -44,7 +34,26 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Distribution(Protocol):
-    """Public distribution interface used by strategies and fitters."""
+    """
+    Protocol defining the interface for probability distributions.
+
+    This protocol is the central abstraction used throughout the system.
+    Concrete distribution implementations must provide the properties and
+    methods defined here.
+
+    Attributes
+    ----------
+    distribution_type : DistributionType
+        Type information about the distribution (kind, dimension, etc.).
+    analytical_computations : Mapping[str, AnalyticalComputation]
+        Direct analytical computations provided by the distribution.
+    sampling_strategy : SamplingStrategy
+        Strategy for generating random samples.
+    computation_strategy : ComputationStrategy
+        Strategy for computing characteristics and conversions.
+    support : Support or None
+        Support of the distribution, if defined.
+    """
 
     @property
     def distribution_type(self) -> DistributionType: ...
@@ -56,6 +65,7 @@ class Distribution(Protocol):
 
     @property
     def sampling_strategy(self) -> SamplingStrategy: ...
+
     @property
     def computation_strategy(self) -> ComputationStrategy[Any, Any]: ...
 
@@ -65,12 +75,59 @@ class Distribution(Protocol):
     def query_method(
         self, characteristic_name: GenericCharacteristicName, **options: Any
     ) -> Method[Any, Any]:
+        """
+        Query a computation method for a specific characteristic.
+
+        Parameters
+        ----------
+        characteristic_name : str
+            Name of the characteristic to compute (e.g., "pdf", "cdf").
+        **options : Any
+            Additional options for the computation.
+
+        Returns
+        -------
+        Method
+            Callable method that computes the characteristic.
+        """
         return self.computation_strategy.query_method(characteristic_name, self, **options)
 
     def calculate_characteristic(
         self, characteristic_name: GenericCharacteristicName, value: Any, **options: Any
     ) -> Any:
+        """
+        Calculate a characteristic at the given value.
+
+        Parameters
+        ----------
+        characteristic_name : str
+            Name of the characteristic to compute.
+        value : Any
+            Point(s) at which to evaluate the characteristic.
+        **options : Any
+            Additional computation options.
+
+        Returns
+        -------
+        Any
+            Value of the characteristic at the given point(s).
+        """
         return self.query_method(characteristic_name, **options)(value)
 
     def sample(self, n: int, **options: Any) -> Sample:
+        """
+        Generate random samples from the distribution.
+
+        Parameters
+        ----------
+        n : int
+            Number of samples to generate.
+        **options : Any
+            Additional sampling options.
+
+        Returns
+        -------
+        Sample
+            Container with the generated samples.
+        """
         return self.sampling_strategy.sample(n, distr=self, **options)

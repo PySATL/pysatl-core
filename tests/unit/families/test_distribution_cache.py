@@ -13,19 +13,12 @@ from tests.unit.families.test_basic import TestBaseFamily
 
 class TestAnalyticalComputationCache(TestBaseFamily):
     def _fallback_characteristics(self) -> dict[GenericCharacteristicName, dict[str, object]]:
-        """Provide characteristics only for the base parametrization.
-
-        Both characteristics return the same base parameter (``value``) to make
-        assertions straightforward. The ``alt`` parametrization must therefore
-        fallback to base for both PDF and CDF.
-        """
         return {
             self.PDF: {"base": lambda params, x: params.value},
             self.CDF: {"base": lambda params, x: params.value},
         }
 
     def test_cache_auto_invalidation(self) -> None:
-        """Mapping should be cached and auto-invalidated on parameter object/name changes."""
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
         ParametricFamilyRegister.register(family)
 
@@ -60,7 +53,6 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         assert computations3[self.CDF](0.0) == pytest.approx(7.0)
 
     def test_fallback_to_base_for_missing_form(self) -> None:
-        """Missing forms in current parametrization must be supplied from base."""
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
         ParametricFamilyRegister.register(family)
 
