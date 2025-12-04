@@ -2,9 +2,7 @@
 Concrete distribution instances with specific parameter values.
 
 This module provides the implementation for individual distribution instances
-created from parametric families. It handles distribution characteristics
-computation, sampling, and provides access to analytical methods for
-specific parameter sets.
+created from parametric families.
 """
 
 from __future__ import annotations
@@ -41,10 +39,10 @@ class ParametricFamilyDistribution(Distribution):
     """
     A specific distribution instance from a parametric family.
 
-    This class represents a concrete distribution with specific parameter
-    values, providing methods for computation and sampling.
+    Represents a concrete distribution with specific parameter values,
+    providing methods for computation and sampling.
 
-    Attributes
+    Parameters
     ----------
     family_name : str
         Name of the distribution family.
@@ -52,6 +50,8 @@ class ParametricFamilyDistribution(Distribution):
         Type of this distribution.
     parameters : Parametrization
         Parameter values for this distribution.
+    _support : Support or None
+        Support of this distribution.
     """
 
     family_name: str
@@ -61,6 +61,7 @@ class ParametricFamilyDistribution(Distribution):
 
     @property
     def distribution_type(self) -> DistributionType:
+        """Get the distribution type."""
         return self._distribution_type
 
     @property
@@ -79,15 +80,11 @@ class ParametricFamilyDistribution(Distribution):
     def analytical_computations(
         self,
     ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
-        """Lazily computed analytical computations for this distribution instance.
+        """
+        Get analytical computations for this distribution.
 
-        Delegates construction to the parent family (precomputed plan) and
-        caches the result per-instance. The cache auto-invalidates when either
-        the **parametrization object** changes (by identity) or the
-        **parametrization name** changes.
-
-        *If you mutate numeric fields of the same parametrization object*,
-        the callables see fresh values because they close over that object.
+        Lazily computed and cached per instance. Cache invalidates when
+        parametrization object or name changes.
         """
         key = (id(self.parameters), self.parameters.name)
         cache_key = getattr(self, "_analytical_cache_key", None)
@@ -102,31 +99,18 @@ class ParametricFamilyDistribution(Distribution):
 
     @property
     def sampling_strategy(self) -> SamplingStrategy:
-        """
-        Get the sampling strategy for this distribution.
-
-        Returns
-        -------
-        SamplingStrategy
-            Strategy for sampling from this distribution.
-        """
+        """Get the sampling strategy for this distribution."""
         return self.family.sampling_strategy
 
     @property
     def computation_strategy(self) -> ComputationStrategy[Any, Any]:
-        """
-        Get the computation strategy for this distribution.
-
-        Returns
-        -------
-        ComputationStrategy
-            Strategy for computing characteristics of this distribution.
-        """
+        """Get the computation strategy for this distribution."""
         return self.family.computation_strategy
 
     @property
     def support(self) -> Support | None:
-        return self.family.support_resolver(self.parameters)
+        """Get the support of this distribution."""
+        return self._support
 
     def sample(self, n: int, **options: Any) -> Sample:
         """
@@ -137,11 +121,11 @@ class ParametricFamilyDistribution(Distribution):
         n : int
             Number of samples to generate.
         **options : Any
-            Additional options for the sampling algorithm.
+            Additional options for sampling.
 
         Returns
         -------
         Sample
-            The generated samples.
+            Generated samples.
         """
         return self.sampling_strategy.sample(n, distr=self, **options)

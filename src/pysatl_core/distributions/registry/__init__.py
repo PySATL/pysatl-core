@@ -1,40 +1,28 @@
 """
 Characteristic Registry package.
 
-Exports
--------
-DEFAULT_COMPUTATION_KEY
-Constraint, SetConstraint, NumericConstraint, EdgeConstraint, NodeConstraint
-EdgeMeta, GraphInvariantError
-CharacteristicRegistry, RegistryView
-characteristic_registry, reset_characteristic_registry
+This package provides a graph-based registry for mathematical distribution
+characteristics (PDF, CDF, PMF, PPF, etc.) with constraint-based filtering.
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-# Public factory & reset (lazy configuration happens inside characteristic_registry())
 from .configuration import (
     characteristic_registry,
     reset_characteristic_registry,
 )
-
-# Constraint layer
 from .constraint import (
     Constraint,
     GraphPrimitiveConstraint,
     NumericConstraint,
     SetConstraint,
 )
-
-# Core graph and view
 from .graph import (
     CharacteristicRegistry,
     RegistryView,
 )
-
-# Graph primitives and constants
 from .graph_primitives import (
     DEFAULT_COMPUTATION_KEY,
     EdgeMeta,
@@ -42,19 +30,19 @@ from .graph_primitives import (
 )
 
 __all__ = [
-    # constants & primitives
+    # Graph primitives and constants
     "DEFAULT_COMPUTATION_KEY",
     "EdgeMeta",
     "GraphInvariantError",
-    # constraints
+    # Constraint types
     "Constraint",
     "SetConstraint",
     "NumericConstraint",
     "GraphPrimitiveConstraint",
-    # graph
+    # Graph classes
     "CharacteristicRegistry",
     "RegistryView",
-    # accessors
+    # Factory functions
     "characteristic_registry",
     "reset_characteristic_registry",
 ]

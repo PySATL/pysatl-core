@@ -49,10 +49,6 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert max(errs) < 5e-3
 
     def test_configuration_discrete_requires_support_then_ok(self) -> None:
-        """
-        Discrete edges require support; without it invariants fail, with it they pass.
-        Also validate pmf->cdf values and cdf->ppf thresholds.
-        """
         reg = characteristic_registry()
         distr = self.make_discrete_point_pmf_distribution(is_with_support=False)
 

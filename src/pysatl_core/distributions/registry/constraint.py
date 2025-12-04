@@ -1,23 +1,9 @@
 """
-Constraint primitives, node/edge applicability constraints.
+Constraint primitives and applicability constraints for distribution registry.
 
-This module defines two layers of constraints:
-
-1) Value-level constraints (do not depend on a distribution):
-   - SetConstraint: membership in a finite set
-   - NumericConstraint: finite set and/or inclusive bounds
-
-2) Applicability constraints (depend on a concrete distribution instance):
-   - FeatureApplicability (abstract): common base with `_get_feature()` and `allows()`
-   - EdgeConstraint: applicability of an edge (uses value-level constraints)
-   - NodeConstraint: applicability of a node (currently supports only `kind`)
-
-Design goals
-------------
-- No hard dependency on a particular distribution-type class.
-- Features are read from `distribution.distribution_type.<name>` and, if absent,
-  from the `distribution` object itself.
-- Numeric domains can be infinite (e.g., constraints like `dim >= 2`).
+This module defines constraints used to determine whether certain computations
+or characteristics can be applied to specific distributions based on their
+features like kind, dimension, support, etc.
 """
 
 from __future__ import annotations
@@ -37,70 +23,67 @@ if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
 
 
-# --------------------------------------------------------------------------- #
-# Value-level constraints (do not depend on a distribution)
-# --------------------------------------------------------------------------- #
-
-
 class Constraint(Protocol):
     """Protocol for value-level constraints."""
 
-    def allows(self, value: Any) -> bool: ...
+    def allows(self, value: Any) -> bool:
+        """Check if the constraint allows the given value."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class NonNullConstraint:
-    """
-    Constraint that accepts any value except None.
-
-    Semantics
-    ---------
-    - value is None  -> False
-    - otherwise      -> True
-    """
+    """Constraint that rejects None values."""
 
     def allows(self, value: Any) -> bool:
+        """Return False if value is None, True otherwise."""
         return value is not None
 
 
 @dataclass(frozen=True, slots=True)
 class SetConstraint:
     """
-    Membership constraint for finite domains.
+    Constraint that checks membership in a finite set.
 
     Parameters
     ----------
     allowed : frozenset[Any] | None
-        If None, the constraint is not applied; otherwise `value ∈ allowed`.
+        The set of allowed values. If None, all values are allowed.
     """
 
     allowed: frozenset[Any] | None = None
 
     def allows(self, value: Any) -> bool:
+        """
+        Check if the value is in the allowed set.
+
+        Returns
+        -------
+        bool
+            True if `allowed` is None or `value` is in `allowed`, False otherwise.
+        """
         return True if self.allowed is None else (value in self.allowed)
 
 
 @dataclass(frozen=True, slots=True)
 class NumericConstraint:
     """
-    Numeric constraint for (possibly infinite) domains.
+    Constraint for numeric values with bounds and/or allowed values.
 
     Parameters
     ----------
-    allowed : frozenset[int] | None, optional
-        Exact allowed values (finite subset). If None, not checked.
-    ge : int | None, optional
-        Inclusive lower bound (value >= ge).
-    le : int | None, optional
-        Inclusive upper bound (value <= le).
+    allowed : frozenset[int] | None
+        Specific allowed integer values.
+    ge : int | None
+        Minimum allowed value (inclusive).
+    le : int | None
+        Maximum allowed value (inclusive).
 
     Notes
     -----
-    Conditions are conjunctive. Examples:
-    - dim == 1      -> allowed={1}
-    - dim >= 2      -> ge=2
-    - dim in {2,3}  -> allowed={2,3}
-    - 2 <= dim <= 5 -> ge=2, le=5
+    All conditions are combined with AND logic. For example, to restrict
+    dimension to exactly 1: `allowed=frozenset({1})`. To require dimension
+    to be at least 2: `ge=2`. To require dimension between 2 and 5: `ge=2, le=5`.
     """
 
     allowed: frozenset[int] | None = None
@@ -108,6 +91,14 @@ class NumericConstraint:
     le: int | None = None
 
     def allows(self, value: Any) -> bool:
+        """
+        Check if the value satisfies all numeric constraints.
+
+        Returns
+        -------
+        bool
+            True if value is an integer satisfying all constraints, False otherwise.
+        """
         try:
             v = int(value)
         except Exception:
@@ -119,18 +110,22 @@ class NumericConstraint:
         return not (self.le is not None and v > self.le)
 
 
-# --------------------------------------------------------------------------- #
-# Applicability constraints (depend on a distribution)
-# --------------------------------------------------------------------------- #
-
-
 @dataclass(frozen=True, slots=True)
 class GraphPrimitiveConstraint:
     """
-    Base for applicability constraints that depend on a distribution.
+    Constraint that checks distribution features at type and instance levels.
 
-    All type-level constraints are expressed via `distribution_type_feature_constraints`.
-    Keys are feature names obtained from the distribution type.
+    This constraint evaluates whether a Distribution satisfies constraints
+    based on both its DistributionType features and its own instance attributes.
+
+    Parameters
+    ----------
+    distribution_type_feature_constraints : Mapping[str, Constraint]
+        Constraints on distribution type features (e.g., kind, dimension).
+        Features are read from the DistributionType object's registry_features.
+    distribution_instance_feature_constraints : Mapping[str, Constraint]
+        Constraints on distribution instance features (e.g., support).
+        Features are read directly from the Distribution instance attributes.
     """
 
     distribution_type_feature_constraints: Mapping[str, Constraint] = field(
@@ -157,6 +152,24 @@ class GraphPrimitiveConstraint:
             )
 
     def allows(self, distr: Distribution) -> bool:
+        """
+        Check if the distribution satisfies all constraints.
+
+        Parameters
+        ----------
+        distr : Distribution
+            The distribution to check.
+
+        Returns
+        -------
+        bool
+            True if all constraints are satisfied, False otherwise.
+
+        Notes
+        -----
+        Type features are read from `distr.distribution_type.registry_features`.
+        Instance features are read directly from `distr` attributes.
+        """
         features = distr.distribution_type.registry_features
 
         for name, cons in self.distribution_type_feature_constraints.items():

@@ -1,14 +1,15 @@
 """
-Distributions subpackage
+Distributions Subpackage
+========================
 
-Interfaces and default implementations for probability distributions used by
-PySATL Core:
+Core abstractions and implementations for probability distributions
+used throughout PySATL.
 
-- distribution protocol (:mod:`.distribution`);
-- numerical fitters (:mod:`.fitters`);
-- characteristic graph registry (:mod:`.registry`);
-- sampling protocol and array-backed samples (:mod:`.sampling`);
-- pluggable strategies (:mod:`.strategies`).
+This package provides:
+- Distribution protocol and computational primitives
+- Characteristic graph registry with constraint-based filtering
+- Sampling interfaces and strategies
+- Support structures for distribution domains
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
@@ -30,12 +31,8 @@ from .strategies import (
     DefaultSamplingUnivariateStrategy,
     SamplingStrategy,
 )
-from .support import (
-    DiscreteSupport,
-    ExplicitTableDiscreteSupport,
-    IntegerLatticeDiscreteSupport,
-    Support,
-)
+from .support import *
+from .support import __all__ as _support_all
 
 __all__ = [
     # computation primitives
@@ -55,10 +52,8 @@ __all__ = [
     # registry
     *_registry_all,
     # support
-    "ExplicitTableDiscreteSupport",
-    "IntegerLatticeDiscreteSupport",
-    "DiscreteSupport",
-    "Support",
+    *_support_all,
 ]
 
 del _registry_all
+del _support_all

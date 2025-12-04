@@ -2,9 +2,7 @@
 Parametric Families module for working with statistical distribution families.
 
 This package provides a comprehensive framework for defining, managing, and
-working with parametric families of statistical distributions. It supports
-multiple parameterizations, constraint validation, and automatic conversion
-between different parameter formats.
+working with parametric families of statistical distributions.
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"

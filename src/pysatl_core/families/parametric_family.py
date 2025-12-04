@@ -3,8 +3,7 @@ Parametric family definitions and management infrastructure.
 
 This module contains the main class for defining parametric families of
 distributions, including support for multiple parameterizations, distribution
-characteristics, sampling strategies, and computation methods. It serves as
-the central definition point for statistical distribution families.
+characteristics, sampling strategies, and computation methods.
 """
 
 from __future__ import annotations
@@ -46,31 +45,28 @@ class ParametricFamily:
     """
     A family of distributions with multiple parametrizations.
 
-    This class represents a parametric family of distributions, such as
-    the normal or lognormal family, which can be parameterized in different
-    ways (e.g., mean-variance or canonical parametrization). The family
-    owns the registry of parametrizations and enforces invariants such as
-    unique names and the existence of a single base parametrization.
+    Represents a parametric family of distributions (e.g., normal, lognormal)
+    that can be parameterized in different ways. Manages parametrizations,
+    distribution characteristics, and provides factory methods for creating
+    distribution instances.
 
-    Attributes
+    Parameters
     ----------
     name : str
         Name of the distribution family.
-    distr_type : DistributionType | Callable[[Parametrization], DistributionType]
-        Type of distributions in this family or a function that infers the
-        type from *base* parametrization values.
-    parametrization_names : list[ParametrizationName]
-        Ordered list of parametrization names. The first name is considered
-        the base parametrization name.
-    distr_characteristics : Dict[GenericCharacteristicName, \
-    Dict[ParametrizationName, ParametrizedFunction]]
-        Mapping from characteristic names to computation functions by parametrization.
-        If a single function is provided, it is assumed to be defined for the base
-        parametrization.
-    sampling_strategy : SamplingStrategy
-        Strategy for sampling from distributions in this family.
-    computation_strategy : ComputationStrategy
+    distr_type : DistributionType or Callable[[Parametrization], DistributionType]
+        Distribution type or function that infers type from base parametrization.
+    distr_parametrizations : list[ParametrizationName]
+        List of parametrization names (first is base parametrization).
+    distr_characteristics : dict[str, dict[str, Callable] or Callable]
+        Mapping from characteristic names to computation functions.
+        Single functions are treated as defined for the base parametrization.
+    sampling_strategy : SamplingStrategy, optional
+        Strategy for sampling from distributions.
+    computation_strategy : ComputationStrategy, optional
         Strategy for computing distribution characteristics.
+    support_by_parametrization : Callable or None, optional
+        Function that returns support for given parameters.
     """
 
     def __init__(
@@ -86,28 +82,6 @@ class ParametricFamily:
         computation_strategy: ComputationStrategy[Any, Any] | None = None,
         support_by_parametrization: SupportArg = None,
     ):
-        """
-        Initialize a new parametric family.
-
-        Parameters
-        ----------
-        name : str
-            Name of the distribution family.
-        distr_type : DistributionType | Callable[[Parametrization], DistributionType]
-            Type of distributions in this family or, if the type is parameter-dependent,
-            a function that takes *base* parametrization and infers the type.
-        distr_parametrizations : list[ParametrizationName]
-            List of parametrizations for this distribution. The first element is
-            always the base parametrization name.
-        distr_characteristics : dict[GenericCharacteristicName, \
-        dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction]
-            Mapping from characteristic names to computation functions. A single function
-            value is treated as defined for the base parametrization.
-        sampling_strategy : SamplingStrategy
-            Strategy for sampling from distributions in this family.
-        computation_strategy : ComputationStrategy
-            Strategy for computing distribution characteristics.
-        """
         self._name = name
         self._distr_type: Callable[[Parametrization], DistributionType] = (
             (lambda params: distr_type) if isinstance(distr_type, DistributionType) else distr_type
@@ -127,7 +101,7 @@ class ParametricFamily:
         self.parametrization_names: list[ParametrizationName] = distr_parametrizations
         self.base_parametrization_name: ParametrizationName = self.parametrization_names[0]
 
-        # Runtime registry of parametrization classes (formerly in ParametrizationSpec)
+        # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
 
         self.sampling_strategy = (
@@ -143,8 +117,7 @@ class ParametricFamily:
             GenericCharacteristicName, dict[ParametrizationName, ParametrizedFunction]
         ] = {key: _process_char_val(val) for key, val in distr_characteristics.items()}
 
-        # Precompute analytical plan: for each parametrization, choose provider parametrization
-        # (either itself or base) for every characteristic that is available.
+        # Precompute analytical plan
         self._analytical_plan: dict[
             ParametrizationName, dict[GenericCharacteristicName, ParametrizationName]
         ] = {}
@@ -160,42 +133,23 @@ class ParametricFamily:
 
     @property
     def name(self) -> str:
-        """
-        Family name.
-
-        Returns
-        -------
-        str
-            The family name.
-        """
+        """Get the family name."""
         return self._name
 
     @property
     def parametrizations(self) -> dict[ParametrizationName, type[Parametrization]]:
-        """
-        Mapping from parametrization names to parametrization classes.
-
-        Returns
-        -------
-        dict[ParametrizationName, type[Parametrization]]
-            A live mapping of registered parametrizations.
-        """
+        """Get mapping from parametrization names to classes."""
         return self._parametrizations
 
     @property
     def base(self) -> type[Parametrization]:
         """
-        Base parametrization class for this family.
-
-        Returns
-        -------
-        type[Parametrization]
-            The class registered under ``base_parametrization_name``.
+        Get the base parametrization class.
 
         Raises
         ------
         ValueError
-            If the base parametrization has not been registered yet.
+            If base parametrization is not registered.
         """
         try:
             return self._parametrizations[self.base_parametrization_name]
@@ -206,6 +160,7 @@ class ParametricFamily:
 
     @property
     def support_resolver(self) -> SupportResolver:
+        """Get the support resolver function."""
         return self._support_resolver
 
     def register_parametrization(
@@ -214,21 +169,19 @@ class ParametricFamily:
         parametrization_class: type[Parametrization],
     ) -> None:
         """
-        Register a parametrization class under ``name``.
+        Register a parametrization class.
 
         Parameters
         ----------
         name : ParametrizationName
-            Unique parametrization name within the family.
+            Unique parametrization name.
         parametrization_class : type[Parametrization]
-            The class that implements the parametrization.
+            Parametrization class to register.
 
         Raises
         ------
-        RuntimeError
-            If the family is frozen and no further registration is allowed.
         ValueError
-            If ``name`` is already registered.
+            If name is already registered.
         """
         if name in self._parametrizations:
             raise ValueError(f"Parametrization '{name}' is already registered.")
@@ -238,20 +191,10 @@ class ParametricFamily:
         """
         Fetch a parametrization class by name.
 
-        Parameters
-        ----------
-        name : ParametrizationName
-            Parametrization name.
-
-        Returns
-        -------
-        type[Parametrization]
-            The registered parametrization class.
-
         Raises
         ------
         KeyError
-            If the name is not registered.
+            If name is not registered.
         """
         return self._parametrizations[name]
 
@@ -267,7 +210,7 @@ class ParametricFamily:
         Returns
         -------
         Parametrization
-            Equivalent parameters in the base parametrization.
+            Equivalent parameters in base parametrization.
         """
         if parameters.name == self.base_parametrization_name:
             return parameters
@@ -277,21 +220,9 @@ class ParametricFamily:
         self, parameters: Parametrization
     ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
         """
-        Build analytical computations mapping for the given parameter instance.
+        Build analytical computations for given parameters.
 
-        This uses a precomputed provider plan so runtime work is reduced to:
-        - (Optionally) converting parameters to base once,
-        - binding callables with :func:`functools.partial`.
-
-        Parameters
-        ----------
-        parameters : Parametrization
-            Parameters in any registered parametrization.
-
-        Returns
-        -------
-        dict[GenericCharacteristicName, AnalyticalComputation]
-            Mapping from characteristic name to analytical computation callable.
+        Uses precomputed provider plan for efficient computation.
         """
         plan = self._analytical_plan.get(parameters.name, {})
         result: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = {}
@@ -319,26 +250,26 @@ class ParametricFamily:
         **parameters_values: Any,
     ) -> ParametricFamilyDistribution:
         """
-        Create a distribution instance with the given parameters.
+        Create a distribution instance with given parameters.
 
         Parameters
         ----------
-        parametrization_name : str | None, optional
-            Name of the parametrization to use, or ``None`` for the base parametrization.
+        parametrization_name : str, optional
+            Name of parametrization to use (defaults to base).
         **parameters_values
             Parameter values for the distribution.
 
         Returns
         -------
         ParametricFamilyDistribution
-            A distribution instance with the specified parameters.
+            Distribution instance with specified parameters.
 
         Raises
         ------
         KeyError
-            If the parametrization name is not registered.
+            If parametrization name is not registered.
         ValueError
-            If the parameters don't satisfy the parametrization constraints.
+            If parameters don't satisfy constraints.
         """
         if parametrization_name is None:
             parametrization_class = self.base
@@ -358,7 +289,7 @@ class ParametricFamily:
         name: str,
     ) -> Callable[[type[Parametrization]], type[Parametrization]]:
         """
-        Create a class decorator that registers a parametrization in this family.
+        Create a class decorator that registers a parametrization.
 
         Parameters
         ----------
@@ -368,7 +299,7 @@ class ParametricFamily:
         Returns
         -------
         Callable[[type[Parametrization]], type[Parametrization]]
-            Class decorator that registers the parametrization and returns it.
+            Class decorator for registering parametrizations.
         """
         from pysatl_core.families.parametrizations import parametrization as _param_deco
 

@@ -2,8 +2,9 @@
 PySATL Core
 ===========
 
-Minimal core for probabilistic distributions: types, strategies, fitters,
-and graph-based characteristic resolution.
+Core framework for probabilistic distributions providing type definitions,
+distribution abstractions, characteristic computation graphs, and parametric
+family management.
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"

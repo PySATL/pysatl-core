@@ -2,32 +2,8 @@
 Computation Primitives and Conversions
 ======================================
 
-This module defines the core building blocks used to compute distribution
-characteristics:
-
-- :class:`Computation` — callable (analytical or fitted) for a single
-  characteristic.
-- :class:`FittedComputationMethod` — a fitted conversion method
-  (e.g., from CDF to PDF) ready to be called.
-- :class:`ComputationMethod` — a factory that *fits* a conversion given a
-  distribution and returns :class:`FittedComputationMethod`.
-- :class:`AnalyticalComputation` — an analytical callable provided by a
-  distribution directly.
-
-It also exposes canonical univariate continuous conversions:
-
-- ``pdf_to_cdf_1C``
-- ``cdf_to_pdf_1C``
-- ``cdf_to_ppf_1C``
-- ``ppf_to_cdf_1C``
-
-Notes
------
-- All callables are intentionally **scalar** (``float -> float``) in the
-  univariate case. Vectorization, if needed, should be handled outside or by
-  the caller.
-- ``**options`` in fitters are free-form and may contain numeric tolerances,
-  disambiguation flags (e.g., ``most_left``), etc.
+Core building blocks for computing distribution characteristics and
+conversions between them (e.g., PDF to CDF, CDF to PPF).
 """
 
 from __future__ import annotations
@@ -51,46 +27,45 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Computation[In, Out](Protocol):
-    """Callable for a single characteristic.
+    """
+    Protocol for computations that evaluate a single characteristic.
 
     Attributes
     ----------
     target : str
-        The characteristic name this computation represents.
-
-    Methods
-    -------
-    __call__(data, **options)
-        Evaluate the characteristic at ``data``.
+        Name of the characteristic this computation produces.
     """
 
     @property
     def target(self) -> GenericCharacteristicName: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
+    def __call__(self, data: In) -> Out: ...
 
 
 @runtime_checkable
 class FittedComputationMethodProtocol[In, Out](Protocol):
-    """Protocol for a fitted conversion method.
+    """
+    Protocol for fitted computation methods ready for evaluation.
 
     Attributes
     ----------
     target : str
-        Destination characteristic.
+        Destination characteristic name.
     sources : Sequence[str]
-        Source characteristics this method depends on.
+        Source characteristic names this method depends on.
     """
 
     @property
     def target(self) -> GenericCharacteristicName: ...
     @property
     def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
+    def __call__(self, data: In) -> Out: ...
 
 
 @runtime_checkable
 class ComputationMethodProtocol[In, Out](Protocol):
-    """Protocol for a conversion method factory (to be fitted)."""
+    """
+    Protocol for computation method factories that can be fitted to distributions.
+    """
 
     @property
     def target(self) -> GenericCharacteristicName: ...
@@ -103,68 +78,65 @@ class ComputationMethodProtocol[In, Out](Protocol):
 
 @dataclass(frozen=True, slots=True)
 class AnalyticalComputation[In, Out]:
-    """Analytical computation provided directly by the distribution.
+    """
+    Analytical computation provided directly by a distribution.
 
     Parameters
     ----------
     target : str
-        Characteristic name (e.g., ``"pdf"``).
-    func : Callable[[In, KwArg(Any)], Out]
-        Analytical callable.
-
-    Notes
-    -----
-    The callable is expected to be scalar for univariate distributions.
+        Characteristic name (e.g., "pdf", "cdf").
+    func : Callable[[In], Out]
+        Analytical function that computes the characteristic.
     """
 
     target: GenericCharacteristicName
-    func: Callable[[In, KwArg(Any)], Out]
+    func: Callable[[In], Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the analytical function."""
-        return self.func(data, **options)
+    def __call__(self, data: In) -> Out:
+        """Evaluate the analytical function at the given data."""
+        return self.func(data)
 
 
 @dataclass(frozen=True, slots=True)
 class FittedComputationMethod[In, Out]:
-    """Fitted conversion method (ready-to-use).
+    """
+    Fitted conversion method ready for use.
 
     Parameters
     ----------
     target : str
         Destination characteristic name.
     sources : Sequence[str]
-        Source characteristic names (unary conversions use length 1).
-    func : Callable[[In, KwArg(Any)], Out]
+        Source characteristic names (typically length 1 for unary conversions).
+    func : Callable[[In], Out]
         Callable implementing the fitted conversion.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    func: Callable[[In, KwArg(Any)], Out]
+    func: Callable[[In], Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the fitted conversion."""
-        return self.func(data, **options)
+    def __call__(self, data: In) -> Out:
+        """Evaluate the fitted conversion at the given data."""
+        return self.func(data)
 
 
 @dataclass(frozen=True, slots=True)
 class ComputationMethod[In, Out]:
-    """Conversion method factory (to be fitted).
+    """
+    Factory for creating fitted computation methods.
+
+    This class represents a conversion method that needs to be fitted to a
+    specific distribution before it can be used.
 
     Parameters
     ----------
     target : str
         Destination characteristic name.
     sources : Sequence[str]
-        Source characteristic names (unary for current graph edges).
-    fitter : Callable[[Distribution, KwArg(Any)], FittedComputationMethod]
-        Fitter that prepares a callable conversion for the given distribution.
-
-    Methods
-    -------
-    fit(distribution, **options)
-        Fit and return a :class:`FittedComputationMethod`.
+        Source characteristic names (typically length 1 for unary conversions).
+    fitter : Callable[[Distribution, **options], FittedComputationMethod]
+        Function that fits the computation method to a distribution.
     """
 
     target: GenericCharacteristicName
@@ -172,5 +144,19 @@ class ComputationMethod[In, Out]:
     fitter: Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
 
     def fit(self, distribution: Distribution, **options: Any) -> FittedComputationMethod[In, Out]:
-        """Fit and return a :class:`FittedComputationMethod`."""
+        """
+        Fit the computation method to a specific distribution.
+
+        Parameters
+        ----------
+        distribution : Distribution
+            Distribution to fit the computation method to.
+        **options : Any
+            Additional options passed to the fitter.
+
+        Returns
+        -------
+        FittedComputationMethod
+            Fitted method ready for evaluation.
+        """
         return self.fitter(distribution, **options)

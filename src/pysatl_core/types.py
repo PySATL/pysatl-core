@@ -1,8 +1,8 @@
 """
-Core Types
-==========
+Core Type Definitions
+=====================
 
-Lightweight enums and dataclasses used across the distributions core.
+Fundamental types and data structures used throughout the PySATL core.
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
@@ -20,7 +20,16 @@ from numpy.typing import NDArray
 
 
 class Kind(StrEnum):
-    """Distribution kind."""
+    """
+    Enumeration of distribution kinds.
+
+    Attributes
+    ----------
+    DISCRETE : str
+        Discrete probability distribution.
+    CONTINUOUS : str
+        Continuous probability distribution.
+    """
 
     DISCRETE = "discrete"
     CONTINUOUS = "continuous"
@@ -30,8 +39,8 @@ class DistributionType:
     """
     Base class for distribution type descriptors.
 
-    Besides acting as a marker, this class provides a small
-    feature interface used by the characteristic registry.
+    Provides a feature interface used by the characteristic registry
+    to query distribution properties.
     """
 
     __slots__ = ()
@@ -39,12 +48,18 @@ class DistributionType:
     @property
     def registry_features(self) -> Mapping[str, Any]:
         """
-        Return a mapping of features consulted by the characteristic registry.
+        Get features used by the characteristic registry.
 
-        Default implementation exposes public dataclass fields (if any)
-        plus simple attributes.
+        Returns
+        -------
+        Mapping[str, Any]
+            Dictionary of feature names to values.
 
-        Subclasses may override this to provide derived or computed features.
+        Notes
+        -----
+        Default implementation exposes public dataclass fields and
+        simple attributes. Subclasses may override to provide derived
+        or computed features.
         """
         data: dict[str, Any] = {}
 
@@ -59,7 +74,7 @@ class DistributionType:
 @dataclass(frozen=True, slots=True)
 class EuclideanDistributionType(DistributionType):
     """
-    Euclidean distribution type.
+    Distribution type for Euclidean space distributions.
 
     Parameters
     ----------
@@ -74,15 +89,44 @@ class EuclideanDistributionType(DistributionType):
 
 
 UnivariateContinuous = EuclideanDistributionType(kind=Kind.CONTINUOUS, dimension=1)
+"""Type for univariate continuous distributions."""
+
 UnivariateDiscrete = EuclideanDistributionType(kind=Kind.DISCRETE, dimension=1)
+"""Type for univariate discrete distributions."""
 
 NumPyNumber = np.floating[Any] | np.integer[Any]
+"""Type alias for NumPy numeric types."""
+
 Number = NumPyNumber | int | float
+"""Type alias for all numeric types."""
+
 NumericArray = NDArray[np.floating[Any] | np.integer[Any]]
+"""Type alias for numeric arrays."""
+
 BoolArray = NDArray[np.bool_]
+"""Type alias for boolean arrays."""
 
 
 class ContinuousSupportShape1D(Enum):
+    """
+    Enumeration of 1D continuous support shapes.
+
+    Attributes
+    ----------
+    REAL_LINE
+        Entire real line (-∞, ∞).
+    RAY_LEFT
+        Left-bounded ray [a, ∞) or (a, ∞).
+    RAY_RIGHT
+        Right-bounded ray (-∞, b] or (-∞, b).
+    BOUNDED_INTERVAL
+        Bounded interval [a, b], (a, b], [a, b), or (a, b).
+    EMPTY
+        Empty support.
+    SINGLE_POINT
+        Single point {a}.
+    """
+
     REAL_LINE = auto()
     RAY_LEFT = auto()
     RAY_RIGHT = auto()
@@ -93,12 +137,28 @@ class ContinuousSupportShape1D(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Interval1D:
+    """
+    1D interval with configurable closure.
+
+    Parameters
+    ----------
+    left : float, default=-inf
+        Left endpoint of the interval.
+    right : float, default=inf
+        Right endpoint of the interval.
+    left_closed : bool, default=True
+        Whether left endpoint is included (ignored if left = -inf).
+    right_closed : bool, default=True
+        Whether right endpoint is included (ignored if right = inf).
+    """
+
     left: float = -inf
     right: float = inf
-    left_closed: bool = True  # Ignored if left == -inf
-    right_closed: bool = True  # Ignored if right == inf
+    left_closed: bool = True
+    right_closed: bool = True
 
     def __post_init__(self) -> None:
+        """Adjust closure for infinite endpoints."""
         if self.left == -inf and self.left_closed:
             object.__setattr__(self, "left_closed", False)
         if self.right == inf and self.right_closed:
@@ -110,6 +170,19 @@ class Interval1D:
     def contains(self, x: NumericArray) -> BoolArray: ...
 
     def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        """
+        Check if point(s) are contained in the interval.
+
+        Parameters
+        ----------
+        x : Number or NumericArray
+            Point(s) to check.
+
+        Returns
+        -------
+        bool or BoolArray
+            True for points within the interval, False otherwise.
+        """
         arr = np.asarray(x)
 
         left_ok = (arr > self.left) | (self.left_closed & (arr >= self.left))
@@ -122,10 +195,12 @@ class Interval1D:
         return cast(BoolArray, result)
 
     def __contains__(self, x: object) -> bool:
+        """Check if a single point is in the interval."""
         return bool(self.contains(cast(Number, x)))
 
     @property
     def is_empty(self) -> bool:
+        """Check if the interval is empty."""
         if self.left > self.right:
             return True
 
@@ -133,6 +208,14 @@ class Interval1D:
 
     @property
     def shape(self) -> ContinuousSupportShape1D:
+        """
+        Get the topological shape of the interval.
+
+        Returns
+        -------
+        ContinuousSupportShape1D
+            Classification of the interval's shape.
+        """
         if self.is_empty:
             return ContinuousSupportShape1D.EMPTY
 
@@ -149,8 +232,13 @@ class Interval1D:
 
 
 type GenericCharacteristicName = str
+"""Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
+
 type ParametrizationName = str
+"""Type alias for parametrization names."""
+
 ScalarFunc = Callable[[float], float]
+"""Type alias for scalar functions (float -> float)."""
 
 
 __all__ = [
