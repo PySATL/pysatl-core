@@ -60,13 +60,13 @@ class Computation[In, Out](Protocol):
 
     Methods
     -------
-    __call__(data)
+    __call__(data, **options)
         Evaluate the characteristic at ``data``.
     """
 
     @property
     def target(self) -> GenericCharacteristicName: ...
-    def __call__(self, data: In) -> Out: ...
+    def __call__(self, data: In, **options: Any) -> Out: ...
 
 
 @runtime_checkable
@@ -85,7 +85,7 @@ class FittedComputationMethodProtocol[In, Out](Protocol):
     def target(self) -> GenericCharacteristicName: ...
     @property
     def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def __call__(self, data: In) -> Out: ...
+    def __call__(self, data: In, **options: Any) -> Out: ...
 
 
 @runtime_checkable
@@ -109,7 +109,7 @@ class AnalyticalComputation[In, Out]:
     ----------
     target : str
         Characteristic name (e.g., ``"pdf"``).
-    func : Callable[[In], Out]
+    func : Callable[[In, KwArg(Any)], Out]
         Analytical callable.
 
     Notes
@@ -118,11 +118,11 @@ class AnalyticalComputation[In, Out]:
     """
 
     target: GenericCharacteristicName
-    func: Callable[[In], Out]
+    func: Callable[[In, KwArg(Any)], Out]
 
-    def __call__(self, data: In) -> Out:
+    def __call__(self, data: In, **options: Any) -> Out:
         """Evaluate the analytical function."""
-        return self.func(data)
+        return self.func(data, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,17 +135,17 @@ class FittedComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (unary conversions use length 1).
-    func : Callable[[In], Out]
+    func : Callable[[In, KwArg(Any)], Out]
         Callable implementing the fitted conversion.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    func: Callable[[In], Out]
+    func: Callable[[In, KwArg(Any)], Out]
 
-    def __call__(self, data: In) -> Out:
+    def __call__(self, data: In, **options: Any) -> Out:
         """Evaluate the fitted conversion."""
-        return self.func(data)
+        return self.func(data, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +158,7 @@ class ComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (unary for current graph edges).
-    fitter : Callable[[Distribution, **options], FittedComputationMethod]
+    fitter : Callable[[Distribution, KwArg(Any)], FittedComputationMethod]
         Fitter that prepares a callable conversion for the given distribution.
 
     Methods
