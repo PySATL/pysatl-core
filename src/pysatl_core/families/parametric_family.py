@@ -23,6 +23,7 @@ from pysatl_core.distributions.strategies import (
     DefaultSamplingUnivariateStrategy,
 )
 from pysatl_core.families.distribution import ParametricFamilyDistribution
+from pysatl_core.types import DistributionType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,7 +33,6 @@ if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
     from pysatl_core.families.parametrizations import Parametrization
     from pysatl_core.types import (
-        DistributionType,
         GenericCharacteristicName,
         ParametrizationName,
     )

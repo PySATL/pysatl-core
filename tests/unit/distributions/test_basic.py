@@ -5,53 +5,55 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from mypy_extensions import KwArg
-
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computation import (
+    AnalyticalComputation,
+    ComputationMethod,
+    FittedComputationMethod,
+)
+from pysatl_core.distributions.support import (
+    ContinuousSupport,
+    ExplicitTableDiscreteSupport,
+)
 from pysatl_core.types import Kind
 from tests.utils.mocks import (
-    DiscreteSupport,
     StandaloneEuclideanUnivariateDistribution,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 
 class DistributionTestBase:
-    """Common helpers and constants for distribution tests."""
-
     PDF = "pdf"
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
 
-    # ---- factories: continuous -------------------------------------------------
-
-    def make_uniform_ppf_distribution(self) -> StandaloneEuclideanUnivariateDistribution:
-        """Return a distribution with only PPF = identity on [0,1]."""
-        ppf_func = cast(Callable[[float, KwArg(Any)], float], lambda q, **kwargs: q)
-
+    def make_uniform_ppf_distribution(
+        self,
+    ) -> StandaloneEuclideanUnivariateDistribution:
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.PPF, func=ppf_func),
+                AnalyticalComputation[float, float](target=self.PPF, func=lambda q: q),
             ],
+            support=ContinuousSupport(0, 1),
         )
 
     def make_logistic_cdf_distribution(
         self,
     ) -> StandaloneEuclideanUnivariateDistribution:
-        def logistic_cdf(x: float, **kwargs: Any) -> float:
+        def logistic_cdf(x: float) -> float:
             return 1.0 / (1.0 + math.exp(-x))
-
-        cdf_func = cast(Callable[[float, KwArg(Any)], float], logistic_cdf)
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.CDF, func=cdf_func),
+                AnalyticalComputation[float, float](target=self.CDF, func=logistic_cdf),
             ],
+            support=ContinuousSupport(),
         )
 
     def make_uniform_pdf_distribution(
@@ -65,43 +67,37 @@ class DistributionTestBase:
             analytical_computations=[
                 AnalyticalComputation[float, float](target=self.PDF, func=uniform_pdf),
             ],
+            support=ContinuousSupport(0, 1),
         )
-
-    def make_plateau_cdf_distribution(self) -> StandaloneEuclideanUnivariateDistribution:
-        """Return a distribution with a plateau CDF: 0 below 0, 0.5 on [0,1), 1 above 1."""
-
-        def _plateau_cdf(x: float, **kwargs: Any) -> float:
-            if x < 0.0:
-                return 0.0
-            if x < 1.0:
-                return 0.5
-            return 1.0
-
-        plateau_cdf = cast(Callable[[float, KwArg(Any)], float], _plateau_cdf)
-
-        return StandaloneEuclideanUnivariateDistribution(
-            kind=Kind.CONTINUOUS,
-            analytical_computations=[
-                AnalyticalComputation[float, float](target=self.CDF, func=plateau_cdf),
-            ],
-        )
-
-    # ---- factories: discrete ---------------------------------------------------
 
     def make_discrete_point_pmf_distribution(
-        self,
+        self, is_with_support: bool = True
     ) -> StandaloneEuclideanUnivariateDistribution:
         masses = {0.0: 0.2, 1.0: 0.5, 2.0: 0.3}
 
         def pmf(x: float) -> float:
             return masses.get(float(x), 0.0)
 
+        support = ExplicitTableDiscreteSupport([0, 1, 2]) if is_with_support else None
+
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
             analytical_computations=[
                 AnalyticalComputation[float, float](target=self.PMF, func=pmf),
             ],
+            support=support,
         )
 
-    def make_discrete_support(self) -> DiscreteSupport:
-        return DiscreteSupport([0.0, 1.0, 2.0])
+    @staticmethod
+    def make_fictitious_computation_method(
+        target: str, sources: Sequence[str]
+    ) -> ComputationMethod[Any, Any]:
+        def _fitted_const(val: Any) -> FittedComputationMethod[Any, Any]:
+            def _impl(*_args: Any, **_kwargs: Any) -> Any:
+                return val
+
+            return cast(FittedComputationMethod[Any, Any], _impl)
+
+        return ComputationMethod(
+            target=target, sources=sources, fitter=lambda *_a, **_k: _fitted_const(None)
+        )
