@@ -292,6 +292,11 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         """
         Iterate through all points in the integer lattice support.
 
+        Note
+        ------
+            If bounded from above and unbounded from below then iterates from upper bound in
+            decreasing order
+
         Raises
         ------
         RuntimeError
