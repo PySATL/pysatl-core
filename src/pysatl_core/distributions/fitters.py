@@ -309,7 +309,7 @@ def fit_cdf_to_ppf_1C(
 
 
 def fit_ppf_to_cdf_1C(
-    distribution: Distribution, /, **kwargs: Any
+    distribution: Distribution, /, **_: Any
 ) -> FittedComputationMethod[float, float]:
     """
     Fit ``cdf`` by numerically inverting a resolvable ``ppf`` with a root solver.
@@ -388,7 +388,7 @@ def fit_pmf_to_cdf_1D(
         if not support.is_left_bounded and support.max_k is not None:
             max_k = support.max_k
 
-            def _cdf(x: float) -> float:
+            def _cdf(x: float, **kwargs: Any) -> float:
                 # Everything to the right of the upper bound has CDF == 1.
                 if x >= max_k:
                     return 1.0
@@ -411,20 +411,24 @@ def fit_pmf_to_cdf_1D(
                 tail = 0.0
                 cur = k
                 while cur <= max_k:
-                    tail += float(pmf_func(float(cur)))
+                    tail += float(pmf_func(float(cur), **kwargs))
                     cur += support.modulus
 
                 return float(np.clip(1.0 - tail, 0.0, 1.0))
 
-            return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf)
+            _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
 
-    def _cdf_prefix(x: float) -> float:
+            return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_func)
+
+    def _cdf_prefix(x: float, **kwargs: Any) -> float:
         s = 0.0
         for k in support.iter_leq(x):
-            s += float(pmf_func(float(k)))
+            s += float(pmf_func(float(k), **kwargs))
         return float(np.clip(s, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_prefix)
+    _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf_prefix)
+
+    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_func)
 
 
 def fit_cdf_to_pmf_1D(
@@ -459,14 +463,16 @@ def fit_cdf_to_pmf_1D(
         raise RuntimeError("Discrete support is required for cdf->pmf.")
     cdf_func = _resolve(distribution, CDF)
 
-    def _pmf(x: float) -> float:
+    def _pmf(x: float, **kwargs: Any) -> float:
         p = support.prev(x)
-        left = 0.0 if p is None else float(cdf_func(float(p)))
+        left = 0.0 if p is None else float(cdf_func(float(p), **kwargs))
         right = float(cdf_func(x))
         mass = max(right - left, 0.0)
         return float(np.clip(mass, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=PMF, sources=[CDF], func=_pmf)
+    _pmf_func = cast(Callable[[float, KwArg(Any)], float], _pmf)
+
+    return FittedComputationMethod[float, float](target=PMF, sources=[CDF], func=_pmf_func)
 
 
 # --- DISCRETE (1D): CDF <-> PPF -------------------------------------------------
@@ -596,7 +602,7 @@ def fit_cdf_to_ppf_1D(
     cdf_vals = np.asarray([float(cdf_func(float(x))) for x in xs], dtype=float)
     cdf_vals = np.clip(np.maximum.accumulate(cdf_vals), 0.0, 1.0)
 
-    def _ppf(q: float) -> float:
+    def _ppf(q: float, **kwargs: Any) -> float:
         if not isfinite(q):
             return float("nan")
         q = float(q)
@@ -609,7 +615,9 @@ def fit_cdf_to_ppf_1D(
             idx = xs.size - 1
         return float(xs[idx])
 
-    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=_ppf)
+    _ppf_func = cast(Callable[[float, KwArg(Any)], float], _ppf)
+
+    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=_ppf_func)
 
 
 def fit_ppf_to_cdf_1D(
@@ -652,7 +660,7 @@ def fit_ppf_to_cdf_1D(
     except Exception:
         p1 = float("inf")
 
-    def _cdf(x: float) -> float:
+    def _cdf(x: float, **kwargs: Any) -> float:
         if not isfinite(x):
             return float("nan")
         # Hard clamps from endpoint probes
@@ -667,7 +675,7 @@ def fit_ppf_to_cdf_1D(
             it += 1
             mid = 0.5 * (lo + hi)
             try:
-                y = float(ppf_func(mid))
+                y = float(ppf_func(mid, **kwargs))
             except Exception:
                 # If PPF fails at mid, shrink conservatively towards lo
                 hi = mid
@@ -678,4 +686,6 @@ def fit_ppf_to_cdf_1D(
                 hi = mid  # crossed threshold
         return float(np.clip(lo, 0.0, 1.0))
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf)
+    _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
+
+    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf_func)
