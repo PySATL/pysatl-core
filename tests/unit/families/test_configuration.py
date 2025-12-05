@@ -15,10 +15,12 @@ from typing import cast
 
 import numpy as np
 import pytest
-from scipy.stats import norm, uniform
+from scipy.stats import expon, norm, uniform
 
 from pysatl_core.distributions.characteristics import GenericCharacteristic
 from pysatl_core.families.configuration import (
+    ExponentialRateParametrization,
+    ExponentialScaleParametrization,
     NormalExpParametrization,
     NormalMeanPrecParametrization,
     NormalMeanStdParametrization,
@@ -31,11 +33,14 @@ from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import UnivariateContinuous
 
 
-class TestNormalFamily:
-    """Test suite for Normal distribution family."""
+class BaseDistributionTest:
+    """Based class for all distribution families' tests"""
 
-    # Precision for floating point comparisons
     CALCULATION_PRECISION = 1e-10
+
+
+class TestNormalFamily(BaseDistributionTest):
+    """Test suite for Normal distribution family."""
 
     def setup_method(self):
         """Setup before each test method."""
@@ -236,7 +241,7 @@ class TestNormalFamily:
         )
 
 
-class TestNormalFamilyEdgeCases:
+class TestNormalFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions."""
 
     def setup_method(self):
@@ -270,11 +275,8 @@ class TestNormalFamilyEdgeCases:
             ppf_char(dist, 1.1)
 
 
-class TestUniformFamily:
+class TestUniformFamily(BaseDistributionTest):
     """Test suite for Uniform distribution family."""
-
-    # Precision for floating point comparisons
-    CALCULATION_PRECISION = 1e-10
 
     def setup_method(self):
         """Setup before each test method."""
@@ -542,7 +544,7 @@ class TestUniformFamily:
         )
 
 
-class TestUniformFamilyEdgeCases:
+class TestUniformFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions for uniform distribution."""
 
     def setup_method(self):
@@ -611,3 +613,298 @@ class TestUniformFamilyEdgeCases:
         """Test that negative range is rejected."""
         with pytest.raises(ValueError, match="range_val > 0"):
             self.uniform_family(minimum=0.0, range_val=-1.0, parametrization_name="minRange")
+
+
+class TestExponentialFamily(BaseDistributionTest):
+    """Test suite for Exponential distribution family."""
+
+    def setup_method(self):
+        """Setup before each test method."""
+        registry = configure_families_register()
+        self.exponential_family = registry.get("Exponential Family")
+        self.exponential_dist_example = self.exponential_family(lambda_=0.5)
+
+    def test_family_registration(self):
+        """Test that exponential family is properly registered."""
+        family = ParametricFamilyRegister.get("Exponential Family")
+        assert family.name == "Exponential Family"
+
+        # Check parameterizations
+        expected_parametrizations = {"rate", "scale"}
+        assert set(family.parametrization_names) == expected_parametrizations
+        assert family.base_parametrization_name == "rate"
+
+    def test_rate_parametrization_creation(self):
+        """Test creation of distribution with rate parametrization."""
+        dist = self.exponential_family(lambda_=0.5)
+
+        assert dist.distr_name == "Exponential Family"
+        assert dist.distribution_type == UnivariateContinuous
+
+        params = cast(ExponentialRateParametrization, dist.parameters)
+        assert params.lambda_ == 0.5
+        assert params.name == "rate"
+
+    def test_scale_parametrization_creation(self):
+        """Test creation of distribution with scale parametrization."""
+        dist = self.exponential_family(beta=2.0, parametrization_name="scale")
+
+        params = cast(ExponentialScaleParametrization, dist.parameters)
+        assert params.beta == 2.0
+        assert params.name == "scale"
+
+    def test_parametrization_constraints(self):
+        """Test parameter constraints validation."""
+        # Lambda must be positive
+        with pytest.raises(ValueError, match="lambda_ > 0"):
+            self.exponential_family(lambda_=-1.0)
+
+        # Beta must be positive
+        with pytest.raises(ValueError, match="beta > 0"):
+            self.exponential_family(beta=-1.0, parametrization_name="scale")
+
+    def test_pdf_calculation(self):
+        """Test PDF calculation against scipy.stats.expon."""
+        pdf = self.exponential_dist_example.computation_strategy.query_method(
+            "pdf", self.exponential_dist_example
+        )
+        test_points = [-1.0, 0.0, 0.5, 1.0, 2.0, 3.0]
+
+        for x in test_points:
+            # Our implementation
+            our_pdf = pdf(x)
+            # Scipy reference (scale = 1/lambda = 2)
+            scipy_pdf = expon.pdf(x, scale=2.0)
+
+            assert abs(our_pdf - scipy_pdf) < self.CALCULATION_PRECISION
+
+    def test_cdf_calculation(self):
+        """Test CDF calculation against scipy.stats.expon."""
+        cdf = self.exponential_dist_example.computation_strategy.query_method(
+            "cdf", self.exponential_dist_example
+        )
+        test_points = [-1.0, 0.0, 0.5, 1.0, 2.0, 3.0]
+
+        for x in test_points:
+            our_cdf = cdf(x)
+            scipy_cdf = expon.cdf(x, scale=2.0)
+
+            assert abs(our_cdf - scipy_cdf) < self.CALCULATION_PRECISION
+
+    def test_ppf_calculation(self):
+        """Test PPF calculation against scipy.stats.expon."""
+        ppf = self.exponential_dist_example.computation_strategy.query_method(
+            "ppf", self.exponential_dist_example
+        )
+        test_probabilities = [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999]
+
+        for p in test_probabilities:
+            our_ppf = ppf(p)
+            scipy_ppf = expon.ppf(p, scale=2.0)
+
+            assert abs(our_ppf - scipy_ppf) < self.CALCULATION_PRECISION
+
+    def test_ppf_boundary(self):
+        """Test PPF at boundary values."""
+        ppf = self.exponential_dist_example.computation_strategy.query_method(
+            "ppf", self.exponential_dist_example
+        )
+
+        # p = 0 should give 0
+        assert abs(ppf(0.0) - 0.0) < self.CALCULATION_PRECISION
+
+        # p = 1 should give infinity
+        assert ppf(1.0) == float("inf")
+
+    @pytest.mark.parametrize(
+        "char_func_arg",
+        [
+            -2.0,
+            -1.0,
+            0.0,
+            1.0,
+            2.0,
+        ],
+    )
+    def test_characteristic_function(self, char_func_arg):
+        """Test characteristic function calculation at specific points."""
+        char_func = self.exponential_dist_example.computation_strategy.query_method(
+            "char_func", self.exponential_dist_example
+        )
+        cf_value = char_func(char_func_arg)
+
+        lambda_ = 0.5
+        # Analytical formula: φ(t) = λ / (λ - i*t)
+        denominator = lambda_ - 1j * char_func_arg
+        expected = 1.0 + 0j if char_func_arg == 0 else lambda_ / denominator
+
+        assert abs(cf_value.real - expected.real) < self.CALCULATION_PRECISION
+        assert abs(cf_value.imag - expected.imag) < self.CALCULATION_PRECISION
+
+    @pytest.mark.parametrize(
+        "char_func_getter, expected",
+        [
+            (lambda distr: distr.computation_strategy.query_method("mean", distr)(None), 2.0),
+            (lambda distr: distr.computation_strategy.query_method("var", distr)(None), 4.0),
+            (lambda distr: distr.computation_strategy.query_method("skewness", distr)(None), 2.0),
+            (
+                lambda distr: distr.computation_strategy.query_method("raw_kurtosis", distr)(None),
+                9.0,
+            ),
+            (
+                lambda distr: distr.computation_strategy.query_method("excess_kurtosis", distr)(
+                    None
+                ),
+                6.0,
+            ),
+        ],
+    )
+    def test_moments(self, char_func_getter, expected):
+        """Test moment calculations using parameterized tests."""
+        actual = char_func_getter(self.exponential_dist_example)
+        assert abs(actual - expected) < self.CALCULATION_PRECISION
+
+    @pytest.mark.parametrize(
+        "parametrization_name, params, expected_lambda",
+        [
+            ("rate", {"lambda_": 0.5}, 0.5),
+            ("scale", {"beta": 2.0}, 0.5),
+        ],
+    )
+    def test_parametrization_conversions(self, parametrization_name, params, expected_lambda):
+        """Test conversions between different parameterizations."""
+        base_params = cast(
+            ExponentialRateParametrization,
+            self.exponential_family.to_base(
+                self.exponential_family.get_parametrization(parametrization_name)(**params)
+            ),
+        )
+
+        assert abs(base_params.lambda_ - expected_lambda) < self.CALCULATION_PRECISION
+
+    def test_analytical_computations_caching(self):
+        """Test that analytical computations are properly cached."""
+        comp = self.exponential_family(lambda_=1.0).analytical_computations
+
+        expected_chars = {
+            "pdf",
+            "cdf",
+            "ppf",
+            "char_func",
+            "mean",
+            "var",
+            "skewness",
+            "raw_kurtosis",
+            "excess_kurtosis",
+        }
+        assert set(comp.keys()) == expected_chars
+
+    def test_array_input_support_pdf(self):
+        """Test that PDF supports array inputs."""
+        dist = self.exponential_family(lambda_=1.0)
+        x_array = np.array([-1.0, 0.0, 0.5, 1.0, 2.0, 3.0])
+
+        pdf = dist.computation_strategy.query_method("pdf", dist)
+        pdf_array = pdf(x_array)
+
+        assert pdf_array.shape == x_array.shape
+        scipy_pdf = expon.pdf(x_array, scale=1.0)
+
+        np.testing.assert_array_almost_equal(
+            pdf_array, scipy_pdf, decimal=int(-math.log10(self.CALCULATION_PRECISION))
+        )
+
+    def test_array_input_support_cdf(self):
+        """Test that CDF supports array inputs."""
+        dist = self.exponential_family(lambda_=1.0)
+        x_array = np.array([-1.0, 0.0, 0.5, 1.0, 2.0, 3.0])
+
+        cdf = dist.computation_strategy.query_method("cdf", dist)
+        cdf_array = cdf(x_array)
+
+        assert cdf_array.shape == x_array.shape
+        scipy_cdf = expon.cdf(x_array, scale=1.0)
+
+        np.testing.assert_array_almost_equal(
+            cdf_array, scipy_cdf, decimal=int(-math.log10(self.CALCULATION_PRECISION))
+        )
+
+    def test_array_input_support_ppf(self):
+        """Test that PPF supports array inputs."""
+        dist = self.exponential_family(lambda_=1.0)
+        p_array = np.array([0.0, 0.25, 0.5, 0.75, 0.999])
+
+        ppf = dist.computation_strategy.query_method("ppf", dist)
+        ppf_array = ppf(p_array)
+
+        assert ppf_array.shape == p_array.shape
+        scipy_ppf = expon.ppf(p_array, scale=1.0)
+
+        np.testing.assert_array_almost_equal(
+            ppf_array, scipy_ppf, decimal=int(-math.log10(self.CALCULATION_PRECISION))
+        )
+
+
+class TestExponentialFamilyEdgeCases(BaseDistributionTest):
+    """Test edge cases and error conditions for exponential distribution."""
+
+    def setup_method(self):
+        """Setup before each test method."""
+        configure_families_register()
+        self.exponential_family = ParametricFamilyRegister.get("Exponential Family")
+
+    def test_invalid_parameterization(self):
+        """Test error for invalid parameterization name."""
+        with pytest.raises(KeyError):
+            self.exponential_family.distribution(parametrization_name="invalid_name", lambda_=1.0)
+
+    def test_missing_parameters(self):
+        """Test error for missing required parameters."""
+        with pytest.raises(TypeError):
+            self.exponential_family.distribution()  # Missing lambda_
+
+    def test_invalid_probability_ppf(self):
+        """Test PPF with invalid probability values."""
+        dist = self.exponential_family(lambda_=1.0)
+        ppf_char = GenericCharacteristic[float, float]("ppf")
+
+        # Test boundaries
+        assert ppf_char(dist, 0.0) == 0.0
+        assert ppf_char(dist, 1.0) == float("inf")
+
+        # Test invalid probabilities
+        with pytest.raises(ValueError):
+            ppf_char(dist, -0.1)
+        with pytest.raises(ValueError):
+            ppf_char(dist, 1.1)
+
+    def test_characteristic_function_edge_cases(self):
+        """Test characteristic function at edge cases."""
+        dist = self.exponential_family(lambda_=1.0)
+        char_func = dist.computation_strategy.query_method("char_func", dist)
+
+        # Test at zero
+        cf_value_zero = char_func(0.0)
+        cf_zero_scalar = cf_value_zero.item()
+        assert abs(cf_zero_scalar.real - 1.0) < self.CALCULATION_PRECISION
+        assert abs(cf_zero_scalar.imag) < self.CALCULATION_PRECISION
+
+        cf_value_small = char_func(1e-10)
+        cf_small_scalar = cf_value_small.item()
+        assert abs(cf_small_scalar.real - 1.0) < self.CALCULATION_PRECISION
+        assert abs(cf_small_scalar.imag) <= self.CALCULATION_PRECISION
+
+        # Test with large t (should approach 0)
+        cf_value_large = char_func(1000.0)
+        assert np.iscomplexobj(cf_value_large)
+        assert np.all(np.abs(cf_value_large) <= 1 + self.CALCULATION_PRECISION)
+
+    def test_zero_rate_edge_case(self):
+        """Test that rate parameter cannot be zero."""
+        with pytest.raises(ValueError, match="lambda_ > 0"):
+            self.exponential_family(lambda_=0.0)
+
+    def test_zero_scale_edge_case(self):
+        """Test that scale parameter cannot be zero."""
+        with pytest.raises(ValueError, match="beta > 0"):
+            self.exponential_family(beta=0.0, parametrization_name="scale")
