@@ -38,7 +38,7 @@ class Computation[In, Out](Protocol):
 
     @property
     def target(self) -> GenericCharacteristicName: ...
-    def __call__(self, data: In) -> Out: ...
+    def __call__(self, data: In, **options: Any) -> Out: ...
 
 
 @runtime_checkable
@@ -58,7 +58,7 @@ class FittedComputationMethodProtocol[In, Out](Protocol):
     def target(self) -> GenericCharacteristicName: ...
     @property
     def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def __call__(self, data: In) -> Out: ...
+    def __call__(self, data: In, **options: Any) -> Out: ...
 
 
 @runtime_checkable
@@ -85,16 +85,16 @@ class AnalyticalComputation[In, Out]:
     ----------
     target : str
         Characteristic name (e.g., "pdf", "cdf").
-    func : Callable[[In], Out]
+    func : Callable[[In, KwArg(Any)], Out]
         Analytical function that computes the characteristic.
     """
 
     target: GenericCharacteristicName
-    func: Callable[[In], Out]
+    func: Callable[[In, KwArg(Any)], Out]
 
-    def __call__(self, data: In) -> Out:
+    def __call__(self, data: In, **options: Any) -> Out:
         """Evaluate the analytical function at the given data."""
-        return self.func(data)
+        return self.func(data, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,17 +108,17 @@ class FittedComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (typically length 1 for unary conversions).
-    func : Callable[[In], Out]
+    func : Callable[[In, KwArg(Any)], Out]
         Callable implementing the fitted conversion.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    func: Callable[[In], Out]
+    func: Callable[[In, KwArg(Any)], Out]
 
-    def __call__(self, data: In) -> Out:
+    def __call__(self, data: In, **options: Any) -> Out:
         """Evaluate the fitted conversion at the given data."""
-        return self.func(data)
+        return self.func(data, **options)
 
 
 @dataclass(frozen=True, slots=True)
