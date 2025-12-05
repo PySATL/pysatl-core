@@ -5,7 +5,8 @@ Distribution Families Configuration
 This module defines and configures parametric distribution families for the PySATL library:
 
 - :class:`Normal Family` — Gaussian distribution with multiple parameterizations.
-- :class:`Uniform Family` — Gaussian distribution with multiple parameterizations.
+- :class:`Uniform Family` — Uniform distribution with multiple parameterizations.
+- :class:`Exponential Family` — Exponential distribution with multiple parameterizations.
 
 Notes
 -----
@@ -71,6 +72,7 @@ def configure_families_register() -> ParametricFamilyRegister:
     """
     _configure_normal_family()
     _configure_uniform_family()
+    _configure_exponential_family()
     return ParametricFamilyRegister()
 
 
@@ -495,7 +497,6 @@ def _configure_uniform_family() -> None:
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
 
-        # Use np.where for compactness and performance
         return np.where(
             (x >= lower_bound) & (x <= upper_bound), 1.0 / (upper_bound - lower_bound), 0.0
         )
@@ -528,7 +529,6 @@ def _configure_uniform_family() -> None:
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
 
-        # Use np.clip for better performance and handling edge cases
         return np.clip((x - lower_bound) / (upper_bound - lower_bound), 0.0, 1.0)
 
     def uniform_ppf(
@@ -657,6 +657,233 @@ def _configure_uniform_family() -> None:
     parametrization(family=Uniform, name="minRange")(UniformMinRangeParametrization)
 
     ParametricFamilyRegister.register(Uniform)
+
+
+@dataclass
+class ExponentialRateParametrization(Parametrization):
+    """
+    Rate parametrization of exponential distribution.
+
+    Parameters
+    ----------
+    lambda_ : float
+        Rate parameter (λ) of the distribution
+    """
+
+    lambda_: float
+
+    @constraint(description="lambda_ > 0")
+    def check_lambda_positive(self) -> bool:
+        """Check that rate parameter is positive."""
+        return self.lambda_ > 0
+
+
+@dataclass
+class ExponentialScaleParametrization(Parametrization):
+    """
+    Scale parametrization of exponential distribution.
+
+    Parameters
+    ----------
+    beta : float
+        Scale parameter (β) of the distribution, β = 1/λ
+    """
+
+    beta: float
+
+    @constraint(description="beta > 0")
+    def check_beta_positive(self) -> bool:
+        """Check that scale parameter is positive."""
+        return self.beta > 0
+
+    def transform_to_base_parametrization(self) -> Parametrization:
+        """
+        Transform to Rate parametrization.
+
+        Returns
+        -------
+        Parametrization
+            Rate parametrization instance
+        """
+        return ExponentialRateParametrization(lambda_=1.0 / self.beta)
+
+
+def _configure_exponential_family() -> None:
+    EXPONENTIAL_DOC = """
+    Exponential distribution.
+
+    The exponential distribution is a continuous probability distribution that
+    describes the time between events in a Poisson process. It has a single
+    parameter: rate (λ) or scale (β = 1/λ).
+
+    Probability density function (rate parametrization):
+        f(x) = λ * exp(-λ*x) for x ≥ 0
+
+    The exponential distribution is memoryless and is widely used in reliability
+    engineering, queuing theory, and survival analysis.
+    """
+
+    def exponential_pdf(
+        parameters: Parametrization, x: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        """
+        Probability density function for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lambda_: float (rate parameter)
+        x : npt.NDArray[np.float64]
+            Points at which to evaluate the probability density function
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            Probability density values at points x
+        """
+        parameters = cast(ExponentialRateParametrization, parameters)
+
+        lambda_ = parameters.lambda_
+        return np.where(x >= 0, lambda_ * np.exp(-lambda_ * x), 0.0)
+
+    def exponential_cdf(
+        parameters: Parametrization, x: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        """
+        Cumulative distribution function for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lambda_: float (rate parameter)
+        x : npt.NDArray[np.float64]
+            Points at which to evaluate the cumulative distribution function
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            Probabilities P(X ≤ x) for each point x
+        """
+        parameters = cast(ExponentialRateParametrization, parameters)
+
+        lambda_ = parameters.lambda_
+        return np.where(x >= 0, 1.0 - np.exp(-lambda_ * x), 0.0)
+
+    def exponential_ppf(
+        parameters: Parametrization, p: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        """
+        Percent point function (inverse CDF) for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lambda_: float (rate parameter)
+        p : npt.NDArray[np.float64]
+            Probability from [0, 1]
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            Quantiles corresponding to probabilities p:
+            - For p = 0: returns 0.0
+            - For p = 1: returns np.inf
+            - For p in (0, 1): returns -ln(1-p)/λ
+
+        Raises
+        ------
+        ValueError
+            If probability is outside [0, 1]
+        """
+        if np.any((p < 0) | (p > 1)):
+            raise ValueError("Probability must be in [0, 1]")
+
+        parameters = cast(ExponentialRateParametrization, parameters)
+        lambda_ = parameters.lambda_
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(p < 1.0, -np.log(1.0 - p) / lambda_, np.inf)
+
+    def exponential_char_func(
+        parameters: Parametrization, t: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.complex128]:
+        """
+        Characteristic function of exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lambda_: float (rate parameter)
+        t : npt.NDArray[np.float64]
+            Points at which to evaluate the characteristic function
+
+        Returns
+        -------
+        npt.NDArray[np.complex128]
+            Characteristic function values at points t
+        """
+        parameters = cast(ExponentialRateParametrization, parameters)
+
+        lambda_ = parameters.lambda_
+        t_arr = np.asarray(t, dtype=np.float64)
+
+        denominator = lambda_ - 1j * t_arr
+        result = np.where(
+            np.abs(t_arr) < 1e-12,
+            1.0 + 0j,
+            lambda_ / denominator,
+        )
+        return cast(npt.NDArray[np.complex128], result)
+
+    def mean_func(parameters: Parametrization, _: Any) -> float:
+        """Mean of exponential distribution."""
+        parameters = cast(ExponentialRateParametrization, parameters)
+        return 1.0 / parameters.lambda_
+
+    def var_func(parameters: Parametrization, _: Any) -> float:
+        """Variance of exponential distribution."""
+        parameters = cast(ExponentialRateParametrization, parameters)
+        return 1.0 / (parameters.lambda_**2)
+
+    def skew_func(_1: Parametrization, _2: Any) -> float:
+        """Skewness of exponential distribution (always 2)."""
+        return 2.0
+
+    def raw_kurt_func(_1: Parametrization, _2: Any) -> float:
+        """Raw kurtosis of exponential distribution (always 9)."""
+        return 9.0
+
+    def ex_kurt_func(_1: Parametrization, _2: Any) -> float:
+        """Excess kurtosis of exponential distribution (always 6)."""
+        return 6.0
+
+    Exponential = ParametricFamily(
+        name="Exponential Family",
+        distr_type=UnivariateContinuous,
+        distr_parametrizations=["rate", "scale"],
+        distr_characteristics={
+            PDF: exponential_pdf,
+            CDF: exponential_cdf,
+            PPF: exponential_ppf,
+            CF: exponential_char_func,
+            MEAN: mean_func,
+            VAR: var_func,
+            SKEW: skew_func,
+            RAWKURT: raw_kurt_func,
+            EXKURT: ex_kurt_func,
+        },
+        sampling_strategy=DefaultSamplingUnivariateStrategy(),
+    )
+    Exponential.__doc__ = EXPONENTIAL_DOC
+
+    parametrization(family=Exponential, name="rate")(ExponentialRateParametrization)
+    parametrization(family=Exponential, name="scale")(ExponentialScaleParametrization)
+
+    ParametricFamilyRegister.register(Exponential)
 
 
 def reset_families_register() -> None:
