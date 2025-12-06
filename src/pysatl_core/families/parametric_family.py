@@ -8,7 +8,7 @@ characteristics, sampling strategies, and computation methods.
 
 from __future__ import annotations
 
-__author__ = "Leonid Elkin, Mikhail Mikhailov"
+__author__ = "Leonid Elkin, Mikhail Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -277,8 +277,8 @@ class ParametricFamily:
             parametrization_class = self._parametrizations[parametrization_name]
 
         parameters = parametrization_class(**parameters_values)
-        base_parameters = self.to_base(parameters)
         parameters.validate()
+        base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
         return ParametricFamilyDistribution(
             self.name, distribution_type, parameters, self.support_resolver(parameters)
