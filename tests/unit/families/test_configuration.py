@@ -28,6 +28,7 @@ from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     CharacteristicName,
     ContinuousSupportShape1D,
+    FamilyName,
     UnivariateContinuous,
 )
 
@@ -41,13 +42,13 @@ class TestNormalFamily:
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.normal_family = registry.get("Normal Family")
+        self.normal_family = registry.get(FamilyName.NORMAL)
         self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
     def test_family_registration(self):
         """Test that normal family is properly registered."""
-        family = ParametricFamilyRegister.get("Normal Family")
-        assert family.name == "Normal Family"
+        family = ParametricFamilyRegister.get(FamilyName.NORMAL)
+        assert family.name == FamilyName.NORMAL
 
         # Check parameterizations
         expected_parametrizations = {"meanStd", "meanPrec", "exponential"}
@@ -58,7 +59,7 @@ class TestNormalFamily:
         """Test creation of distribution with standard parametrization."""
         dist = self.normal_family(mu=2.0, sigma=1.5)
 
-        assert dist.family_name == "Normal Family"
+        assert dist.family_name == FamilyName.NORMAL
         assert dist.distribution_type == UnivariateContinuous
 
         params = cast(NormalMeanStdParametrization, dist.parameters)
@@ -289,7 +290,7 @@ class TestNormalFamilyEdgeCases:
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.normal_family = registry.get("Normal Family")
+        self.normal_family = registry.get(FamilyName.NORMAL)
         self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
     def test_invalid_parameterization(self):

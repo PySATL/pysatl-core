@@ -94,3 +94,9 @@ class ParametricFamilyRegister:
         if cls._instance is not None:
             cls._instance._registered_families.clear()
         cls._instance = None
+
+    @classmethod
+    def list_registered_families(cls) -> list[str]:
+        if cls._instance is None:
+            return []
+        return list(cls._instance._registered_families.keys())

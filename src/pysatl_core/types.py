@@ -270,6 +270,10 @@ class CharacteristicName(StrEnum):
     STANDARD_MOMENT = "standardized_moment"  # unimplemented in graph yet
 
 
+class FamilyName(StrEnum):
+    NORMAL = "Normal"
+
+
 __all__ = [
     "Kind",
     "EuclideanDistributionType",
@@ -286,4 +290,5 @@ __all__ = [
     "Number",
     "NumericArray",
     "CharacteristicName",
+    "FamilyName",
 ]
