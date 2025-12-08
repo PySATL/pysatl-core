@@ -39,7 +39,7 @@ from pysatl_core.families.parametrizations import (
     parametrization,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.types import CharacteristicName, UnivariateContinuous
+from pysatl_core.types import CharacteristicName, FamilyName, UnivariateContinuous
 
 if TYPE_CHECKING:
     from typing import Any
@@ -340,7 +340,7 @@ def _configure_normal_family() -> None:
         return ContinuousSupport()
 
     Normal = ParametricFamily(
-        name="Normal",
+        name=FamilyName.NORMAL,
         distr_type=UnivariateContinuous,
         distr_parametrizations=["meanStd", "meanPrec", "exponential"],
         distr_characteristics={
@@ -665,7 +665,7 @@ def _configure_uniform_family() -> None:
         )
 
     Uniform = ParametricFamily(
-        name="ContinuousUniform",
+        name=FamilyName.CONTINUOUS_UNIFORM,
         distr_type=UnivariateContinuous,
         distr_parametrizations=["standard", "meanWidth", "minRange"],
         distr_characteristics={
