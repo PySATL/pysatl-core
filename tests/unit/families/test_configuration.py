@@ -31,6 +31,7 @@ from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     CharacteristicName,
     ContinuousSupportShape1D,
+    FamilyName,
     UnivariateContinuous,
 )
 
@@ -38,6 +39,7 @@ from pysatl_core.types import (
 class BaseDistributionTest:
     """Based class for all distribution families' tests"""
 
+    # Precision for floating point comparisons
     CALCULATION_PRECISION = 1e-10
 
 
@@ -47,13 +49,13 @@ class TestNormalFamily(BaseDistributionTest):
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.normal_family = registry.get("Normal")
+        self.normal_family = registry.get(FamilyName.NORMAL)
         self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
     def test_family_registration(self):
         """Test that normal family is properly registered."""
-        family = ParametricFamilyRegister.get("Normal")
-        assert family.name == "Normal"
+        family = ParametricFamilyRegister.get(FamilyName.NORMAL)
+        assert family.name == FamilyName.NORMAL
 
         # Check parameterizations
         expected_parametrizations = {"meanStd", "meanPrec", "exponential"}
@@ -64,7 +66,7 @@ class TestNormalFamily(BaseDistributionTest):
         """Test creation of distribution with standard parametrization."""
         dist = self.normal_family(mu=2.0, sigma=1.5)
 
-        assert dist.family_name == "Normal"
+        assert dist.family_name == FamilyName.NORMAL
         assert dist.distribution_type == UnivariateContinuous
 
         params = cast(NormalMeanStdParametrization, dist.parameters)
@@ -294,7 +296,7 @@ class TestNormalFamilyEdgeCases:
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.normal_family = registry.get("Normal")
+        self.normal_family = registry.get(FamilyName.NORMAL)
         self.normal_dist_example = self.normal_family(mu=2.0, sigma=1.5)
 
     def test_invalid_parameterization(self):
@@ -330,13 +332,13 @@ class TestUniformFamily(BaseDistributionTest):
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.uniform_family = registry.get("ContinuousUniform")
+        self.uniform_family = registry.get(FamilyName.CONTINUOUS_UNIFORM)
         self.uniform_dist_example = self.uniform_family(lower_bound=2.0, upper_bound=5.0)
 
     def test_family_registration(self):
         """Test that uniform family is properly registered."""
-        family = ParametricFamilyRegister.get("ContinuousUniform")
-        assert family.name == "ContinuousUniform"
+        family = ParametricFamilyRegister.get(FamilyName.CONTINUOUS_UNIFORM)
+        assert family.name == FamilyName.CONTINUOUS_UNIFORM
 
         # Check parameterizations
         expected_parametrizations = {"standard", "meanWidth", "minRange"}
@@ -347,7 +349,7 @@ class TestUniformFamily(BaseDistributionTest):
         """Test creation of distribution with standard parametrization."""
         dist = self.uniform_family(lower_bound=2.0, upper_bound=5.0)
 
-        assert dist.family_name == "ContinuousUniform"
+        assert dist.family_name == FamilyName.CONTINUOUS_UNIFORM
         assert dist.distribution_type == UnivariateContinuous
 
         params = cast(UniformStandardParametrization, dist.parameters)
@@ -630,7 +632,7 @@ class TestUniformFamilyEdgeCases(BaseDistributionTest):
     def setup_method(self):
         """Setup before each test method."""
         registry = configure_families_register()
-        self.uniform_family = registry.get("ContinuousUniform")
+        self.uniform_family = registry.get(FamilyName.CONTINUOUS_UNIFORM)
         self.uniform_dist = self.uniform_family(lower_bound=0.0, upper_bound=1.0)
 
     def test_invalid_parameterization(self):
