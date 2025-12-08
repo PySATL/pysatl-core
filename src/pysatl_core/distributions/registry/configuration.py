@@ -32,44 +32,39 @@ from pysatl_core.distributions.registry.constraint import (
     SetConstraint,
 )
 from pysatl_core.distributions.registry.graph import CharacteristicRegistry
-from pysatl_core.types import Kind
-
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-PMF = "pmf"
+from pysatl_core.types import CharacteristicName, Kind
 
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
     pdf_to_cdf_1C = ComputationMethod[float, float](
-        target=CDF, sources=[PDF], fitter=fit_pdf_to_cdf_1C
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PDF], fitter=fit_pdf_to_cdf_1C
     )
     cdf_to_pdf_1C = ComputationMethod[float, float](
-        target=PDF, sources=[CDF], fitter=fit_cdf_to_pdf_1C
+        target=CharacteristicName.PDF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_pdf_1C
     )
     cdf_to_ppf_1C = ComputationMethod[float, float](
-        target=PPF, sources=[CDF], fitter=fit_cdf_to_ppf_1C
+        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1C
     )
     ppf_to_cdf_1C = ComputationMethod[float, float](
-        target=CDF, sources=[PPF], fitter=fit_ppf_to_cdf_1C
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1C
     )
 
     pmf_to_cdf_1D = ComputationMethod[float, float](
-        target=CDF,
-        sources=[PMF],
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PMF],
         fitter=fit_pmf_to_cdf_1D,
     )
     cdf_to_pmf_1D = ComputationMethod[float, float](
-        target=PMF,
-        sources=[CDF],
+        target=CharacteristicName.PMF,
+        sources=[CharacteristicName.CDF],
         fitter=fit_cdf_to_pmf_1D,
     )
     cdf_to_ppf_1D = ComputationMethod[float, float](
-        target=PPF, sources=[CDF], fitter=fit_cdf_to_ppf_1D
+        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1D
     )
     ppf_to_cdf_1D = ComputationMethod[float, float](
-        target=CDF, sources=[PPF], fitter=fit_ppf_to_cdf_1D
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1D
     )
 
     dim1_constraint = NumericConstraint(allowed=frozenset({1}))
@@ -83,11 +78,11 @@ def _configure(reg: CharacteristicRegistry) -> None:
         distribution_type_feature_constraints={"kind": kind_discrete}
     )
 
-    reg.add_characteristic(name=CDF, is_definitive=True)
-    reg.add_characteristic(name=PPF, is_definitive=True)
+    reg.add_characteristic(name=CharacteristicName.CDF, is_definitive=True)
+    reg.add_characteristic(name=CharacteristicName.PPF, is_definitive=True)
 
     reg.add_characteristic(
-        name=PDF,
+        name=CharacteristicName.PDF,
         is_definitive=True,
         definitive_constraint=pdf_node_constraint,
         # TODO: Maybe it SHOULD be present even in discrete case and every other definitive char
@@ -95,7 +90,7 @@ def _configure(reg: CharacteristicRegistry) -> None:
         presence_constraint=pdf_node_constraint,
     )
     reg.add_characteristic(
-        name=PMF,
+        name=CharacteristicName.PMF,
         is_definitive=True,
         definitive_constraint=pmf_node_constraint,
         # TODO: Maybe it SHOULD be present even in continuous case and every other definitive char
