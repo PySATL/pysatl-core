@@ -19,7 +19,7 @@ from pysatl_core.distributions.support import (
     ContinuousSupport,
     ExplicitTableDiscreteSupport,
 )
-from pysatl_core.types import Kind
+from pysatl_core.types import CharacteristicName, Kind
 from tests.utils.mocks import (
     StandaloneEuclideanUnivariateDistribution,
 )
@@ -29,11 +29,6 @@ if TYPE_CHECKING:
 
 
 class DistributionTestBase:
-    PDF = "pdf"
-    CDF = "cdf"
-    PPF = "ppf"
-    PMF = "pmf"
-
     def make_uniform_ppf_distribution(
         self,
     ) -> StandaloneEuclideanUnivariateDistribution:
@@ -41,7 +36,7 @@ class DistributionTestBase:
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.PPF, func=ppf_func),
+                AnalyticalComputation[float, float](target=CharacteristicName.PPF, func=ppf_func),
             ],
             support=ContinuousSupport(0, 1),
         )
@@ -56,7 +51,9 @@ class DistributionTestBase:
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.CDF, func=logistic_cdf_func),
+                AnalyticalComputation[float, float](
+                    target=CharacteristicName.CDF, func=logistic_cdf_func
+                ),
             ],
             support=ContinuousSupport(),
         )
@@ -72,7 +69,9 @@ class DistributionTestBase:
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.PDF, func=uniform_pdf_func),
+                AnalyticalComputation[float, float](
+                    target=CharacteristicName.PDF, func=uniform_pdf_func
+                ),
             ],
             support=ContinuousSupport(0, 1),
         )
@@ -92,7 +91,7 @@ class DistributionTestBase:
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
             analytical_computations=[
-                AnalyticalComputation[float, float](target=self.PMF, func=pmf_func),
+                AnalyticalComputation[float, float](target=CharacteristicName.PMF, func=pmf_func),
             ],
             support=support,
         )

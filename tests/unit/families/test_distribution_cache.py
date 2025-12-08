@@ -7,15 +7,15 @@ __license__ = "SPDX-License-Identifier: MIT"
 import pytest
 
 from pysatl_core.families import ParametricFamilyRegister
-from pysatl_core.types import GenericCharacteristicName
+from pysatl_core.types import CharacteristicName, GenericCharacteristicName
 from tests.unit.families.test_basic import TestBaseFamily
 
 
 class TestAnalyticalComputationCache(TestBaseFamily):
     def _fallback_characteristics(self) -> dict[GenericCharacteristicName, dict[str, object]]:
         return {
-            self.PDF: {"base": lambda params, x: params.value},
-            self.CDF: {"base": lambda params, x: params.value},
+            CharacteristicName.PDF: {"base": lambda params, x: params.value},
+            CharacteristicName.CDF: {"base": lambda params, x: params.value},
         }
 
     def test_cache_auto_invalidation(self) -> None:
@@ -41,16 +41,18 @@ class TestAnalyticalComputationCache(TestBaseFamily):
 
         # Both mappings must contain PDF and CDF and be callable
         for mapping in (computations2, computations3):
-            assert self.PDF in mapping and self.CDF in mapping
-            assert callable(mapping[self.PDF]) and callable(mapping[self.CDF])
+            assert CharacteristicName.PDF in mapping and CharacteristicName.CDF in mapping
+            assert callable(mapping[CharacteristicName.PDF]) and callable(
+                mapping[CharacteristicName.CDF]
+            )
 
         # For alt(value=5.0) → fallback to base(value=5.0)
-        assert computations2[self.PDF](1.23) == pytest.approx(5.0)
-        assert computations2[self.CDF](0.5) == pytest.approx(5.0)
+        assert computations2[CharacteristicName.PDF](1.23) == pytest.approx(5.0)
+        assert computations2[CharacteristicName.CDF](0.5) == pytest.approx(5.0)
 
         # For base(value=7.0)
-        assert computations3[self.PDF](42.0) == pytest.approx(7.0)
-        assert computations3[self.CDF](0.0) == pytest.approx(7.0)
+        assert computations3[CharacteristicName.PDF](42.0) == pytest.approx(7.0)
+        assert computations3[CharacteristicName.CDF](0.0) == pytest.approx(7.0)
 
     def test_fallback_to_base_for_missing_form(self) -> None:
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
@@ -60,8 +62,8 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         computations = distribution.analytical_computations
 
         # Both characteristics are present via fallback
-        assert self.PDF in computations and self.CDF in computations
+        assert CharacteristicName.PDF in computations and CharacteristicName.CDF in computations
 
         # For alt(value=2.0) → base(value=2.0)
-        assert computations[self.PDF](1.23) == pytest.approx(2.0)
-        assert computations[self.CDF](0.5) == pytest.approx(2.0)
+        assert computations[CharacteristicName.PDF](1.23) == pytest.approx(2.0)
+        assert computations[CharacteristicName.CDF](0.5) == pytest.approx(2.0)

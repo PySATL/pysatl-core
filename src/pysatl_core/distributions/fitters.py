@@ -21,17 +21,13 @@ from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
     IntegerLatticeDiscreteSupport,
 )
+from pysatl_core.types import CharacteristicName
 
 if TYPE_CHECKING:
     from typing import Any
 
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName, ScalarFunc
-
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-PMF = "pmf"
 
 
 def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> ScalarFunc:
@@ -87,9 +83,9 @@ def _ppf_brentq_from_cdf(
     Parameters
     ----------
     cdf : Callable[[float], float]
-        Monotone CDF in ``[-inf, +inf] -> [0, 1]``.
+        Monotone Characteristic.CDF in ``[-inf, +inf] -> [0, 1]``.
     most_left : bool, default False
-        If ``True``, return the leftmost quantile for flat CDF plateaus.
+        If ``True``, return the leftmost quantile for flat Characteristic.CDF plateaus.
     x0 : float, default 0.0
         Initial bracket center.
     init_step : float, default 1.0
@@ -101,7 +97,7 @@ def _ppf_brentq_from_cdf(
     x_tol : float, default 1e-12
         Absolute tolerance in ``x`` for stopping criterion.
     y_tol : float, default 0.0
-        Optional tolerance in CDF values to stop early when the bracket is flat.
+        Optional tolerance in Characteristic.CDF values to stop early when the bracket is flat.
     max_iter : int, default 200
         Maximum iterations for the bisection-like refinement.
 
@@ -239,7 +235,7 @@ def fit_pdf_to_cdf_1C(
     FittedComputationMethod[float, float]
         Fitted ``pdf -> cdf`` conversion.
     """
-    pdf_func = _resolve(distribution, PDF)
+    pdf_func = _resolve(distribution, CharacteristicName.PDF)
 
     def _cdf(x: float, **options: Any) -> float:
         val, _ = _sp_integrate.quad(
@@ -248,7 +244,9 @@ def fit_pdf_to_cdf_1C(
         return float(np.clip(val, 0.0, 1.0))
 
     cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
-    return FittedComputationMethod[float, float](target=CDF, sources=[PDF], func=cdf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PDF], func=cdf_func
+    )
 
 
 def fit_cdf_to_pdf_1C(
@@ -266,7 +264,7 @@ def fit_cdf_to_pdf_1C(
     FittedComputationMethod[float, float]
         Fitted ``cdf -> pdf`` conversion.
     """
-    cdf_func = _resolve(distribution, CDF)
+    cdf_func = _resolve(distribution, CharacteristicName.CDF)
 
     def _pdf(x: float, **options: Any) -> float:
         def wrapped_cdf(t: float) -> float:
@@ -276,7 +274,9 @@ def fit_cdf_to_pdf_1C(
         return float(max(d, 0.0))
 
     pdf_func = cast(Callable[[float, KwArg(Any)], float], _pdf)
-    return FittedComputationMethod[float, float](target=PDF, sources=[CDF], func=pdf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.PDF, sources=[CharacteristicName.CDF], func=pdf_func
+    )
 
 
 def fit_cdf_to_ppf_1C(
@@ -294,7 +294,7 @@ def fit_cdf_to_ppf_1C(
     FittedComputationMethod[float, float]
         Fitted ``cdf -> ppf`` conversion.
     """
-    cdf_func = _resolve(distribution, CDF)
+    cdf_func = _resolve(distribution, CharacteristicName.CDF)
 
     def cdf_with_options(x: float) -> float:
         return cdf_func(x, **options)
@@ -305,7 +305,9 @@ def fit_cdf_to_ppf_1C(
         return ppf_func(q)
 
     ppf_cast = cast(Callable[[float, KwArg(Any)], float], _ppf)
-    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=ppf_cast)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], func=ppf_cast
+    )
 
 
 def fit_ppf_to_cdf_1C(
@@ -323,7 +325,7 @@ def fit_ppf_to_cdf_1C(
     FittedComputationMethod[float, float]
         Fitted ``ppf -> cdf`` conversion.
     """
-    ppf_func = _resolve(distribution, PPF)
+    ppf_func = _resolve(distribution, CharacteristicName.PPF)
 
     def _cdf(x: float, **options: Any) -> float:
         if not isfinite(x):
@@ -342,7 +344,9 @@ def fit_ppf_to_cdf_1C(
         return float(np.clip(q, 0.0, 1.0))
 
     cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
-    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=cdf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], func=cdf_func
+    )
 
 
 # --- Discrete fitters: pmf <-> cdf (1D) --------------------------------------
@@ -352,16 +356,16 @@ def fit_pmf_to_cdf_1D(
     distribution: Distribution, /, **_: Any
 ) -> FittedComputationMethod[float, float]:
     """
-    Build CDF from PMF on a discrete support by partial summation.
+    Build Characteristic.CDF from Characteristic.PMF on a discrete support by partial summation.
 
     The behaviour depends on the kind of discrete support:
 
-    * For table-like supports and left-bounded integer lattices, the CDF is
+    * For table-like supports and left-bounded integer lattices, the Characteristic.CDF is
       constructed as a prefix sum over all support points ``k <= x``.
-    * For right-bounded integer lattices (support extends to ``-inf``), the CDF
+    * For right-bounded integer lattices (support extends to ``-inf``), the Characteristic.CDF
       is computed via a *tail* sum:
 
-          CDF(x) = 1 - sum_{k > x} pmf(k),
+          Characteristic.CDF(x) = 1 - sum_{k > x} pmf(k),
 
       which only involves finitely many points.
     * Two-sided infinite integer lattices are not supported by this fitter —
@@ -372,7 +376,7 @@ def fit_pmf_to_cdf_1D(
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for pmf->cdf.")
 
-    pmf_func = _resolve(distribution, PMF)
+    pmf_func = _resolve(distribution, CharacteristicName.PMF)
 
     # Special case: right-bounded integer lattice
     if isinstance(support, IntegerLatticeDiscreteSupport):
@@ -381,7 +385,8 @@ def fit_pmf_to_cdf_1D(
         if not support.is_left_bounded and not support.is_right_bounded:
             raise RuntimeError(
                 "pmf->cdf for a two-sided infinite integer lattice is not supported "
-                "by the generic fitter. Provide an analytical CDF or a custom fitter."
+                "by the generic fitter. Provide an analytical Characteristic.CDF or a "
+                "custom fitter."
             )
 
         # Right-bounded, left-unbounded: use tail summation.
@@ -389,7 +394,7 @@ def fit_pmf_to_cdf_1D(
             max_k = support.max_k
 
             def _cdf(x: float, **kwargs: Any) -> float:
-                # Everything to the right of the upper bound has CDF == 1.
+                # Everything to the right of the upper bound has Characteristic.CDF == 1.
                 if x >= max_k:
                     return 1.0
 
@@ -418,7 +423,9 @@ def fit_pmf_to_cdf_1D(
 
             _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
 
-            return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_func)
+            return FittedComputationMethod[float, float](
+                target=CharacteristicName.CDF, sources=[CharacteristicName.PMF], func=_cdf_func
+            )
 
     def _cdf_prefix(x: float, **kwargs: Any) -> float:
         s = 0.0
@@ -428,14 +435,16 @@ def fit_pmf_to_cdf_1D(
 
     _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf_prefix)
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PMF], func=_cdf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PMF], func=_cdf_func
+    )
 
 
 def fit_cdf_to_pmf_1D(
     distribution: Distribution, /, **_: Any
 ) -> FittedComputationMethod[float, float]:
     """
-    Extract PMF from CDF on a discrete support as jump sizes.
+    Extract Characteristic.PMF from Characteristic.CDF on a discrete support as jump sizes.
 
     Parameters
     ----------
@@ -461,7 +470,7 @@ def fit_cdf_to_pmf_1D(
     support = distribution.support
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for cdf->pmf.")
-    cdf_func = _resolve(distribution, CDF)
+    cdf_func = _resolve(distribution, CharacteristicName.CDF)
 
     def _pmf(x: float, **kwargs: Any) -> float:
         p = support.prev(x)
@@ -472,10 +481,12 @@ def fit_cdf_to_pmf_1D(
 
     _pmf_func = cast(Callable[[float, KwArg(Any)], float], _pmf)
 
-    return FittedComputationMethod[float, float](target=PMF, sources=[CDF], func=_pmf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.PMF, sources=[CharacteristicName.CDF], func=_pmf_func
+    )
 
 
-# --- DISCRETE (1D): CDF <-> PPF -------------------------------------------------
+# --- DISCRETE (1D): Characteristic.CDF <-> Characteristic.PPF ---------------
 
 
 def _collect_support_values(support: Any) -> np.ndarray:
@@ -566,12 +577,13 @@ def fit_cdf_to_ppf_1D(
     distribution: Distribution, /, **options: Any
 ) -> FittedComputationMethod[float, float]:
     """
-    Fit **discrete** PPF from a resolvable CDF and explicit discrete support.
+    Fit **discrete** Characteristic.PPF from a resolvable Characteristic.CDF
+    and explicit discrete support.
 
     Semantics
     ---------
     For a given ``q ∈ [0, 1]`` returns the **leftmost** support point ``x`` such that
-    ``CDF(x) ≥ q`` (step-quantile).
+    ``Characteristic.CDF(x) ≥ q`` (step-quantile).
 
     Requires
     --------
@@ -592,13 +604,13 @@ def fit_cdf_to_ppf_1D(
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for cdf->ppf.")
 
-    cdf_func = _resolve(distribution, CDF)
+    cdf_func = _resolve(distribution, CharacteristicName.CDF)
 
     xs = _collect_support_values(support)  # sorted float array
     if xs.size == 0:
         raise RuntimeError("Discrete support is empty.")
 
-    # Pre-compute CDF on support and enforce monotonicity (safety against FP noise)
+    # Pre-compute Characteristic.CDF on support and enforce monotonicity (safety against FP noise)
     cdf_vals = np.asarray([float(cdf_func(float(x))) for x in xs], dtype=float)
     cdf_vals = np.clip(np.maximum.accumulate(cdf_vals), 0.0, 1.0)
 
@@ -617,21 +629,24 @@ def fit_cdf_to_ppf_1D(
 
     _ppf_func = cast(Callable[[float, KwArg(Any)], float], _ppf)
 
-    return FittedComputationMethod[float, float](target=PPF, sources=[CDF], func=_ppf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], func=_ppf_func
+    )
 
 
 def fit_ppf_to_cdf_1D(
     distribution: Distribution, /, **options: Any
 ) -> FittedComputationMethod[float, float]:
     """
-    Fit **discrete** CDF using only a resolvable PPF via bisection on ``q``.
+    Fit **discrete** Characteristic.CDF using only a resolvable Characteristic.PPF
+    via bisection on ``q``.
 
     Semantics
     ---------
-    ``CDF(x) = sup { q ∈ [0,1] : PPF(q) ≤ x }``
+    ``Characteristic.CDF(x) = sup { q ∈ [0,1] : Characteristic.PPF(q) ≤ x }``
 
     We implement this as a monotone predicate on ``q``:
-      ``f(q) := (PPF(q) ≤ x)``, and find the largest ``q`` with ``f(q) = True``.
+      ``f(q) := (Characteristic.PPF(q) ≤ x)``, and find the largest ``q`` with ``f(q) = True``.
 
     Parameters
     ----------
@@ -646,11 +661,11 @@ def fit_ppf_to_cdf_1D(
     FittedComputationMethod[float, float]
         Fitted ``ppf -> cdf`` conversion for discrete 1D distributions.
     """
-    ppf_func = _resolve(distribution, PPF)
+    ppf_func = _resolve(distribution, CharacteristicName.PPF)
     q_tol: float = float(options.get("q_tol", 1e-12))
     max_iter: int = int(options.get("max_iter", 100))
 
-    # Quick edge probes (robust to weird PPF endpoints)
+    # Quick edge probes (robust to weird Characteristic.PPF endpoints)
     try:
         p0 = float(ppf_func(0.0))
     except Exception:
@@ -677,7 +692,7 @@ def fit_ppf_to_cdf_1D(
             try:
                 y = float(ppf_func(mid, **kwargs))
             except Exception:
-                # If PPF fails at mid, shrink conservatively towards lo
+                # If Characteristic.PPF fails at mid, shrink conservatively towards lo
                 hi = mid
                 continue
             if y <= x:
@@ -688,4 +703,6 @@ def fit_ppf_to_cdf_1D(
 
     _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
 
-    return FittedComputationMethod[float, float](target=CDF, sources=[PPF], func=_cdf_func)
+    return FittedComputationMethod[float, float](
+        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], func=_cdf_func
+    )
