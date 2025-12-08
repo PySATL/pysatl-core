@@ -6,6 +6,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from pysatl_core.families import ParametricFamily, Parametrization
 from pysatl_core.types import (
+    CharacteristicName,
     GenericCharacteristicName,
     UnivariateContinuous,
 )
@@ -13,19 +14,15 @@ from tests.utils.mocks import MockSamplingStrategy
 
 
 class TestBaseFamily:
-    PDF: GenericCharacteristicName = "pdf"
-    CDF: GenericCharacteristicName = "cdf"
-    PPF: GenericCharacteristicName = "mean"
-
     def make_default_family(
         self,
         distr_characteristics: dict[GenericCharacteristicName, dict[str, object]] | None = None,
     ) -> ParametricFamily:
         if distr_characteristics is None:
             distr_characteristics = {
-                self.PDF: {"base": lambda p, x: x},
-                self.CDF: {"alt": lambda p, x: x, "base": lambda p, x: x},
-                self.PPF: {"base": lambda p, x: x},
+                CharacteristicName.PDF: {"base": lambda p, x: x},
+                CharacteristicName.CDF: {"alt": lambda p, x: x, "base": lambda p, x: x},
+                CharacteristicName.PPF: {"base": lambda p, x: x},
             }
         fam = ParametricFamily(
             name="Default",

@@ -39,20 +39,10 @@ from pysatl_core.families.parametrizations import (
     parametrization,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.types import UnivariateContinuous
+from pysatl_core.types import CharacteristicName, UnivariateContinuous
 
 if TYPE_CHECKING:
     from typing import Any
-
-
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-CF = "char_func"
-MEAN = "mean"
-VAR = "var"
-SKEW = "skewness"
-KURT = "kurtosis"
 
 
 @lru_cache(maxsize=1)
@@ -354,14 +344,14 @@ def _configure_normal_family() -> None:
         distr_type=UnivariateContinuous,
         distr_parametrizations=["meanStd", "meanPrec", "exponential"],
         distr_characteristics={
-            PDF: normal_pdf,
-            CDF: normal_cdf,
-            PPF: normal_ppf,
-            CF: normal_char_func,
-            MEAN: mean_func,
-            VAR: var_func,
-            SKEW: skew_func,
-            KURT: kurt_func,
+            CharacteristicName.PDF: normal_pdf,
+            CharacteristicName.CDF: normal_cdf,
+            CharacteristicName.PPF: normal_ppf,
+            CharacteristicName.CF: normal_char_func,
+            CharacteristicName.MEAN: mean_func,
+            CharacteristicName.VAR: var_func,
+            CharacteristicName.SKEW: skew_func,
+            CharacteristicName.KURT: kurt_func,
         },
         sampling_strategy=DefaultSamplingUnivariateStrategy(),
         support_by_parametrization=_normal_support,

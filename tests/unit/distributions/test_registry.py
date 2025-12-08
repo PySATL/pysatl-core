@@ -18,6 +18,7 @@ from pysatl_core.distributions.registry import (
     reset_characteristic_registry,
 )
 from pysatl_core.distributions.strategies import DefaultComputationStrategy
+from pysatl_core.types import CharacteristicName
 from tests.unit.distributions.test_basic import DistributionTestBase
 
 
@@ -32,18 +33,20 @@ class TestCharacteristicRegistry(DistributionTestBase):
         view = reg.view(distr)
 
         # Presence / definitiveness (pdf may be absent by config; don't require it)
-        assert self.PMF not in view.all_characteristics
-        assert {self.CDF, self.PPF}.issubset(view.all_characteristics)
-        assert {self.CDF, self.PPF}.issubset(view.definitive_characteristics)
+        assert CharacteristicName.PMF not in view.all_characteristics
+        assert {CharacteristicName.CDF, CharacteristicName.PPF}.issubset(view.all_characteristics)
+        assert {CharacteristicName.CDF, CharacteristicName.PPF}.issubset(
+            view.definitive_characteristics
+        )
 
         # Paths must exist between definitive characteristics we rely on
-        assert view.find_path(self.CDF, self.PPF) is not None
-        assert view.find_path(self.PPF, self.CDF) is not None
+        assert view.find_path(CharacteristicName.CDF, CharacteristicName.PPF) is not None
+        assert view.find_path(CharacteristicName.PPF, CharacteristicName.CDF) is not None
 
         # Strategy resolves and roundtrips: CDF(PPF(q)) ~ q
         strategy = DefaultComputationStrategy[float, float](enable_caching=False)
-        ppf = strategy.query_method(self.PPF, distr)
-        cdf = strategy.query_method(self.CDF, distr)
+        ppf = strategy.query_method(CharacteristicName.PPF, distr)
+        cdf = strategy.query_method(CharacteristicName.CDF, distr)
         qs = np.linspace(1e-6, 1.0 - 1e-6, 7)
         errs = [abs(float(cdf(float(ppf(float(q))))) - q) for q in qs]
         assert max(errs) < 5e-3
@@ -60,22 +63,26 @@ class TestCharacteristicRegistry(DistributionTestBase):
         distr = self.make_discrete_point_pmf_distribution()
         view = reg.view(distr)
 
-        assert self.PDF not in view.all_characteristics
-        assert {self.PMF, self.CDF, self.PPF}.issubset(view.all_characteristics)
-        assert {self.PMF, self.CDF, self.PPF}.issubset(view.definitive_characteristics)
+        assert CharacteristicName.PDF not in view.all_characteristics
+        assert {CharacteristicName.PMF, CharacteristicName.CDF, CharacteristicName.PPF}.issubset(
+            view.all_characteristics
+        )
+        assert {CharacteristicName.PMF, CharacteristicName.CDF, CharacteristicName.PPF}.issubset(
+            view.definitive_characteristics
+        )
 
-        assert view.find_path(self.PMF, self.CDF) is not None
-        assert view.find_path(self.CDF, self.PMF) is not None
-        assert view.find_path(self.CDF, self.PPF) is not None
-        assert view.find_path(self.PPF, self.CDF) is not None
+        assert view.find_path(CharacteristicName.PMF, CharacteristicName.CDF) is not None
+        assert view.find_path(CharacteristicName.CDF, CharacteristicName.PMF) is not None
+        assert view.find_path(CharacteristicName.CDF, CharacteristicName.PPF) is not None
+        assert view.find_path(CharacteristicName.PPF, CharacteristicName.CDF) is not None
 
         strategy = DefaultComputationStrategy[float, float](enable_caching=False)
-        cdf = strategy.query_method(self.CDF, distr)
+        cdf = strategy.query_method(CharacteristicName.CDF, distr)
         assert cdf(0.0) == pytest.approx(0.2, abs=1e-10)
         assert cdf(1.0) == pytest.approx(0.7, abs=1e-10)
         assert cdf(2.0) == pytest.approx(1.0, abs=1e-10)
 
-        ppf = strategy.query_method(self.PPF, distr)
+        ppf = strategy.query_method(CharacteristicName.PPF, distr)
         assert ppf(0.10) == pytest.approx(0.0, abs=1e-12)
         assert ppf(0.70) == pytest.approx(1.0, abs=1e-12)
         assert ppf(0.95) == pytest.approx(2.0, abs=1e-12)

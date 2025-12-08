@@ -4,6 +4,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from pysatl_core.types import CharacteristicName
 from tests.unit.families.test_basic import TestBaseFamily
 
 
@@ -15,11 +16,11 @@ class TestAnalyticalPlan(TestBaseFamily):
         assert set(plan.keys()) == {"base", "alt"}
 
         # For 'alt': CDF provided by 'alt'; PDF/PPF fallback to base (PPF has only base)
-        assert plan["alt"][self.CDF] == "alt"
-        assert plan["alt"][self.PDF] == "base"
-        assert plan["alt"][self.PPF] == "base"
+        assert plan["alt"][CharacteristicName.CDF] == "alt"
+        assert plan["alt"][CharacteristicName.PDF] == "base"
+        assert plan["alt"][CharacteristicName.PPF] == "base"
 
         # For 'base': all come from base
-        assert plan["base"][self.PDF] == "base"
-        assert plan["base"][self.CDF] == "base"
-        assert plan["base"][self.PPF] == "base"
+        assert plan["base"][CharacteristicName.PDF] == "base"
+        assert plan["base"][CharacteristicName.CDF] == "base"
+        assert plan["base"][CharacteristicName.PPF] == "base"
