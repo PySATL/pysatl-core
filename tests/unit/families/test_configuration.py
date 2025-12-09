@@ -11,22 +11,13 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from typing import cast
 
 import numpy as np
 import pytest
 from scipy.stats import norm, uniform
 
 from pysatl_core.distributions.support import ContinuousSupport
-from pysatl_core.families.configuration import (
-    NormalExpParametrization,
-    NormalMeanPrecParametrization,
-    NormalMeanStdParametrization,
-    UniformMeanWidthParametrization,
-    UniformMinRangeParametrization,
-    UniformStandardParametrization,
-    configure_families_register,
-)
+from pysatl_core.families.configuration import configure_families_register
 from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     CharacteristicName,
@@ -68,30 +59,23 @@ class TestNormalFamily(BaseDistributionTest):
 
         assert dist.family_name == FamilyName.NORMAL
         assert dist.distribution_type == UnivariateContinuous
-
-        params = cast(NormalMeanStdParametrization, dist.parameters)
-        assert params.mu == 2.0
-        assert params.sigma == 1.5
-        assert params.name == "meanStd"
+        assert dist.parameters == {"mu": 2.0, "sigma": 1.5}
+        assert dist.parametrization_name == "meanStd"
 
     def test_mean_prec_parametrization_creation(self):
         """Test creation of distribution with mean-precision parametrization."""
         dist = self.normal_family(mu=2.0, tau=0.25, parametrization_name="meanPrec")
 
-        params = cast(NormalMeanPrecParametrization, dist.parameters)
-        assert params.mu == 2.0
-        assert params.tau == 0.25
-        assert params.name == "meanPrec"
+        assert dist.parameters == {"mu": 2.0, "tau": 0.25}
+        assert dist.parametrization_name == "meanPrec"
 
     def test_exponential_parametrization_creation(self):
         """Test creation of distribution with exponential parametrization."""
         # For N(2, 1.5): a = -1/(2*1.5²) = -0.222..., b = 2/1.5² = 0.888...
         dist = self.normal_family(a=-0.222, b=0.888, parametrization_name="exponential")
 
-        params = cast(NormalExpParametrization, dist.parameters)
-        assert params.a == -0.222
-        assert params.b == 0.888
-        assert params.name == "exponential"
+        assert dist.parameters == {"a": -0.222, "b": 0.888}
+        assert dist.parametrization_name == "exponential"
 
     def test_parametrization_constraints(self):
         """Test parameter constraints validation."""
@@ -109,9 +93,7 @@ class TestNormalFamily(BaseDistributionTest):
 
     def test_pdf_calculation(self):
         """Test PDF calculation against scipy.stats.norm."""
-        pdf = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.PDF, self.normal_dist_example
-        )
+        pdf = self.normal_dist_example.query_method(CharacteristicName.PDF)
         test_points = [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
 
         for x in test_points:
@@ -124,9 +106,7 @@ class TestNormalFamily(BaseDistributionTest):
 
     def test_cdf_calculation(self):
         """Test CDF calculation against scipy.stats.norm."""
-        cdf = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.CDF, self.normal_dist_example
-        )
+        cdf = self.normal_dist_example.query_method(CharacteristicName.CDF)
         test_points = [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
 
         for x in test_points:
@@ -137,9 +117,7 @@ class TestNormalFamily(BaseDistributionTest):
 
     def test_ppf_calculation(self):
         """Test PPF calculation against scipy.stats.norm."""
-        ppf = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.PPF, self.normal_dist_example
-        )
+        ppf = self.normal_dist_example.query_method(CharacteristicName.PPF)
         test_probabilities = [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999]
 
         for p in test_probabilities:
@@ -160,9 +138,7 @@ class TestNormalFamily(BaseDistributionTest):
     )
     def test_characteristic_function(self, char_func_arg):
         """Test characteristic function calculation at specific points."""
-        char_func = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.CF, self.normal_dist_example
-        )
+        char_func = self.normal_dist_example.query_method(CharacteristicName.CF)
         cf_value = char_func(char_func_arg)
 
         expected_real = math.exp(-0.5 * (1.5 * char_func_arg) ** 2) * math.cos(2.0 * char_func_arg)
@@ -175,21 +151,15 @@ class TestNormalFamily(BaseDistributionTest):
         "char_func_getter, expected",
         [
             (
-                lambda distr: distr.computation_strategy.query_method(
-                    CharacteristicName.MEAN, distr
-                )(None),
+                lambda distr: distr.query_method(CharacteristicName.MEAN)(None),
                 2.0,
             ),
             (
-                lambda distr: distr.computation_strategy.query_method(
-                    CharacteristicName.VAR, distr
-                )(None),
+                lambda distr: distr.query_method(CharacteristicName.VAR)(None),
                 2.25,
             ),
             (
-                lambda distr: distr.computation_strategy.query_method(
-                    CharacteristicName.SKEW, distr
-                )(None),
+                lambda distr: distr.query_method(CharacteristicName.SKEW)(None),
                 0.0,
             ),
         ],
@@ -201,9 +171,7 @@ class TestNormalFamily(BaseDistributionTest):
 
     def test_kurtosis_calculation(self):
         """Test kurtosis calculation with excess parameter."""
-        kurt_func = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.KURT, self.normal_dist_example
-        )
+        kurt_func = self.normal_dist_example.query_method(CharacteristicName.KURT)
 
         raw_kurt = kurt_func(None)
         assert abs(raw_kurt - 3.0) < self.CALCULATION_PRECISION
@@ -226,15 +194,12 @@ class TestNormalFamily(BaseDistributionTest):
         self, parametrization_name, params, expected_mu, expected_sigma
     ):
         """Test conversions between different parameterizations."""
-        base_params = cast(
-            NormalMeanStdParametrization,
-            self.normal_family.to_base(
-                self.normal_family.get_parametrization(parametrization_name)(**params)
-            ),
+        base_params = self.normal_family.to_base(
+            self.normal_family.get_parametrization(parametrization_name)(**params)
         )
 
-        assert abs(base_params.mu - expected_mu) < self.CALCULATION_PRECISION
-        assert abs(base_params.sigma - expected_sigma) < self.CALCULATION_PRECISION
+        assert abs(base_params.parameters["mu"] - expected_mu) < self.CALCULATION_PRECISION
+        assert abs(base_params.parameters["sigma"] - expected_sigma) < self.CALCULATION_PRECISION
 
     def test_analytical_computations_caching(self):
         """Test that analytical computations are properly cached."""
@@ -257,7 +222,7 @@ class TestNormalFamily(BaseDistributionTest):
         dist = self.normal_family(mu=0.0, sigma=1.0)
         x_array = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
 
-        pdf = dist.computation_strategy.query_method(CharacteristicName.PDF, dist)
+        pdf = dist.query_method(CharacteristicName.PDF)
         pdf_array = pdf(x_array)
 
         assert pdf_array.shape == x_array.shape
@@ -311,9 +276,7 @@ class TestNormalFamilyEdgeCases:
 
     def test_invalid_probability_ppf(self):
         """Test PPF with invalid probability values."""
-        ppf = self.normal_dist_example.computation_strategy.query_method(
-            CharacteristicName.PPF, self.normal_dist_example
-        )
+        ppf = self.normal_dist_example.query_method(CharacteristicName.PPF)
 
         # Test boundaries
         assert ppf(0.0) == float("-inf")
@@ -352,28 +315,22 @@ class TestUniformFamily(BaseDistributionTest):
         assert dist.family_name == FamilyName.CONTINUOUS_UNIFORM
         assert dist.distribution_type == UnivariateContinuous
 
-        params = cast(UniformStandardParametrization, dist.parameters)
-        assert params.lower_bound == 2.0
-        assert params.upper_bound == 5.0
-        assert params.name == "standard"
+        assert dist.parameters == {"lower_bound": 2.0, "upper_bound": 5.0}
+        assert dist.parametrization_name == "standard"
 
     def test_mean_width_parametrization_creation(self):
         """Test creation of distribution with mean-width parametrization."""
         dist = self.uniform_family(mean=3.5, width=3.0, parametrization_name="meanWidth")
 
-        params = cast(UniformMeanWidthParametrization, dist.parameters)
-        assert params.mean == 3.5
-        assert params.width == 3.0
-        assert params.name == "meanWidth"
+        assert dist.parameters == {"mean": 3.5, "width": 3.0}
+        assert dist.parametrization_name == "meanWidth"
 
     def test_min_range_parametrization_creation(self):
         """Test creation of distribution with min-range parametrization."""
         dist = self.uniform_family(minimum=2.0, range_val=3.0, parametrization_name="minRange")
 
-        params = cast(UniformMinRangeParametrization, dist.parameters)
-        assert params.minimum == 2.0
-        assert params.range_val == 3.0
-        assert params.name == "minRange"
+        assert dist.parameters == {"minimum": 2.0, "range_val": 3.0}
+        assert dist.parametrization_name == "minRange"
 
     def test_parametrization_constraints(self):
         """Test parameter constraints validation."""
@@ -391,9 +348,7 @@ class TestUniformFamily(BaseDistributionTest):
 
     def test_pdf_calculation(self):
         """Test PDF calculation against scipy.stats.uniform."""
-        pdf = self.uniform_dist_example.computation_strategy.query_method(
-            "pdf", self.uniform_dist_example
-        )
+        pdf = self.uniform_dist_example.query_method(CharacteristicName.PDF)
         test_points = [1.0, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0]
 
         for x in test_points:
@@ -406,9 +361,7 @@ class TestUniformFamily(BaseDistributionTest):
 
     def test_cdf_calculation(self):
         """Test CDF calculation against scipy.stats.uniform."""
-        cdf = self.uniform_dist_example.computation_strategy.query_method(
-            "cdf", self.uniform_dist_example
-        )
+        cdf = self.uniform_dist_example.query_method(CharacteristicName.CDF)
         test_points = [1.0, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0]
 
         for x in test_points:
@@ -419,9 +372,7 @@ class TestUniformFamily(BaseDistributionTest):
 
     def test_ppf_calculation(self):
         """Test PPF calculation against scipy.stats.uniform."""
-        ppf = self.uniform_dist_example.computation_strategy.query_method(
-            "ppf", self.uniform_dist_example
-        )
+        ppf = self.uniform_dist_example.query_method(CharacteristicName.PPF)
         test_probabilities = [0.0, 0.25, 0.5, 0.75, 1.0]
 
         for p in test_probabilities:
@@ -441,9 +392,7 @@ class TestUniformFamily(BaseDistributionTest):
     )
     def test_characteristic_function(self, char_func_arg):
         """Test characteristic function calculation at specific points."""
-        char_func = self.uniform_dist_example.computation_strategy.query_method(
-            "char_func", self.uniform_dist_example
-        )
+        char_func = self.uniform_dist_example.query_method(CharacteristicName.CF)
         cf_value = char_func(char_func_arg)
 
         # Analytical formula for characteristic function of uniform distribution
@@ -469,9 +418,7 @@ class TestUniformFamily(BaseDistributionTest):
 
     def test_characteristic_function_at_zero(self):
         """Test characteristic function at zero returns 1."""
-        char_func = self.uniform_dist_example.computation_strategy.query_method(
-            "char_func", self.uniform_dist_example
-        )
+        char_func = self.uniform_dist_example.query_method(CharacteristicName.CF)
 
         cf_value_zero = char_func(0.0)
         assert abs(cf_value_zero.real - 1.0) < self.CALCULATION_PRECISION
@@ -489,22 +436,20 @@ class TestUniformFamily(BaseDistributionTest):
         dist = self.uniform_dist_example
 
         # Mean
-        mean_func = dist.computation_strategy.query_method("mean", dist)
+        mean_func = dist.query_method(CharacteristicName.MEAN)
         assert abs(mean_func(None) - 3.5) < self.CALCULATION_PRECISION
 
         # Variance
-        var_func = dist.computation_strategy.query_method("var", dist)
+        var_func = dist.query_method(CharacteristicName.VAR)
         assert abs(var_func(None) - 0.75) < self.CALCULATION_PRECISION
 
         # Skewness
-        skew_func = dist.computation_strategy.query_method("skewness", dist)
+        skew_func = dist.query_method(CharacteristicName.SKEW)
         assert abs(skew_func(None) - 0.0) < self.CALCULATION_PRECISION
 
     def test_kurtosis_calculation(self):
         """Test kurtosis calculation with excess parameter."""
-        kurt_func = self.uniform_dist_example.computation_strategy.query_method(
-            "kurtosis", self.uniform_dist_example
-        )
+        kurt_func = self.uniform_dist_example.query_method(CharacteristicName.KURT)
 
         raw_kurt = kurt_func(None)
         assert abs(raw_kurt - 1.8) < self.CALCULATION_PRECISION
@@ -527,29 +472,30 @@ class TestUniformFamily(BaseDistributionTest):
         self, parametrization_name, params, expected_lower, expected_upper
     ):
         """Test conversions between different parameterizations."""
-        base_params = cast(
-            UniformStandardParametrization,
-            self.uniform_family.to_base(
-                self.uniform_family.get_parametrization(parametrization_name)(**params)
-            ),
+        base_params = self.uniform_family.to_base(
+            self.uniform_family.get_parametrization(parametrization_name)(**params)
         )
 
-        assert abs(base_params.lower_bound - expected_lower) < self.CALCULATION_PRECISION
-        assert abs(base_params.upper_bound - expected_upper) < self.CALCULATION_PRECISION
+        assert (
+            abs(base_params.parameters["lower_bound"] - expected_lower) < self.CALCULATION_PRECISION
+        )
+        assert (
+            abs(base_params.parameters["upper_bound"] - expected_upper) < self.CALCULATION_PRECISION
+        )
 
     def test_analytical_computations_caching(self):
         """Test that analytical computations are properly cached."""
         comp = self.uniform_family(lower_bound=0.0, upper_bound=1.0).analytical_computations
 
         expected_chars = {
-            "pdf",
-            "cdf",
-            "ppf",
-            "char_func",
-            "mean",
-            "var",
-            "skewness",
-            "kurtosis",
+            CharacteristicName.PDF,
+            CharacteristicName.CDF,
+            CharacteristicName.PPF,
+            CharacteristicName.CF,
+            CharacteristicName.MEAN,
+            CharacteristicName.VAR,
+            CharacteristicName.SKEW,
+            CharacteristicName.KURT,
         }
         assert set(comp.keys()) == expected_chars
 
@@ -558,7 +504,7 @@ class TestUniformFamily(BaseDistributionTest):
         dist = self.uniform_family(lower_bound=0.0, upper_bound=1.0)
         x_array = np.array([-0.5, 0.0, 0.25, 0.5, 0.75, 1.0, 1.5])
 
-        pdf = dist.computation_strategy.query_method("pdf", dist)
+        pdf = dist.query_method(CharacteristicName.PDF)
         pdf_array = pdf(x_array)
 
         assert pdf_array.shape == x_array.shape
@@ -573,7 +519,7 @@ class TestUniformFamily(BaseDistributionTest):
         dist = self.uniform_family(lower_bound=0.0, upper_bound=1.0)
         x_array = np.array([-0.5, 0.0, 0.25, 0.5, 0.75, 1.0, 1.5])
 
-        cdf = dist.computation_strategy.query_method("cdf", dist)
+        cdf = dist.query_method(CharacteristicName.CDF)
         cdf_array = cdf(x_array)
 
         assert cdf_array.shape == x_array.shape
@@ -588,7 +534,7 @@ class TestUniformFamily(BaseDistributionTest):
         dist = self.uniform_family(lower_bound=0.0, upper_bound=1.0)
         p_array = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
 
-        ppf = dist.computation_strategy.query_method("ppf", dist)
+        ppf = dist.query_method(CharacteristicName.PPF)
         ppf_array = ppf(p_array)
 
         assert ppf_array.shape == p_array.shape
@@ -652,7 +598,7 @@ class TestUniformFamilyEdgeCases(BaseDistributionTest):
 
     def test_invalid_probability_ppf(self):
         """Test PPF with invalid probability values."""
-        ppf = self.uniform_dist.computation_strategy.query_method("ppf", self.uniform_dist)
+        ppf = self.uniform_dist.query_method(CharacteristicName.PPF)
 
         # Test boundaries
         assert ppf(0.0) == 0.0
@@ -672,9 +618,7 @@ class TestUniformFamilyEdgeCases(BaseDistributionTest):
 
     def test_characteristic_function_edge_cases(self):
         """Test characteristic function at edge cases."""
-        char_func = self.uniform_dist.computation_strategy.query_method(
-            "char_func", self.uniform_dist
-        )
+        char_func = self.uniform_dist.query_method(CharacteristicName.CF)
 
         # Test with very small t
         cf_value_small = char_func(self.CALCULATION_PRECISION)

@@ -24,13 +24,20 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.computation import AnalyticalComputation
     from pysatl_core.distributions.sampling import Sample
-    from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
+    from pysatl_core.distributions.strategies import (
+        ComputationStrategy,
+        SamplingStrategy,
+    )
     from pysatl_core.distributions.support import Support
     from pysatl_core.families.parametric_family import ParametricFamily
-    from pysatl_core.families.parametrizations import Parametrization
+    from pysatl_core.families.parametrizations import (
+        Parametrization,
+        ParametrizationConstraint,
+    )
     from pysatl_core.types import (
         DistributionType,
         GenericCharacteristicName,
+        ParametrizationName,
     )
 
 
@@ -48,7 +55,7 @@ class ParametricFamilyDistribution(Distribution):
         Name of the distribution family.
     _distribution_type : DistributionType
         Type of this distribution.
-    parameters : Parametrization
+    _parametrization : Parametrization
         Parameter values for this distribution.
     _support : Support or None
         Support of this distribution.
@@ -56,13 +63,61 @@ class ParametricFamilyDistribution(Distribution):
 
     family_name: str
     _distribution_type: DistributionType
-    parameters: Parametrization
+    _parametrization: Parametrization
     _support: Support | None
 
     @property
     def distribution_type(self) -> DistributionType:
         """Get the distribution type."""
         return self._distribution_type
+
+    @property
+    def parametrization(self) -> Parametrization:
+        """
+        Get the parametrization object containing distribution parameters.
+
+        Returns
+        -------
+        Parametrization
+            Parametrization instance with all parameter values.
+        """
+        return self._parametrization
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        """
+        Get distribution parameters as a dictionary (shortcut).
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary mapping parameter names to their values.
+        """
+        return self._parametrization.parameters
+
+    @property
+    def parametrization_name(self) -> ParametrizationName:
+        """
+        Get the name of the parametrization used by this distribution.
+
+        Returns
+        -------
+        ParametrizationName
+            Name of the parameterization format (e.g., 'meanStd').
+        """
+        return self._parametrization.name
+
+    @property
+    def parameters_constraints(self) -> list[ParametrizationConstraint]:
+        """
+        Get constraints that apply to the distribution's parameters.
+
+        Returns
+        -------
+        list[ParametrizationConstraint]
+            List of parameter constraints for validation.
+        """
+        return self._parametrization.constraints
 
     @property
     def family(self) -> ParametricFamily:
@@ -86,12 +141,12 @@ class ParametricFamilyDistribution(Distribution):
         Lazily computed and cached per instance. Cache invalidates when
         parametrization object or name changes.
         """
-        key = (id(self.parameters), self.parameters.name)
+        key = (id(self.parametrization), self.parametrization_name)
         cache_key = getattr(self, "_analytical_cache_key", None)
         cache_val = getattr(self, "_analytical_cache_val", None)
 
         if cache_key != key or cache_val is None:
-            cache_val = self.family._build_analytical_computations(self.parameters)
+            cache_val = self.family._build_analytical_computations(self.parametrization)
             self._analytical_cache_key = key
             self._analytical_cache_val = cache_val
 
