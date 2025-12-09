@@ -16,7 +16,7 @@ from abc import ABC
 from dataclasses import dataclass, is_dataclass
 from functools import wraps
 from inspect import isfunction
-from typing import TYPE_CHECKING, ParamSpec
+from typing import TYPE_CHECKING, ParamSpec, dataclass_transform
 
 from pysatl_core.types import ParametrizationName
 
@@ -144,6 +144,7 @@ def constraint(description: str) -> Callable[[Callable[P, bool]], Callable[P, bo
     return decorator
 
 
+@dataclass_transform()
 def parametrization(
     *,
     family: ParametricFamily,

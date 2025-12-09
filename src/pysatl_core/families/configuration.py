@@ -22,7 +22,6 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
 
@@ -64,109 +63,6 @@ def configure_families_register() -> ParametricFamilyRegister:
     return ParametricFamilyRegister()
 
 
-@dataclass
-class NormalMeanStdParametrization(Parametrization):
-    """
-    Standard parametrization of normal distribution.
-
-    Parameters
-    ----------
-    mu : float
-        Mean of the distribution
-    sigma : float
-        Standard deviation of the distribution
-    """
-
-    mu: float
-    sigma: float
-
-    @constraint(description="sigma > 0")
-    def check_sigma_positive(self) -> bool:
-        """Check that standard deviation is positive."""
-        return self.sigma > 0
-
-
-@dataclass
-class NormalMeanPrecParametrization(Parametrization):
-    """
-    Mean-precision parametrization of normal distribution.
-
-    Parameters
-    ----------
-    mu : float
-        Mean of the distribution
-    tau : float
-        Precision parameter (inverse variance)
-    """
-
-    mu: float
-    tau: float
-
-    @constraint(description="tau > 0")
-    def check_tau_positive(self) -> bool:
-        """Check that precision parameter is positive."""
-        return self.tau > 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        sigma = math.sqrt(1 / self.tau)
-        return NormalMeanStdParametrization(mu=self.mu, sigma=sigma)
-
-
-@dataclass
-class NormalExpParametrization(Parametrization):
-    """
-    Exponential family parametrization of normal distribution.
-        Uses the form: y = exp(a*x² + b*x + c)
-
-    Parameters
-    ----------
-    a : float
-        Quadratic term coefficient in exponential form
-    b : float
-        Linear term coefficient in exponential form
-    """
-
-    a: float
-    b: float
-
-    @property
-    def c(self) -> float:
-        """
-        Calculate the normalization constant c.
-
-        Returns
-        -------
-        float
-            Normalization constant
-        """
-        return (self.b**2) / (4 * self.a) - (1 / 2) * math.log(math.pi / (-self.a))
-
-    @constraint(description="a < 0")
-    def check_a_negative(self) -> bool:
-        """Check that quadratic term coefficient is negative."""
-        return self.a < 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        mu = -self.b / (2 * self.a)
-        sigma = math.sqrt(-1 / (2 * self.a))
-        return NormalMeanStdParametrization(mu=mu, sigma=sigma)
-
-
 def _configure_normal_family() -> None:
     NORMAL_DOC = """
     Normal (Gaussian) distribution.
@@ -202,7 +98,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probability density values at points x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
@@ -232,7 +128,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probabilities P(X ≤ x) for each point x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         z = (x - parameters.mu) / (parameters.sigma * np.sqrt(2))
         return cast(npt.NDArray[np.float64], 0.5 * (1 + erf(z)))
@@ -266,7 +162,7 @@ def _configure_normal_family() -> None:
         if np.any((p < 0) | (p > 1)):
             raise ValueError("Probability must be in [0, 1]")
 
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         result = cast(
             npt.NDArray[np.float64],
@@ -294,7 +190,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.complex128]
             Characteristic function values at points x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
@@ -302,12 +198,12 @@ def _configure_normal_family() -> None:
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
         return parameters.mu
 
     def var_func(parameters: Parametrization, _: Any) -> float:
         """Variance of normal distribution."""
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
         return parameters.sigma**2
 
     def skew_func(_1: Parametrization, _2: Any) -> int:
@@ -358,104 +254,107 @@ def _configure_normal_family() -> None:
     )
     Normal.__doc__ = NORMAL_DOC
 
-    parametrization(family=Normal, name="meanStd")(NormalMeanStdParametrization)
-    parametrization(family=Normal, name="meanPrec")(NormalMeanPrecParametrization)
-    parametrization(family=Normal, name="exponential")(NormalExpParametrization)
+    @parametrization(family=Normal, name="meanStd")
+    class _MeanStd(Parametrization):
+        """
+        Standard parametrization of normal distribution.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of the distribution
+        sigma : float
+            Standard deviation of the distribution
+        """
+
+        mu: float
+        sigma: float
+
+        @constraint(description="sigma > 0")
+        def check_sigma_positive(self) -> bool:
+            """Check that standard deviation is positive."""
+            return self.sigma > 0
+
+    @parametrization(family=Normal, name="meanPrec")
+    class _MeanPrec(Parametrization):
+        """
+        Mean-precision parametrization of normal distribution.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of the distribution
+        tau : float
+            Precision parameter (inverse variance)
+        """
+
+        mu: float
+        tau: float
+
+        @constraint(description="tau > 0")
+        def check_tau_positive(self) -> bool:
+            """Check that precision parameter is positive."""
+            return self.tau > 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            sigma = math.sqrt(1 / self.tau)
+            return _MeanStd(mu=self.mu, sigma=sigma)
+
+    @parametrization(family=Normal, name="exponential")
+    class _Exp(Parametrization):
+        """
+        Exponential family parametrization of normal distribution.
+            Uses the form: y = exp(a*x² + b*x + c)
+
+        Parameters
+        ----------
+        a : float
+            Quadratic term coefficient in exponential form
+        b : float
+            Linear term coefficient in exponential form
+        """
+
+        a: float
+        b: float
+
+        @property
+        def c(self) -> float:
+            """
+            Calculate the normalization constant c.
+
+            Returns
+            -------
+            float
+                Normalization constant
+            """
+            return (self.b**2) / (4 * self.a) - (1 / 2) * math.log(math.pi / (-self.a))
+
+        @constraint(description="a < 0")
+        def check_a_negative(self) -> bool:
+            """Check that quadratic term coefficient is negative."""
+            return self.a < 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            mu = -self.b / (2 * self.a)
+            sigma = math.sqrt(-1 / (2 * self.a))
+            return _MeanStd(mu=mu, sigma=sigma)
 
     ParametricFamilyRegister.register(Normal)
-
-
-@dataclass
-class UniformStandardParametrization(Parametrization):
-    """
-    Standard parametrization of uniform distribution.
-
-    Parameters
-    ----------
-    lower_bound : float
-        Lower bound of the distribution
-    upper_bound : float
-        Upper bound of the distribution
-    """
-
-    lower_bound: float
-    upper_bound: float
-
-    @constraint(description="lower_bound < upper_bound")
-    def check_lower_less_than_upper(self) -> bool:
-        """Check that lower bound is less than upper bound."""
-        return self.lower_bound < self.upper_bound
-
-
-@dataclass
-class UniformMeanWidthParametrization(Parametrization):
-    """
-    Mean-width parametrization of uniform distribution.
-
-    Parameters
-    ----------
-    mean : float
-        Mean (center) of the distribution
-    width : float
-        Width of the distribution (upper_bound - lower_bound)
-    """
-
-    mean: float
-    width: float
-
-    @constraint(description="width > 0")
-    def check_width_positive(self) -> bool:
-        """Check that width is positive."""
-        return self.width > 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        half_width = self.width / 2
-        return UniformStandardParametrization(
-            lower_bound=self.mean - half_width, upper_bound=self.mean + half_width
-        )
-
-
-@dataclass
-class UniformMinRangeParametrization(Parametrization):
-    """
-    Minimum-range parametrization of uniform distribution.
-
-    Parameters
-    ----------
-    minimum : float
-        Minimum value (lower bound)
-    range_val : float
-        Range of the distribution (upper_bound - lower_bound)
-    """
-
-    minimum: float
-    range_val: float
-
-    @constraint(description="range_val > 0")
-    def check_range_positive(self) -> bool:
-        """Check that range is positive."""
-        return self.range_val > 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        return UniformStandardParametrization(
-            lower_bound=self.minimum, upper_bound=self.minimum + self.range_val
-        )
 
 
 def _configure_uniform_family() -> None:
@@ -496,7 +395,7 @@ def _configure_uniform_family() -> None:
         npt.NDArray[np.float64]
             Probability density values at points x
         """
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
 
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
@@ -528,7 +427,7 @@ def _configure_uniform_family() -> None:
         npt.NDArray[np.float64]
             Probabilities P(X ≤ x) for each point x
         """
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
 
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
@@ -568,7 +467,7 @@ def _configure_uniform_family() -> None:
         if np.any((p < 0) | (p > 1)):
             raise ValueError("Probability must be in [0, 1]")
 
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
 
@@ -599,7 +498,7 @@ def _configure_uniform_family() -> None:
         npt.NDArray[np.complex128]
             Characteristic function values at points t
         """
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
 
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
@@ -616,12 +515,12 @@ def _configure_uniform_family() -> None:
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of uniform distribution."""
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
         return (parameters.lower_bound + parameters.upper_bound) / 2
 
     def var_func(parameters: Parametrization, _: Any) -> float:
         """Variance of uniform distribution."""
-        parameters = cast(UniformStandardParametrization, parameters)
+        parameters = cast(_Standard, parameters)
         width = parameters.upper_bound - parameters.lower_bound
         return width**2 / 12
 
@@ -654,9 +553,7 @@ def _configure_uniform_family() -> None:
 
     def _uniform_support(parameters: Parametrization) -> ContinuousSupport:
         """Support of uniform distribution"""
-        parameters = cast(
-            UniformStandardParametrization, parameters.transform_to_base_parametrization()
-        )
+        parameters = cast(_Standard, parameters.transform_to_base_parametrization())
         return ContinuousSupport(
             left=parameters.lower_bound,
             right=parameters.upper_bound,
@@ -669,23 +566,105 @@ def _configure_uniform_family() -> None:
         distr_type=UnivariateContinuous,
         distr_parametrizations=["standard", "meanWidth", "minRange"],
         distr_characteristics={
-            PDF: uniform_pdf,
-            CDF: uniform_cdf,
-            PPF: uniform_ppf,
-            CF: uniform_char_func,
-            MEAN: mean_func,
-            VAR: var_func,
-            SKEW: skew_func,
-            KURT: kurt_func,
+            CharacteristicName.PDF: uniform_pdf,
+            CharacteristicName.CDF: uniform_cdf,
+            CharacteristicName.PPF: uniform_ppf,
+            CharacteristicName.CF: uniform_char_func,
+            CharacteristicName.MEAN: mean_func,
+            CharacteristicName.VAR: var_func,
+            CharacteristicName.SKEW: skew_func,
+            CharacteristicName.KURT: kurt_func,
         },
         sampling_strategy=DefaultSamplingUnivariateStrategy(),
         support_by_parametrization=_uniform_support,
     )
     Uniform.__doc__ = UNIFORM_DOC
 
-    parametrization(family=Uniform, name="standard")(UniformStandardParametrization)
-    parametrization(family=Uniform, name="meanWidth")(UniformMeanWidthParametrization)
-    parametrization(family=Uniform, name="minRange")(UniformMinRangeParametrization)
+    @parametrization(family=Uniform, name="standard")
+    class _Standard(Parametrization):
+        """
+        Standard parametrization of uniform distribution.
+
+        Parameters
+        ----------
+        lower_bound : float
+            Lower bound of the distribution
+        upper_bound : float
+            Upper bound of the distribution
+        """
+
+        lower_bound: float
+        upper_bound: float
+
+        @constraint(description="lower_bound < upper_bound")
+        def check_lower_less_than_upper(self) -> bool:
+            """Check that lower bound is less than upper bound."""
+            return self.lower_bound < self.upper_bound
+
+    @parametrization(family=Uniform, name="meanWidth")
+    class _MeanWidth(Parametrization):
+        """
+        Mean-width parametrization of uniform distribution.
+
+        Parameters
+        ----------
+        mean : float
+            Mean (center) of the distribution
+        width : float
+            Width of the distribution (upper_bound - lower_bound)
+        """
+
+        mean: float
+        width: float
+
+        @constraint(description="width > 0")
+        def check_width_positive(self) -> bool:
+            """Check that width is positive."""
+            return self.width > 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            half_width = self.width / 2
+            return _Standard(lower_bound=self.mean - half_width, upper_bound=self.mean + half_width)
+
+    @parametrization(family=Uniform, name="minRange")
+    class _MinRange(Parametrization):
+        """
+        Minimum-range parametrization of uniform distribution.
+
+        Parameters
+        ----------
+        minimum : float
+            Minimum value (lower bound)
+        range_val : float
+            Range of the distribution (upper_bound - lower_bound)
+        """
+
+        minimum: float
+        range_val: float
+
+        @constraint(description="range_val > 0")
+        def check_range_positive(self) -> bool:
+            """Check that range is positive."""
+            return self.range_val > 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            return _Standard(lower_bound=self.minimum, upper_bound=self.minimum + self.range_val)
 
     ParametricFamilyRegister.register(Uniform)
 
