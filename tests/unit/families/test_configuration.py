@@ -11,19 +11,13 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from typing import cast
 
 import numpy as np
 import pytest
 from scipy.stats import norm
 
 from pysatl_core.distributions.support import ContinuousSupport
-from pysatl_core.families.configuration import (
-    NormalExpParametrization,
-    NormalMeanPrecParametrization,
-    NormalMeanStdParametrization,
-    configure_families_register,
-)
+from pysatl_core.families.configuration import configure_families_register
 from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     CharacteristicName,
@@ -61,30 +55,23 @@ class TestNormalFamily:
 
         assert dist.family_name == FamilyName.NORMAL
         assert dist.distribution_type == UnivariateContinuous
-
-        params = cast(NormalMeanStdParametrization, dist.parameters)
-        assert params.mu == 2.0
-        assert params.sigma == 1.5
-        assert params.name == "meanStd"
+        assert dist.parameters == {"mu": 2.0, "sigma": 1.5}
+        assert dist.parametrization_name == "meanStd"
 
     def test_mean_prec_parametrization_creation(self):
         """Test creation of distribution with mean-precision parametrization."""
         dist = self.normal_family(mu=2.0, tau=0.25, parametrization_name="meanPrec")
 
-        params = cast(NormalMeanPrecParametrization, dist.parameters)
-        assert params.mu == 2.0
-        assert params.tau == 0.25
-        assert params.name == "meanPrec"
+        assert dist.parameters == {"mu": 2.0, "tau": 0.25}
+        assert dist.parametrization_name == "meanPrec"
 
     def test_exponential_parametrization_creation(self):
         """Test creation of distribution with exponential parametrization."""
         # For N(2, 1.5): a = -1/(2*1.5²) = -0.222..., b = 2/1.5² = 0.888...
         dist = self.normal_family(a=-0.222, b=0.888, parametrization_name="exponential")
 
-        params = cast(NormalExpParametrization, dist.parameters)
-        assert params.a == -0.222
-        assert params.b == 0.888
-        assert params.name == "exponential"
+        assert dist.parameters == {"a": -0.222, "b": 0.888}
+        assert dist.parametrization_name == "exponential"
 
     def test_parametrization_constraints(self):
         """Test parameter constraints validation."""
@@ -219,15 +206,12 @@ class TestNormalFamily:
         self, parametrization_name, params, expected_mu, expected_sigma
     ):
         """Test conversions between different parameterizations."""
-        base_params = cast(
-            NormalMeanStdParametrization,
-            self.normal_family.to_base(
-                self.normal_family.get_parametrization(parametrization_name)(**params)
-            ),
+        base_params = self.normal_family.to_base(
+            self.normal_family.get_parametrization(parametrization_name)(**params)
         )
 
-        assert abs(base_params.mu - expected_mu) < self.CALCULATION_PRECISION
-        assert abs(base_params.sigma - expected_sigma) < self.CALCULATION_PRECISION
+        assert abs(base_params.parameters["mu"] - expected_mu) < self.CALCULATION_PRECISION
+        assert abs(base_params.parameters["sigma"] - expected_sigma) < self.CALCULATION_PRECISION
 
     def test_analytical_computations_caching(self):
         """Test that analytical computations are properly cached."""

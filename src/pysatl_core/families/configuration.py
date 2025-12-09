@@ -21,7 +21,6 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
 
@@ -62,109 +61,6 @@ def configure_families_register() -> ParametricFamilyRegister:
     return ParametricFamilyRegister()
 
 
-@dataclass
-class NormalMeanStdParametrization(Parametrization):
-    """
-    Standard parametrization of normal distribution.
-
-    Parameters
-    ----------
-    mu : float
-        Mean of the distribution
-    sigma : float
-        Standard deviation of the distribution
-    """
-
-    mu: float
-    sigma: float
-
-    @constraint(description="sigma > 0")
-    def check_sigma_positive(self) -> bool:
-        """Check that standard deviation is positive."""
-        return self.sigma > 0
-
-
-@dataclass
-class NormalMeanPrecParametrization(Parametrization):
-    """
-    Mean-precision parametrization of normal distribution.
-
-    Parameters
-    ----------
-    mu : float
-        Mean of the distribution
-    tau : float
-        Precision parameter (inverse variance)
-    """
-
-    mu: float
-    tau: float
-
-    @constraint(description="tau > 0")
-    def check_tau_positive(self) -> bool:
-        """Check that precision parameter is positive."""
-        return self.tau > 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        sigma = math.sqrt(1 / self.tau)
-        return NormalMeanStdParametrization(mu=self.mu, sigma=sigma)
-
-
-@dataclass
-class NormalExpParametrization(Parametrization):
-    """
-    Exponential family parametrization of normal distribution.
-        Uses the form: y = exp(a*x² + b*x + c)
-
-    Parameters
-    ----------
-    a : float
-        Quadratic term coefficient in exponential form
-    b : float
-        Linear term coefficient in exponential form
-    """
-
-    a: float
-    b: float
-
-    @property
-    def c(self) -> float:
-        """
-        Calculate the normalization constant c.
-
-        Returns
-        -------
-        float
-            Normalization constant
-        """
-        return (self.b**2) / (4 * self.a) - (1 / 2) * math.log(math.pi / (-self.a))
-
-    @constraint(description="a < 0")
-    def check_a_negative(self) -> bool:
-        """Check that quadratic term coefficient is negative."""
-        return self.a < 0
-
-    def transform_to_base_parametrization(self) -> Parametrization:
-        """
-        Transform to Standard parametrization.
-        Returns
-        -------
-        Parametrization
-            Standard parametrization instance
-        """
-        mu = -self.b / (2 * self.a)
-        sigma = math.sqrt(-1 / (2 * self.a))
-        return NormalMeanStdParametrization(mu=mu, sigma=sigma)
-
-
 def _configure_normal_family() -> None:
     NORMAL_DOC = """
     Normal (Gaussian) distribution.
@@ -200,7 +96,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probability density values at points x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
@@ -230,7 +126,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.float64]
             Probabilities P(X ≤ x) for each point x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         z = (x - parameters.mu) / (parameters.sigma * np.sqrt(2))
         return cast(npt.NDArray[np.float64], 0.5 * (1 + erf(z)))
@@ -264,7 +160,7 @@ def _configure_normal_family() -> None:
         if np.any((p < 0) | (p > 1)):
             raise ValueError("Probability must be in [0, 1]")
 
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         result = cast(
             npt.NDArray[np.float64],
@@ -292,7 +188,7 @@ def _configure_normal_family() -> None:
         npt.NDArray[np.complex128]
             Characteristic function values at points x
         """
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
@@ -300,12 +196,12 @@ def _configure_normal_family() -> None:
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
         return parameters.mu
 
     def var_func(parameters: Parametrization, _: Any) -> float:
         """Variance of normal distribution."""
-        parameters = cast(NormalMeanStdParametrization, parameters)
+        parameters = cast(_MeanStd, parameters)
         return parameters.sigma**2
 
     def skew_func(_1: Parametrization, _2: Any) -> int:
@@ -355,9 +251,105 @@ def _configure_normal_family() -> None:
     )
     Normal.__doc__ = NORMAL_DOC
 
-    parametrization(family=Normal, name="meanStd")(NormalMeanStdParametrization)
-    parametrization(family=Normal, name="meanPrec")(NormalMeanPrecParametrization)
-    parametrization(family=Normal, name="exponential")(NormalExpParametrization)
+    @parametrization(family=Normal, name="meanStd")
+    class _MeanStd(Parametrization):
+        """
+        Standard parametrization of normal distribution.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of the distribution
+        sigma : float
+            Standard deviation of the distribution
+        """
+
+        mu: float
+        sigma: float
+
+        @constraint(description="sigma > 0")
+        def check_sigma_positive(self) -> bool:
+            """Check that standard deviation is positive."""
+            return self.sigma > 0
+
+    @parametrization(family=Normal, name="meanPrec")
+    class _MeanPrec(Parametrization):
+        """
+        Mean-precision parametrization of normal distribution.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of the distribution
+        tau : float
+            Precision parameter (inverse variance)
+        """
+
+        mu: float
+        tau: float
+
+        @constraint(description="tau > 0")
+        def check_tau_positive(self) -> bool:
+            """Check that precision parameter is positive."""
+            return self.tau > 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            sigma = math.sqrt(1 / self.tau)
+            return _MeanStd(mu=self.mu, sigma=sigma)
+
+    @parametrization(family=Normal, name="exponential")
+    class _Exp(Parametrization):
+        """
+        Exponential family parametrization of normal distribution.
+            Uses the form: y = exp(a*x² + b*x + c)
+
+        Parameters
+        ----------
+        a : float
+            Quadratic term coefficient in exponential form
+        b : float
+            Linear term coefficient in exponential form
+        """
+
+        a: float
+        b: float
+
+        @property
+        def c(self) -> float:
+            """
+            Calculate the normalization constant c.
+
+            Returns
+            -------
+            float
+                Normalization constant
+            """
+            return (self.b**2) / (4 * self.a) - (1 / 2) * math.log(math.pi / (-self.a))
+
+        @constraint(description="a < 0")
+        def check_a_negative(self) -> bool:
+            """Check that quadratic term coefficient is negative."""
+            return self.a < 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            mu = -self.b / (2 * self.a)
+            sigma = math.sqrt(-1 / (2 * self.a))
+            return _MeanStd(mu=mu, sigma=sigma)
 
     ParametricFamilyRegister.register(Normal)
 

@@ -14,7 +14,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, dataclass_transform
 
 from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.distributions.strategies import (
@@ -30,7 +30,9 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
-    from pysatl_core.families.parametrizations import Parametrization
+    from pysatl_core.families.parametrizations import (
+        Parametrization,
+    )
     from pysatl_core.types import (
         GenericCharacteristicName,
         ParametrizationName,
@@ -284,12 +286,16 @@ class ParametricFamily:
             self.name, distribution_type, parameters, self.support_resolver(parameters)
         )
 
+    @dataclass_transform()
     def parametrization(
-        self,
-        name: str,
+        self, *, name: str
     ) -> Callable[[type[Parametrization]], type[Parametrization]]:
         """
         Create a class decorator that registers a parametrization.
+
+        If you want to use this syntax and so that Mypy doesn't swear,
+        you should mark your class as a dataclass.
+        At the moment, Mypy cannot identify dataclass_transform if the decorator is a class method.
 
         Parameters
         ----------
