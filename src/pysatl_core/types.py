@@ -241,6 +241,39 @@ ScalarFunc = Callable[[float], float]
 """Type alias for scalar functions (float -> float)."""
 
 
+class CharacteristicName(StrEnum):
+    """
+    Enumeration of statistical distribution characteristics.
+
+    This enumeration defines standard names for distribution functions,
+    moments, and other statistical characteristics used throughout the
+    PySATL-core library.
+
+    Note
+    ----------
+    It also means that these characteristics are accessible via registry graph.
+    It doesn't mean that user can't add their characteristics to the graph.
+    """
+
+    PDF = "pdf"
+    CDF = "cdf"
+    PPF = "ppf"
+    PMF = "pmf"
+    CF = "cf"  # unimplemented in graph yet
+    SF = "sf"  # unimplemented in graph yet
+    MEAN = "mean"  # unimplemented in graph yet
+    VAR = "var"  # unimplemented in graph yet
+    SKEW = "skewness"  # unimplemented in graph yet
+    KURT = "kurtosis"  # unimplemented in graph yet
+    MOMENT = "moment"  # unimplemented in graph yet
+    CENTRAL_MOMENT = "central_moment"  # unimplemented in graph yet
+    STANDARD_MOMENT = "standardized_moment"  # unimplemented in graph yet
+
+
+class FamilyName(StrEnum):
+    NORMAL = "Normal"
+
+
 __all__ = [
     "Kind",
     "EuclideanDistributionType",
@@ -256,4 +289,6 @@ __all__ = [
     "NumPyNumber",
     "Number",
     "NumericArray",
+    "CharacteristicName",
+    "FamilyName",
 ]
