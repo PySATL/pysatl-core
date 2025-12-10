@@ -1,0 +1,88 @@
+
+=APPENDIX  Glossary  Glossary
+
+=UP TOP [a05]
+
+=DESCRIPTION
+
+@table @strong
+
+@item CDF
+cumulative distribution function.
+
+@item HR
+hazard rate (or failure rate).
+
+@item inverse local concavity
+local concavity of inverse PDF @unurmath{f^{-1}(y)} expressed in term of 
+@unurmath{x = f^{-1}(y).}
+Is is given by
+@unurmath{ilc_f(x) = 1 + x\,f''(x) / f'(x)}
+
+@item local concavity
+maximum value of @i{c} such that PDF @i{f(x)} is @unurmath{T_c.}
+Is is given by
+@unurmath{lc_f(x) = 1 - f''(x)\,f(x) / f'(x)^2}
+
+@item PDF
+probability density function.
+
+@item dPDF
+derivative (gradient) of probability density function.
+
+@item PMF
+probability mass function.
+
+@item PV
+(finite) probability vector.
+
+@item URNG
+uniform random number generator.
+
+@item @math{U(a,b)}
+continuous uniform distribution on the interval @unurmath{(a,b).}
+
+@item T-concave
+a function @i{f(x)} is called @i{T}-convace if the transformed function
+@i{T(f(x))} is concave. 
+We only deal with transformations @unurmath{T_c,} where
+@table @code
+@item @i{c} = 0
+@unurmath{T(x) = \log(x)}
+@item @i{c} = @math{-0.5}
+@unurmath{T(x) = -1/\sqrt{x}}
+@item @i{c} != 0
+@unurmath{T(x) = sign(x) \cdot x^c}
+@end table
+
+@item u-error
+for a given approximate inverse CDF @unurmath{X=G^{-1}(U)}
+the u-error is given as 
+@unurmathdisplay{uerror = |U-F(G^{-1}(U))|}
+where @unurmath{F} denotes the exact CDF.
+Goodness-of-fit tests like the Kolmogorov-Smirnov test or the
+chi-squared test look at this type of error.
+See @ref{Inversion} for more details.
+
+@item u-resolution
+the maximal tolerated u-error for an approximate inverse CDF.
+
+@item x-error
+for a given approximate inverse CDF @unurmath{X=G^{-1}(U)}
+the x-error is given as 
+@unurmathdisplay{xerror = |F^{-1}(U)-G^{-1}(U)|}
+where @unurmath{F^{-1}} denotes the exact inverse CDF.
+The x-error measure the deviation of @unurmath{G^{-1}(U)}
+from the exact result.
+Notice that we have to distinguish between @emph{absolute} and
+@emph{relative} x-error. In UNU.RAN we use the absolute x-error near 0
+and the relative x-error otherwise.
+See @ref{Inversion} for more details.
+
+@item x-resolution
+the maximal tolerated x-error for an approximate inverse CDF.
+
+@end table
+
+=EON
+

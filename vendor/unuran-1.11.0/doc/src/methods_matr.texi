@@ -1,0 +1,8 @@
+@cartouche
+@noindent
+Methods for @b{matrix distributions}@*
+sample with @command{unur_sample_matr}
+
+@noindent
+MCORR: Distribution object for random correlation matrix.
+@end cartouche

@@ -30,7 +30,7 @@ Create a UNU.RAN sampling strategy for a distribution:
 
 from __future__ import annotations
 
-__author__ = "Leonid Elkin, Mikhail, Mikhailov"
+__author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
@@ -39,7 +39,6 @@ from pysatl_core.stats._unuran.api import (
     UnuranMethodConfig,
     UnuranSampler,
     UnuranSamplingStrategy,
-    create_unuran_strategy,
 )
 
 __all__ = [
@@ -47,6 +46,5 @@ __all__ = [
     "UnuranMethodConfig",
     "UnuranSampler",
     "UnuranSamplingStrategy",
-    "create_unuran_strategy",
 ]
 

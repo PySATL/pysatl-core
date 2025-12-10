@@ -1,0 +1,253 @@
+
+=NODE  Installation Installation
+=UP Intro [30]
+
+=DESCRIPTION
+   UNU.RAN was developed on an Intel architecture under Linux with
+   the GNU C compiler but should compile and run on any computing
+   environment. It requires an ANSI compliant C compiler.
+
+   Below find the installation instructions for unices.
+
+
+   @subsubheading Uniform random number generator
+
+   UNU.RAN can be used with any uniform random number generator but (at the 
+   moment) some features work best with Pierre L'Ecuyer's RngStreams library
+   (see @url{http://statmath.wu.ac.at/software/RngStreams/} for a 
+   description and downloading.
+   For details on using uniform random number in UNU.RAN
+   see @ref{URNG,,Using uniform random number generators}.
+
+   Install the required libraries first.
+
+
+   @subsubheading UNU.RAN
+
+   @enumerate 
+
+   @item First unzip and untar the package and change to the directory:
+
+   	 @example
+	    tar zxvf unuran-@value{VERSION}.tar.gz
+	    cd unuran-@value{VERSION}
+	 @end example
+
+   @item Optional: Edit the file @file{src/unuran_config.h}
+
+   @item Run a configuration script:
+
+	 @example
+	    sh ./configure --prefix=<prefix>
+	 @end example
+
+	 @noindent
+	 where @code{<prefix>} is the root of the installation tree.
+	 When omitted @file{/usr/local} is used.
+
+	 Use @code{./configure --help} to get a list of other options.
+	 In particular the following flags are important:
+
+	 @itemize @bullet
+         @item
+	 Enable support for some external sources of uniform random
+         number generators
+	 (@pxref{URNG,,Using uniform random number generators}):
+
+	 @table @code
+         @item --with-urng-rngstream
+	     URNG: use Pierre L'Ecuyer's RNGSTREAM library
+               [default=@code{no}]
+
+         @item --with-urng-prng
+             URNG: use Otmar Lendl's PRNG library
+               [default=@code{no}]
+
+	 @item --with-urng-gsl
+             URNG: use random number generators from GNU Scientific Library
+               [default=@code{no}]
+
+         @item --with-urng-default
+             URNG: global default URNG (builtin|rngstream)
+               [default=@code{builtin}]
+         @end table
+
+         We strongly recommend to use RngStreams library: 
+
+	 @example
+            sh ./configure --with-urng-rngstream --with-urng-default=rngstream
+	 @end example
+     
+         @emph{Important:} You must install the respective libraries
+         @file{RngStreams}, @file{PRNG} and @file{GSL} before 
+	 @code{./configure} is executed.
+
+         @item
+	 Also make a shared library:
+
+	 @table @code
+	 @item --enable-shared
+	     build shared libraries  [default=@code{no}]
+         @end table
+
+         @item
+	 The library provides the function @code{unur_gen_info} for
+	 information about generator objects. This is intented for 
+	 using in interactive computing environments.
+         This feature can be enabled / disabled by means of the 
+	 configure flag
+
+	 @table @code
+	 @item --enable-info
+	     INFO: provide function with information about
+               generator objects [default=@code{yes}]
+         @end table
+
+	 @item
+	 Enable support for deprecated UNU.RAN routines if you have
+	 some problems with older application after upgrading the
+         library:
+
+	 @table @code
+	 @item --enable-deprecated
+             enable support for deprecated UNU.RAN routines
+               [default=@code{no}] 
+         @end table
+
+	 @item
+	 Enable debugging tools:
+
+	 @table @code
+	 @item --enable-check-struct
+	     Debug: check validity of pointers to structures
+               [default=@code{no}]
+
+	 @item --enable-logging
+	     Debug: print informations about generator into logfile
+               [default=no]
+         @end table
+	 @end itemize
+
+
+   @item Compile and install the libray:
+
+	 @example
+	    make
+	    make install
+	 @end example
+
+	 @noindent
+	 Obviously @code{$(prefix)/include} and @code{$(prefix)/lib}
+	 must be in the search path of your compiler. You can use environment
+	 variables to add these directories to the search path. If you
+	 are using the bash type (or add to your profile):
+
+	 @example
+	    export LIBRARY_PATH="<prefix>/lib"
+	    export C_INCLURE_PATH="<prefix>/include"
+	 @end example
+
+	 @noindent
+	 If you want to make a shared library, then making such
+	 a library can be enabled using
+
+	 @example
+	    sh ./configure --enable-shared
+	 @end example
+
+	 @noindent
+	 If you want to link against the shared library make sure that 
+	 it can be found when executing the binary that links to the 
+	 library. If it is not installed in the usual path, then the
+	 easiest way is to set the @code{LD_LIBRARY_PATH} environment
+	 variable. See any operating system documentation about shared
+	 libraries for more information, such as the ld(1) and
+	 ld.so(8) manual pages.
+
+   @item Documentation in various formats (PDF, HTML, info, plain
+         text) can be found in directory @file{doc}.
+
+   @item You can run some tests by
+
+	 @example
+	    make check
+	 @end example
+
+	 @noindent
+	 However, some of these tests requires the usage of the PRNG or 
+	 RngStreams library and are only executed if these are installed
+	 enabled by the corresponding configure flag.
+
+	 An extended set of tests is run by 
+
+	 @example
+	    make fullcheck
+	 @end example
+
+	 @noindent
+	 However some of these might fail occasionally due to 
+	 roundoff errors or the mysteries of floating point arithmetic,
+	 since we have used some extreme settings to test the library.
+
+   @end enumerate
+
+
+   @subsubheading Upgrading
+
+   @itemize @minus
+   @item @emph{Important:}
+
+         UNU.RAN now relies on some aspects of IEEE
+	 754 compliant floating point arithmetic. In particular, 
+	 @code{1./0.} and @code{0./0.} must result in @code{infinity}
+	 and @code{NaN} (not a number), respectively, and must not
+	 cause a floating point exception. 
+	 For allmost all modern compting architecture this is implemented
+	 in hardware. For others there should be a special compiler flag
+	 to get this feature (e.g., @code{-MIEEE} on DEC alpha or
+	 @code{-mp} for the Intel C complier).
+
+   @item Upgrading UNU.RAN from version 0.9.x or earlier:
+
+         With UNU.RAN version 1.0.x some of the macro definitions in
+	 file @file{src/unuran_config.h} are moved into file
+	 @file{config.h} and are set/controlled by the
+	 @code{./configure} script. 
+
+	 Writting logging information into the logfile must now be
+	 enabled when running the configure script:
+
+	 @example
+            sh ./configure --enable-logging
+	 @end example
+
+   @item Upgrading UNU.RAN from version 0.7.x or earlier:
+
+	 With UNU.RAN version 0.8.0 the interface for changing
+	 underlying distributions and running a reinitialization
+	 routine has been simplified. The old routines can be compiled
+	 into the library using the following configure flag: 
+
+	 @example
+	    sh ./configure --enable-deprecated
+	 @end example
+
+	 @noindent
+         Notice: Using these deprecated routines is not supported any
+         more and this strong discouraged. 
+
+	 Wrapper functions for external sources of uniform random
+	 numbers are now enabled by configure flags and not by macros
+	 defined in file @file{src/unuran_config.h}.
+
+	 The file @file{src/unuran_config.h} is not installed any
+	 more. It is now only included when the library is compiled.
+         It should be removed from the global include path of the
+	 compiler.
+
+   @end itemize
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+

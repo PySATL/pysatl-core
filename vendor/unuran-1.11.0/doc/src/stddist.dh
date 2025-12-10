@@ -1,0 +1,151 @@
+
+/*---------------------------------------------------------------------------*/
+
+=NODE  Stddist   UNU.RAN Library of standard distributions
+=UP TOP [55]
+
+=DESCRIPTION
+Although it is not its primary target, many
+distributions are already implemented in UNU.RAN.
+This section presents these available distributions
+and their parameters.
+
+The syntax to get a distribuion object for distributions
+@code{<dname>} is:
+
+@deftypefn -- {UNUR_DISTR*} unur_distr_@code{<dname>} (double* @var{params}, int @var{n_params})
+@var{params} is an array of doubles of size 
+@var{n_params} holding the parameters.
+@end deftypefn
+
+@noindent
+E.g. to get an object for the gamma distribution (with shape parameter) use
+
+@example
+   unur_distr_gamma( params, 1 );
+@end example
+
+@noindent
+Distributions may have default parameters with need not be given
+explicitely.
+E.g. The gamma distribution has three parameters: the
+shape, scale and location parameter. Only the (first) shape parameter
+is required. The others can be omitted and are then set by default
+values.
+
+@example
+   @cc_start alpha = 5; default: beta = 1, gamma = 0 @cc_stop
+   double fpar[] = @{5.@};
+   unur_distr_gamma( fpar, 1 );
+
+   @cc_start alpha = 5, beta = 3; default: gamma = 0 @cc_stop
+   double fpar[] = @{5., 3.@};
+   unur_distr_gamma( fpar, 2 );
+
+   @cc_start alpha = 5, beta = 3, gamma = -2
+   double fpar[] = @{5., 3., -2.@};
+   unur_distr_gamma( fpar, 3 );
+@end example
+
+@strong{Important:} Naturally the computational accuracy
+limits the possible parameters. There shouldn't be problems
+when the parameters of a distribution are in a ``reasonable'' range but
+e.g. the normal distribution N(10^15,1) won't yield the desired results.
+(In this case it would be better generating N(0,1) and @emph{then}
+transform the results.)
+@* Of course computational inaccuracy is not specific to UNU.RAN
+and should always be kept in mind when working with computers.
+
+@emph{Important:} The routines of the standard library are included
+for non-uniform random variate generation and not to provide special
+functions for statistical computations.
+
+@subheading Remark
+
+The following keywords are used in the tables:
+@table @i
+@item PDF
+probability density function,
+with variable @i{x}.
+
+@item PMF
+probability mass function,
+with variable @i{k}.
+
+@item constant
+normalization constant for given PDF and PMF, resp.
+They must be multiplied by @i{constant} to get the 
+``real'' PDF and PMF.
+
+@item CDF
+gives information whether the CDF is implemented in UNU.RAN.
+
+@item domain
+domain PDF and PMF, resp.
+
+@item parameters  @var{n_std} (@var{n_total}): @r{list}
+list of parameters for distribution, where @var{n_std} is the number
+of parameters for the standard form of the distribution and
+@var{n_total} the total number for the (non-standard form of the)
+distribution. @var{list} is the list of parameters in the order as
+they are stored in the array of parameters. Optional parameter that
+can be omitted are enclosed in square brackets @code{[@dots{}]}.
+
+A detailed list of these parameters gives then the range of valid
+parameters and defaults for optional parameters that are used when
+these are omitted.
+
+@item reference
+gives reference for distribution
+(@pxref{Bibliography}).
+
+@item special generators
+lists available special generators for the distribution.
+The first number is the variant that to be set by
+unur_cstd_set_variant() and unur_dstd_set_variant() call, respectively.
+If no variant is set the default variant @code{DEF} is used.
+In the table the respective abbreviations @code{DEF} and @code{INV}
+are used for @code{UNUR_STDGEN_DEFAULT} and
+@code{UNUR_STDGEN_INVERSION}.
+Also the references for these methods are given (@pxref{Bibliography}).
+
+Notice that these generators might be slower than universal methods.
+
+If @code{DEF} is ommited, the first entry is the default generator.
+
+@end table
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Stddist_CONT    UNU.RAN Library of continuous univariate distributions
+=UP Stddist [10]
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Stddist_CVEC    UNU.RAN Library of continuous multivariate distributions
+=UP Stddist [20]
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Stddist_DISCR    UNU.RAN Library of discrete univariate distributions
+=UP Stddist [30]
+=DESCRIPTION
+   At the moment there are no CDFs implemented for discrete distribution.
+   Thus unur_distr_discr_upd_pmfsum() does not work properly for truncated 
+   distribution.
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Stddist_MATR    UNU.RAN Library of random matrices
+=UP Stddist [40]
+=EON
+
+/*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+

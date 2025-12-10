@@ -1,0 +1,305 @@
+/*---------------------------------------------------------------------------*/
+
+=APPENDIX  Bibliography  Bibliography 
+
+=UP TOP [a07]
+
+=DESCRIPTION
+
+@subheading Standard Distributions
+
+@table @t
+
+@anchor{bib:JKKa92}
+@item [JKKa92]
+@sc{N.L. Johnson, S. Kotz, and A.W. Kemp} (1992).
+@i{Univariate Discrete Distributions},
+2nd edition,
+John Wiley & Sons, Inc., New York.
+
+@anchor{bib:JKBb94}
+@item [JKBb94] 
+@sc{N.L. Johnson, S. Kotz, and N. Balakrishnan} (1994).
+@i{Continuous Univariate Distributions}, 
+Volume 1,
+2nd edition,
+John Wiley & Sons, Inc., New York.
+
+@anchor{bib:JKBc95}
+@item [JKBc95]
+@sc{N.L. Johnson, S. Kotz, and N. Balakrishnan} (1995).
+@i{Continuous Univariate Distributions}, 
+Volume 2,
+2nd edition,
+John Wiley & Sons, Inc., New York.
+
+@anchor{bib:JKBd97}
+@item [JKBd97]
+@sc{N.L. Johnson, S. Kotz, and N. Balakrishnan} (1997).
+@i{Discrete Multivariate Distributions}, 
+John Wiley & Sons, Inc., New York.
+
+@anchor{bib:KBJe00}
+@item [KBJe00]
+@sc{S. Kotz, N. Balakrishnan, and N.L. Johnson} (2000).
+@i{Continuous Multivariate Distributions},
+Volume 1: Models and Applications,
+John Wiley & Sons, Inc., New York.
+
+@end table
+
+@c -------------------------------------------------------
+
+@subheading Universal Methods -- Surveys
+
+@table @t
+
+@anchor{bib:HLD04}
+@item [HLD04]
+@sc{W. H@"ormann, J. Leydold, and G. Derflinger} (2004).
+@i{Automatic Nonuniform Random Variate Generation},
+Springer, Berlin.
+
+@end table
+
+@c -------------------------------------------------------
+
+@subheading Universal Methods
+
+@table @t
+
+@anchor{bib:AJa93}
+@item [AJa93]
+@sc{J.H. Ahrens} (1993).
+@i{Sampling from general distributions by suboptimal division of domains},
+Grazer Math. Berichte 319, 30pp.
+
+@anchor{bib:AJa95}
+@item [AJa95]
+@sc{J.H. Ahrens} (1995).
+@i{An one-table method for sampling from continuous and discrete distributions},
+Computing 54(2), pp. 127-146.
+
+@anchor{bib:CAa74}
+@item [CAa74]
+@sc{H.C. Chen and Y. Asau} (1974).
+@i{On generating random variates from an empirical distribution},
+AIIE Trans. 6, pp. 163-166.
+
+@anchor{bib:DHLa08}
+@item [DHLa08]
+@sc{G. Derflinger, W. H@"ormann, and J. Leydold} (2008).
+@i{Numerical inversion when only the density function is known},
+Research Report Series of the Department of Statistics and Mathematics 78, 
+WU Wien, Augasse 2--6, A-1090 Wien, Austria,
+@uref{http://epub.wu.ac.at/english/}.
+
+@anchor{bib:DLa86}
+@item [DLa86]
+@sc{L. Devroye} (1986).
+@i{Non-Uniform Random Variate Generation},
+Springer Verlag, New York.
+
+@anchor{bib:GWa92}
+@item [GWa92]
+@sc{W.R. Gilks and P. Wild} (1992).
+@i{Adaptive rejection sampling for Gibbs sampling},
+Applied Statistics 41, pp. 337-348.
+
+@anchor{bib:HWa95}
+@item [HWa95]
+@sc{W. H@"ormann} (1995).
+@i{A rejection technique for sampling from T-concave distributions},
+ACM Trans. Math. Software 21(2), pp. 182-193.
+
+@anchor{bib:HDa96}
+@item [HDa96]
+@sc{W. H@"ormann and G. Derflinger} (1996).
+@i{Rejection-inversion to generate variates from monotone discrete distributions},
+ACM TOMACS 6(3), 169-184.
+
+@anchor{bib:HLa00}
+@item [HLa00]
+@sc{W. H@"ormann and J. Leydold} (2000).
+@i{Automatic random variate generation for simulation input.}
+In: J.A. Joines, R. Barton, P. Fishwick, K. Kang (eds.),
+Proceedings of the 2000 Winter Simulation Conference, pp. 675-682.
+
+@anchor{bib:HLa03}
+@item [HLa03]
+@sc{W. H@"ormann and J. Leydold} (2003).
+@i{Continuous Random Variate Generation by Fast Numerical Inversion},
+ACM TOMACS 13(4), 347-362.
+
+@anchor{bib:HLDa07}
+@item [HLDa07]
+@sc{W. H@"ormann, J. Leydold, and G. Derflinger} (2007).
+@i{Automatic Random Variate Generation for Unbounded Densities},
+ACM Trans. Model. Comput. Simul. 17(4), pp.18.
+
+@anchor{bib:KLPa05}
+@item [KLPa05]
+@sc{R. Karawatzki, J. Leydold, and K. P@"otzelberger} (2005).
+@i{Automatic Markov chain Monte Carlo procedures for sampling from multivariate distributions},
+Research Report Series of the Department of Statistics and Mathematics 27, 
+WU Wien, Augasse 2--6, A-1090 Wien, Austria,
+@uref{http://epub.wu.ac.at/english/}.
+
+@anchor{bib:LJa98}
+@item [LJa98]
+@sc{J. Leydold} (1998).
+@i{A Rejection Technique for Sampling from Log-Concave Multivariate Distributions},
+ACM TOMACS 8(3), pp. 254-280.
+
+@anchor{bib:LJa00}
+@item [LJa00]
+@sc{J. Leydold} (2000).
+@i{Automatic Sampling with the Ratio-of-Uniforms Method},
+ACM Trans. Math. Software 26(1), pp. 78-98.
+
+@anchor{bib:LJa01}
+@item [LJa01]
+@sc{J. Leydold} (2001).
+@i{A simple universal generator for continuous and discrete 
+univariate T-concave distributions},
+ACM Trans. Math. Software 27(1), pp. 66-82.
+
+@anchor{bib:LJa02}
+@item [LJa02]
+@sc{J. Leydold} (2003).
+@i{Short universal generators via generalized ratio-of-uniforms method},
+Math. Comp. 72(243), pp. 1453-1471.
+
+@anchor{bib:WGS91}
+@item [WGS91]
+@sc{J.C. Wakefield, A.E. Gelfand, and A.F.M. Smith} (1992).
+@i{Efficient generation of random variates via the ratio-of-uniforms method},
+Statist. Comput. 1(2), pp. 129-133.
+
+@anchor{bib:WAa77}
+@item [WAa77]
+@sc{A.J. Walker} (1977).
+@i{An efficient method for generating discrete random variables with general distributions},
+ACM Trans. Math. Software 3, pp. 253-256.
+
+@end table
+
+@c -------------------------------------------------------
+
+@subheading Special Generators
+
+@table @t
+
+@anchor{bib:ADa74}
+@item [ADa74]
+@sc{J.H. Ahrens, U. Dieter} (1974).
+@i{Computer methods for sampling from gamma, beta, Poisson
+and binomial distributions},
+Computing 12, 223-246.
+
+@anchor{bib:ADa82}
+@item [ADa82]
+@sc{J.H. Ahrens, U. Dieter} (1982).
+@i{Generating gamma variates by a modified rejection technique},
+Communications of the ACM 25, 47-54.
+
+@anchor{bib:ADb82}
+@item [ADb82]
+@sc{J.H. Ahrens, U. Dieter} (1982).
+@i{Computer generation of Poisson deviates from modified normal distributions},
+ACM Trans. Math. Software 8, 163-179.
+
+@anchor{bib:BMa58}
+@item [BMa58]
+@sc{G.E.P. Box and M.E. Muller} (1958).
+@i{A note on the generation of random normal deviates},
+Annals Math. Statist. 29, 610-611. 
+
+@anchor{bib:CHa77}
+@item [CHa77]
+@sc{R.C.H. Cheng} (1977).
+@i{The Generation of Gamma Variables with Non-Integral Shape Parameter},
+Appl. Statist. 26(1), 71-75.
+
+@anchor{bib:Dag89}
+@item [Dag89]
+@sc{J.S. Dagpunar} (1989).
+@i{An Easily Implemented Generalised Inverse Gaussian Generator},
+Commun. Statist. Simul. 18(2), 703-710.
+
+@anchor{bib:HDa90}
+@item [HDa90]
+@sc{W. H@"ormann and G. Derflinger} (1990).
+@i{The ACR Method for generating normal random variables},
+OR Spektrum 12, 181-185.
+
+@anchor{bib:KAa81}
+@item [KAa81]
+@sc{A.W. Kemp} (1981).
+@i{Efficient generation of logarithmically distributed 
+pseudo-random variables},
+Appl. Statist. 30, 249-253.
+
+@anchor{bib:KRa76}
+@item [KRa76]
+@sc{A.J. Kinderman and J.G. Ramage} (1976).
+@i{Computer Generation of Normal Random Variables},
+J. Am. Stat. Assoc. 71(356), 893 - 898.
+
+@anchor{bib:MJa87}
+@item [MJa87]
+@sc{J.F. Monahan} (1987).
+@i{An algorithm for generating chi random variables},
+ACM Trans. Math. Software 13, 168-172.
+
+@anchor{bib:MGa62}
+@item [MGa62]
+@sc{G. Marsaglia} (1962).
+@i{Improving the Polar Method for Generating a Pair of Random Variables},
+Boeing Sci. Res. Lab., Seattle, Washington.
+
+@anchor{bib:MOa84}
+@item [MOa84]
+@sc{G. Marsaglia and I. Olkin} (1984).
+@i{Generating Correlation Matrices},
+SIAM J. Sci. Stat. Comput 5, 470-475.
+
+@anchor{bib:STa89}
+@item [STa89]
+@sc{E. Stadlober} (1989).
+@i{Sampling from Poisson, binomial and hypergeometric distributions:
+ratio of uniforms as a simple and fast alternative},
+Bericht 303, Math. Stat. Sektion,
+Forschungsgesellschaft Joanneum, Graz.
+
+@anchor{bib:ZHa94}
+@item [ZHa94]
+@sc{H. Zechner} (1994).
+@i{Efficient sampling from continuous and discrete unimodal distributions},
+Pd.D. Thesis, 156 pp., Technical University Graz, Austria.
+
+@end table
+
+@c -------------------------------------------------------
+
+@subheading Other references
+
+@table @t
+
+@anchor{bib:CPa76}
+@item [CPa76]
+@sc{R. Cranley and T.N.L. Patterson} (1976).
+@i{Randomization of number theoretic methods for multiple integration},
+SIAM J. Num. Anal., Vol. 13, pp. 904-914.
+
+@anchor{bib:HJa61}
+@item [HJa61]
+@sc{R. Hooke and T.A. Jeeves} (1961).
+@i{Direct Search Solution of Numerical and Statistical Problems},
+Journal of the ACM, Vol. 8, April 1961, pp. 212-229.
+
+@end table
+
+@c -------------------------------------------------------
+
+=EON

@@ -1,0 +1,386 @@
+ *****************************************************************************
+ *                                                                           *
+ *          UNU.RAN -- Universal Non-Uniform Random number generator         *
+ *                                                                           *
+ *****************************************************************************
+
+
+               Installation instructions for the UNU.RAN library.
+
+                              Version 1.11.0
+
+
+While the code is plain ANSI C and thus quite portable, the following
+adaptions might be necessary for compiling this library.
+
+
+Uniform random number generator
+...............................
+
+   UNU.RAN can be used with any uniform random number generator but (at
+the moment) some features work best with Pierre L'Ecuyer's RngStreams
+library (see <http://statmath.wu.ac.at/software/RngStreams/> for
+a description and downloading).
+
+   Install the requires libraries first.
+
+
+Installing UNU.RAN
+..................
+
+  1. First unzip and untar the package and change to the directory:
+          tar zxvf unuran-1.11.0.tar.gz
+          cd unuran-1.11.0
+
+
+  2. Optional: Edit the file `src/unuran_config.h'.
+
+
+  3. Run a configuration script:
+
+          sh ./configure --prefix=<prefix>
+
+     where `<prefix>' is the root of the installation tree.  When
+     omitted `/usr/local' is used.
+
+     Use ./configure --help to get a list of other options.
+     In particular the following flags are important:
+
+     [*] Enable support for some external sources of uniform random
+         number generators: 
+
+         --with-urng-rngstream
+	     URNG: use Pierre L'Ecuyer's RNGSTREAM library
+               [default=no]
+         --with-urng-prng
+             URNG: use Otmar Lendl's PRNG library
+               [default=no]
+	 --with-urng-gsl
+             URNG: use random number generators from GNU Scientific Library
+               [default=no]
+
+         --with-urng-default
+             URNG: global default URNG (builtin|rngstream)
+               [default=builtin]
+
+         We strongly recommend to use RngStreams library: 
+
+         sh ./configure --with-urng-rngstream --with-urng-default=rngstream
+     
+         Important: You must install the respective libraries RngStreams,
+         PRNG and GSL before ./configure is executed.
+
+     [*] Also make a shared library:
+
+         --enable-shared
+	     build shared libraries  [default=no]
+
+     [*] The library provides the function `unur_gen_info' for
+         information about generator objects. This is intended for 
+	 using in interactive computing environments.
+	 This feature can be enabled / disabled by means of the 
+	 configure flag
+
+         --enable-info
+               INFO: provide function with information about generator
+               objects [default=`yes']
+
+     [*] Enable support for deprecated UNU.RAN routines if you have
+         some problems with older application after upgrading the
+         library:
+
+         --enable-deprecated
+             enable support for deprecated UNU.RAN routines
+               [default=no] 
+
+     [*] Enable debugging tools:
+
+         --enable-check-struct
+	     Debug: check validity of pointers to structures
+               [default=no]
+
+         --enable-logging
+	     Debug: print informations about generator into logfile
+               [default=no]
+
+
+  4. Compile and install the library:
+
+          make
+          make install
+
+     This installs the following files:
+
+          $(prefix)/include/unuran.h
+          $(prefix)/include/unuran_tests.h
+          $(prefix)/lib/libunuran.a
+          $(prefix)/info/unuran.info
+
+     Obviously `$(prefix)/include' and `$(prefix)/lib' must be in the search
+     path of your compiler. You can use environment variables to add these
+     directories to the search path. If you are using the bash type (or add to
+     your profile):
+
+          export LIBRARY_PATH="HOMEDIRECTORY/lib"
+          export C_INCLUDE_PATH="HOMEDIRECTORY/include"
+
+
+  5. Documentation in various formats (PDF, HTML, info, plain text)
+     can be found in the directory `doc'.
+
+
+  6. You can run some tests by
+          make check
+
+     However, some of these tests requires the usage of the PRNG or
+     RngStreams library and are only executed if these are installed
+     enabled by the corresponding configure flag.
+
+     An extended set of tests is run by
+          make fullcheck
+
+     However some of these might fail occasionally due to roundoff
+     errors or the mysteries of floating point arithmetic, since we
+     have used some extreme settings to test the library.
+
+
+(For further targets for make and more details see the GNU generic installation
+instructions below.)
+
+
+Upgrading UNU.RAN
+.................
+
+Important: 
+  UNU.RAN now relies on some aspects of IEEE 754 compliant floating
+  point arithmetic. In particular, 1./0. and 0./0. must result in
+  INFINITY and NaN (not a number), respectively, and must not cause a
+  floating point exception. For almost all modern computing
+  architecture this is implemented in hardware. For others there
+  should be a special compiler flag to get this feature (e.g. -MIEEE
+  on DEC alpha or -mp for the Intel C compiler).
+
+
+Upgrading UNU.RAN from version 0.9.x or earlier:
+
+  With UNU.RAN version 1.0.x some of the macro definitions in file
+  'src/unuran_config.h' are moved into file 'config.h' and are
+  set/controlled by the ./configure script.
+
+  Writting logging information into the logfile must now be enabled
+  when running the configure script:
+
+          sh ./configure --enable-logging
+
+
+Upgrading UNU.RAN from version 0.7.x or earlier:
+
+  With UNU.RAN version 0.8.x the interface for changing underlying
+  distributions and running a reinitialization routine has been 
+  simplified. The old routines can be compiled into the library using 
+  the following configure flag:
+
+          sh ./configure --enable-deprecated
+
+  Notice: Using these deprecated routines is not supported any more
+  and this strong discouraged.
+
+  Wrapper functions for external sources of uniform random numbers
+  are now enabled by configure flags and not by macros defined in 
+  file 'src/unuran_config.h'.
+
+  The file 'src/unuran_config.h' is not installed any more. 
+  It is now only included when the library is compiled.
+  It should be removed from the global include path of the compiler.
+
+
+
+
+*********************************************************************
+*                                                                   *
+*               GNU generic installation instructions.              *
+*                                                                   *
+*********************************************************************
+
+Basic Installation
+==================
+
+   These are generic installation instructions.
+
+   The `configure' shell script attempts to guess correct values for
+various system-dependent variables used during compilation.  It uses
+those values to create a `Makefile' in each directory of the package.
+It may also create one or more `.h' files containing system-dependent
+definitions.  Finally, it creates a shell script `config.status' that
+you can run in the future to recreate the current configuration, a file
+`config.cache' that saves the results of its tests to speed up
+reconfiguring, and a file `config.log' containing compiler output
+(useful mainly for debugging `configure').
+
+   If you need to do unusual things to compile the package, please try
+to figure out how `configure' could check whether to do them, and mail
+diffs or instructions to the address given in the `README' so they can
+be considered for the next release.  If at some point `config.cache'
+contains results you don't want to keep, you may remove or edit it.
+
+   The file `configure.in' is used to create `configure' by a program
+called `autoconf'.  You only need `configure.in' if you want to change
+it or regenerate `configure' using a newer version of `autoconf'.
+
+The simplest way to compile this package is:
+
+  1. `cd' to the directory containing the package's source code and type
+     `./configure' to configure the package for your system.  If you're
+     using `csh' on an old version of System V, you might need to type
+     `sh ./configure' instead to prevent `csh' from trying to execute
+     `configure' itself.
+
+     Running `configure' takes awhile.  While running, it prints some
+     messages telling which features it is checking for.
+
+  2. Type `make' to compile the package.
+
+  3. Optionally, type `make check' to run any self-tests that come with
+     the package.
+
+  4. Type `make install' to install the programs and any data files and
+     documentation.
+
+  5. You can remove the program binaries and object files from the
+     source code directory by typing `make clean'.  To also remove the
+     files that `configure' created (so you can compile the package for
+     a different kind of computer), type `make distclean'.  There is
+     also a `make maintainer-clean' target, but that is intended mainly
+     for the package's developers.  If you use it, you may have to get
+     all sorts of other programs in order to regenerate files that came
+     with the distribution.
+
+Compilers and Options
+=====================
+
+   Some systems require unusual options for compilation or linking that
+the `configure' script does not know about.  You can give `configure'
+initial values for variables by setting them in the environment.  Using
+a Bourne-compatible shell, you can do that on the command line like
+this:
+     CC=c89 CFLAGS=-O2 LIBS=-lposix ./configure
+
+Or on systems that have the `env' program, you can do it like this:
+     env CPPFLAGS=-I/usr/local/include LDFLAGS=-s ./configure
+
+Compiling For Multiple Architectures
+====================================
+
+   You can compile the package for more than one kind of computer at the
+same time, by placing the object files for each architecture in their
+own directory.  To do this, you must use a version of `make' that
+supports the `VPATH' variable, such as GNU `make'.  `cd' to the
+directory where you want the object files and executables to go and run
+the `configure' script.  `configure' automatically checks for the
+source code in the directory that `configure' is in and in `..'.
+
+   If you have to use a `make' that does not supports the `VPATH'
+variable, you have to compile the package for one architecture at a time
+in the source code directory.  After you have installed the package for
+one architecture, use `make distclean' before reconfiguring for another
+architecture.
+
+Installation Names
+==================
+
+   By default, `make install' will install the package's files in
+`/usr/local/bin', `/usr/local/man', etc.  You can specify an
+installation prefix other than `/usr/local' by giving `configure' the
+option `--prefix=PATH'.
+
+   You can specify separate installation prefixes for
+architecture-specific files and architecture-independent files.  If you
+give `configure' the option `--exec-prefix=PATH', the package will use
+PATH as the prefix for installing programs and libraries.
+Documentation and other data files will still use the regular prefix.
+
+   In addition, if you use an unusual directory layout you can give
+options like `--bindir=PATH' to specify different values for particular
+kinds of files.  Run `configure --help' for a list of the directories
+you can set and what kinds of files go in them.
+
+   If the package supports it, you can cause programs to be installed
+with an extra prefix or suffix on their names by giving `configure' the
+option `--program-prefix=PREFIX' or `--program-suffix=SUFFIX'.
+
+Optional Features
+=================
+
+   Some packages pay attention to `--enable-FEATURE' options to
+`configure', where FEATURE indicates an optional part of the package.
+They may also pay attention to `--with-PACKAGE' options, where PACKAGE
+is something like `gnu-as' or `x' (for the X Window System).  The
+`README' should mention any `--enable-' and `--with-' options that the
+package recognizes.
+
+   For packages that use the X Window System, `configure' can usually
+find the X include and library files automatically, but if it doesn't,
+you can use the `configure' options `--x-includes=DIR' and
+`--x-libraries=DIR' to specify their locations.
+
+Specifying the System Type
+==========================
+
+   There may be some features `configure' can not figure out
+automatically, but needs to determine by the type of host the package
+will run on.  Usually `configure' can figure that out, but if it prints
+a message saying it can not guess the host type, give it the
+`--host=TYPE' option.  TYPE can either be a short name for the system
+type, such as `sun4', or a canonical name with three fields:
+     CPU-COMPANY-SYSTEM
+
+See the file `config.sub' for the possible values of each field.  If
+`config.sub' isn't included in this package, then this package doesn't
+need to know the host type.
+
+   If you are building compiler tools for cross-compiling, you can also
+use the `--target=TYPE' option to select the type of system they will
+produce code for and the `--build=TYPE' option to select the type of
+system on which you are compiling the package.
+
+Sharing Defaults
+================
+
+   If you want to set default values for `configure' scripts to share,
+you can create a site shell script called `config.site' that gives
+default values for variables like `CC', `cache_file', and `prefix'.
+`configure' looks for `PREFIX/share/config.site' if it exists, then
+`PREFIX/etc/config.site' if it exists.  Or, you can set the
+`CONFIG_SITE' environment variable to the location of the site script.
+A warning: not all `configure' scripts look for a site script.
+
+Operation Controls
+==================
+
+   `configure' recognizes the following options to control how it
+operates.
+
+`--cache-file=FILE'
+     Use and save the results of the tests in FILE instead of
+     `./config.cache'.  Set FILE to `/dev/null' to disable caching, for
+     debugging `configure'.
+
+`--help'
+     Print a summary of the options to `configure', and exit.
+
+`--quiet'
+`--silent'
+`-q'
+     Do not print messages saying which checks are being made.  To
+     suppress all normal output, redirect it to `/dev/null' (any error
+     messages will still be shown).
+
+`--srcdir=DIR'
+     Look for the package's source code in directory DIR.  Usually
+     `configure' can determine that directory automatically.
+
+`--version'
+     Print the version of Autoconf used to generate the `configure'
+     script, and exit.
+
+`configure' also accepts some other, not widely useful, options.

@@ -1,0 +1,25 @@
+=NODE  Error_Debug  Error handling and Debugging 
+
+=UP TOP [60]
+
+=DESCRIPTION
+   UNU.RAN routines report an error whenever they cannot perform the
+   requested task. Additionally it is possible to get information
+   about the generated distribution of generator objects for debugging
+   purposes. However, the latter must be enabled when compiling and
+   installing the library. (It is disabled by default.)
+   This chapter describes all necessary details:
+
+   @itemize
+   @item Choose an output stream to for writing the requested
+         information. 
+   @item Select a debugging level.
+   @item Select an error handler.
+   @item Write your own error handler.
+   @item Get more information for a particular error code.
+   @end itemize
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+

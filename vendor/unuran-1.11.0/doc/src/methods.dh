@@ -1,0 +1,227 @@
+/*---------------------------------------------------------------------------*/
+
+=NODE  Methods   Methods for generating non-uniform random variates
+=UP TOP [40]
+
+=DESCRIPTION
+
+Sampling from a particular distribution with UNU.RAN requires the
+following steps:
+
+@enumerate
+@item
+Create a distribution object
+(@pxref{Distribution_objects,,Handling distribution objects}).
+
+@item
+Select a method and create a parameter object.
+
+@item
+Initizialize the generator object using unur_init().
+
+@emph{Important}: Initialization of the generator object might fail.
+unur_init() returns a NULL pointer then, which @strong{must} not be
+used for sampling.
+
+@item
+Draw a sample from the generator object using the 
+corresponding sampling function (depending on the type of
+distribution:
+univariate continuous, univariate discrete, multivariate
+continuous, and random matrix).
+
+@item
+It is possible for a generator object to change the parameters and the
+domain of the underlying distribution. This must be done by extracting
+this object by means of a unur_get_distr() call and
+changing the distribution using the correspondig set calls, 
+see @ref{Distribution_objects,,Handling distribution objects}.
+The generator object @strong{must} then be reinitialized by means of
+the unur_reinit() call.
+
+@emph{Important}: Currently not all methods allow reinitialization,
+see the description of the particular method (keyword @i{Reinit}).
+
+@emph{Important}: Reinitialization of the generator object might fail.
+Thus one @strong{must} check the return code of the unur_reinit() call.
+
+@emph{Important}: When reinitialization fails then sampling routines
+always return @code{UNUR_INFINITY} (for continuous distributions) or @code{0} (for
+discrete distributions), respectively.
+However, it is still possible to change the underlying distribution
+and try to reinitialize again.
+
+@end enumerate
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_CONT    Methods for continuous univariate distributions
+=UP Methods [10]
+
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_cont.texi
+
+@subheading Example
+
+@smallexample
+@include ref_example_cont.texi
+@end smallexample
+
+@subheading Example (String API)
+
+@smallexample
+@include ref_example_cont_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_CEMP    Methods for continuous empirical univariate distributions
+=UP Methods [20]
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_cemp.texi
+
+@subheading Example
+
+@smallexample
+@include ref_example_emp.texi
+@end smallexample
+
+@subheading Example (String API)
+
+@smallexample
+@include ref_example_emp_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_CVEC    Methods for continuous multivariate distributions
+=UP Methods [30]
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_cvec.texi
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  MCMC_Methods_for_CVEC    Markov chain samplers for continuous multivariate distributions
+=UP Methods [35]
+=DESCRIPTION
+
+Markov chain samplers generate sequences of random vectors which have 
+the target distribution as stationary distribution. 
+There generated vectors are (more or less) correlated and it might take a long 
+time until the sequence has converged to the given target distribution.
+
+@strong{Beware: MCMC sampling can be dangerous!}
+
+@subheading Overview of methods
+
+@include methods_mcmc.texi
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_CVEMP   Methods for continuous empirical multivariate distributions
+=UP Methods [40]
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_cvemp.texi
+
+@subheading Example
+
+@smallexample
+@include ref_example_vemp.texi
+@end smallexample
+
+@subheading Example (String API)
+
+(not implemented)
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_DISCR   Methods for discrete univariate distributions
+=UP Methods [50]
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_discr.texi
+
+@subheading Example
+
+@smallexample
+@include ref_example_discr.texi
+@end smallexample
+
+@subheading Example (String API)
+
+@smallexample
+@include ref_example_discr_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_MATR    Methods for random matrices
+=UP Methods [60]
+=DESCRIPTION
+
+@subheading Overview of methods
+
+@include methods_matr.texi
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Methods_for_UNID    Methods for uniform univariate distributions
+=UP Methods [70]
+=DESCRIPTION
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Meta_Methods    Meta Methods for univariate distributions
+=UP Methods [80]
+
+=DESCRIPTION
+
+@subheading Example
+
+@smallexample
+@include ref_example_mixt.texi
+@end smallexample
+
+@subheading Example (Inversion)
+
+@smallexample
+@include ref_example_mixt_inv.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+

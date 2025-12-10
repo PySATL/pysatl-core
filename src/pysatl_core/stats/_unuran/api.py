@@ -299,49 +299,6 @@ class UnuranSamplingStrategy(Protocol):
         """Default method configuration."""
         ...
 
-
-# Factory functions (to be implemented via bindings)
-
-
-def create_unuran_strategy(
-    config: UnuranMethodConfig | None = None,
-) -> UnuranSamplingStrategy:
-    """
-    Create a UNU.RAN-based sampling strategy.
-
-    This function creates a strategy instance that can be used as a
-    distribution's sampling strategy. The strategy will create and manage
-    UNU.RAN samplers as needed.
-
-    Parameters
-    ----------
-    config : UnuranMethodConfig | None, optional
-        Default method configuration for all samplers created by this strategy.
-        If ``None``, uses default configuration.
-
-    Returns
-    -------
-    UnuranSamplingStrategy
-        A sampling strategy instance.
-
-    Examples
-    --------
-    Create a strategy and use it with a distribution:
-
-        >>> strategy = create_unuran_strategy(
-        ...     UnuranMethodConfig(method=UnuranMethod.AUTO)
-        ... )
-        >>> distr.sampling_strategy = strategy
-        >>> sample = distr.sample(1000)
-    """
-    from pysatl_core.stats._unuran.bindings import create_strategy_impl
-
-    return create_strategy_impl(config)
-
-
-# Helper functions for characteristic detection
-
-
 def _get_available_characteristics(distr: Distribution) -> set[str]:
     """
     Get the set of available characteristic names for a distribution.

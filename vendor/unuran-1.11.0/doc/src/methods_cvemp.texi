@@ -1,0 +1,8 @@
+@cartouche
+@noindent
+Methods for @b{continuous empirical multivariate distributions}@*
+sample with @command{unur_sample_vec}
+
+@noindent
+VEMPK: Requires an observed sample.
+@end cartouche

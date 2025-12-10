@@ -1,0 +1,51 @@
+
+ *****************************************************************************
+ *                                                                           *
+ *          UNU.RAN -- Universal Non-Uniform Random number generator         *
+ *                                                                           *
+ *****************************************************************************
+
+
+Important: 
+  UNU.RAN now relies on some aspects of IEEE 754 compliant floating
+  point arithmetic. In particular, 1./0. and 0./0. must result in
+  INFINITY and NaN (not a number), respectively, and must not cause a
+  floating point exception. For almost all modern compting
+  architecture this is implemented in hardware. For others there
+  should be a special compiler flag to get this feature (e.g. -MIEEE
+  on DEC alpha or -mp for the Intel C compiler).
+
+
+Upgrading UNU.RAN from version 0.9.x or earlier
+...............................................
+
+  With UNU.RAN version 1.0.x some of the macro definitions in file
+  'src/unuran_config.h' are moved into file 'config.h' and are
+  set/controlled by the ./configure script.
+
+  Writting logging information into the logfile must now be enabled
+  when running the configure script:
+
+          sh ./configure --enable-logging
+
+
+Upgrading UNU.RAN from version 0.7.x or earlier
+...............................................
+
+  With UNU.RAN version 0.8.x the interface for changing underlying
+  distributions and running a reinitialization routine has been 
+  simplified. The old routines can be compiled into the library using 
+  the following configure flag:
+
+          sh ./configure --enable-deprecated
+
+  Notice: Using these deprecated routines is not supported any more
+  and this strong discouraged.
+
+  Wrapper functions for external sources of uniform random numbers
+  are now enabled by configure flags and not by macros defined in 
+  file 'src/unuran_config.h'.
+
+  The file 'src/unuran_config.h' is not installed any more. 
+  It is now only included when the library is compiled.
+  It should be removed from the global include path of the compiler.
