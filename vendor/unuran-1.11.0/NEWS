@@ -1,0 +1,727 @@
+
+Version 1.11.0: April 2023
+
+	* Methods:
+
+	- PINV:
+	  . Optionally improved estimate of u-error of the approximation
+	    at the expense of considerably higher setup time.
+	    This can be switched on by means of ...
+
+	  . new function unur_pinv_set_extra_testpoints()
+
+	  . Fixed issue with PDFs that almost vanish at the boundary of
+	    the domain
+  
+
+Version 1.10.0: December 2022
+
+	* Distributions:
+
+	- GIG: improved numerical accuracy of computation of mode
+
+	* Internal:
+
+	- Fixed some compiler warnings
+
+	- Update configure script
+
+
+Version 1.9.0: March 2022
+
+	* Methods:
+
+	- CSTD:
+	  print constants computed in init step into log file and 
+	  info string.
+
+	- PINV:
+	  . now also works for distributions with PDFs with constant
+	    part
+
+	  . internal:  
+	    check pointer dPDF before using it.
+	    disabled internal rescaling of PDF.
+	    abort computation of area below PDF when an almost
+	    infinite loop occurs.
+	    do not immediately stop computation of relevant domain
+	    when INF or NaN occurs.
+		
+	- new function unur_get_method():
+	  it returns the identifier for the generating method.
+	  these identifiers are declared in 'src/methods/unur_metthods.h'.
+
+	- new function unur_gen_is_inversion();
+	  returns TRUE if the generator object implements an 
+	  inversion method.
+
+	- get rid of confusing error message for method TABL when the
+	  the update function for the PDF area is not available.
+
+	* Distributions:
+
+	- beta: fixed a problem with CSTD special generator '2'.
+
+	- added example 'example_reinit.c'
+
+
+Version 1.8.1: April 2011
+
+	- fixed linker flags for GSL (thanks to Carlos)
+
+
+Version 1.8.0: October 2010
+
+	* Methods:
+
+	- DSTD:
+	  new function unur_dstd_chg_truncated()
+	  that allows to truncate the domain of generator object that
+	  implements the inversion method.
+
+	- NORTA:
+	  use method PINV as first choice for generator of marginal
+	  distribution.
+
+	- PINV:
+	  when no 'center' is provided by the user, or when the
+	  PDF vanishes for the given 'center' or is not finite, then
+	  the method tries to "guess" an appropriate point for the 'center'.
+
+	  new function unur_pinv_eval_approxcdf() for computing
+	  approximate CDF. This requires to keep the table of
+	  CDF values by means of call unur_pinv_set_keepcdf().
+
+	* Distributions:
+
+	- DISCRete distribution objects: added slot 'invCDF' for
+	  inverse CDF. New functions
+	  . unur_distr_discr_set_invcdf()
+	  . unur_distr_discr_get_invcdf()
+	  . unur_distr_discr_eval_invcdf()
+
+	- When configure flag '--with-Rmath' is used, then all special
+	  functions (like beta and gamma function) are now taken from
+	  Rmath library.
+
+	- geometric distribution: fixed special random variate generator
+
+	* Other:
+
+	- Fixed errors detect by static analysis tools by the ROOT team 
+	  at CERN (thanks to R. Brun and L. Moneta)
+
+
+Version 1.7.1: April 2010
+
+	* Methods:
+
+	- PINV:
+	  fixed setup for smoothness parameters 1 and 2.
+	  It failed on x86 (32-bit) platforms.
+
+
+Version 1.7.0: April 2010
+
+	* Methods:
+
+	- PINV:
+	  . estimation of computational domain is now more robust.
+	  . added experimental function unur_pinv_set_use_upoints().
+	  . increased maximal order to 17
+	  . added smoothness parameter,
+	    new function unur_pinv_set_smoothness().
+
+
+Version 1.6.0: February 2010
+
+	* Methods:
+
+	- new method MIXT (MIXTure of distributions)
+
+
+Version 1.5.1: November 2009
+
+	* fixed a minor problem with MS Visual Studio compiler
+
+
+Version 1.5.0: November 2009
+
+	* Methods:
+
+	- NINV: changed evaluation of accuracy goal of algorithms.
+	  Now checking for the maximal tolerated x-error and maximal
+	  tolerated u-error can be set (or disabled) independently.
+	  [This slightly changes the generated pseudo-random sequence!]
+	  By default, the u-error remains unchecked.
+
+	  New variant: bisection method.
+	    This is a very slow method and should only be considered as
+	    a last resort.
+
+	- NORTA: try method PINV for sampling from marginal distribution.
+
+	* Distributions:
+
+	- added new distributions:
+
+	    hyperbolic ... Hyperbolic distribution           
+	    IG         ... Inverse Gaussian distribution
+	    GIG        ... Generalized Inverse Gaussian distribution
+	    lognormal  ... Log-Normal distribution
+	    slash      ... Slash distribution
+
+	* Tests:
+
+	- unur_test_inverror() has been renamed to unur_test_u_error().
+
+	- new test function unur_test_timing_R() for (hopefully) more
+	  robust timing results.
+
+	* configure:
+
+	- New exprimental configure flag '--with-Rmath':
+	  enables usage of the Rmath stand alone library from the
+	  R project for statistical computing. This makes some special
+	  functions (in particular Bessel functions) available for 
+	  PDFs and CDFs of some distributions (e.g. GIG).
+
+
+Version 1.4.1: August 2009
+
+	* Methods:
+
+	- PINV: fixed bug that occured when SunStudio compiler with
+	  flag -xO5 was used (initialization failed).
+	  
+
+Version 1.4.0: June 2009
+
+	* Methods:
+
+	- unur_quantile() now also supports CSTD with inversion 
+	  and DGT (for discrete distribution).
+
+	- CSTD: generic inversion method for continuous distribution
+	  provided that the inverse CDF is implemented in distribution
+	  object.
+
+	- PINV: slightly fewer PDF evaluations during setup
+
+	* Distributions:
+
+	- CONT (continuous univariate distribution):
+	  support for inverse CDF:
+	     unur_distr_cont_set_invcdf()
+	     unur_distr_cont_get_invcdf()
+	     unur_distr_cont_eval_invcdf()
+
+	- unur_distr_cont_set_domain() now takes care of given
+	  center set by a unur_distr_cont_set_center() call.
+
+
+Version 1.3.1: January 2009
+
+	* Methods:
+
+	- AROU: fixed problems with round-off errors when computing
+	  tangents.
+
+
+Version 1.3.0: November 2008
+
+	* Methods:
+
+	- new method PINV (Polynomial interpolation based INVersion of
+	  CDF).
+
+	- new function unur_quantile() that (approximately)
+	  computes the quantile for a continuous distribution. It
+	  requires a generator object that implements an inversion
+	  method.  
+
+	- HINV: fixed segfault when calling 
+	  unur_hinv_eval_approxinvcdf with u-value very close
+	  too 1.
+	  However, now when the domain has been truncated then
+	  this function evaluates the inverse CDF of the
+	  truncated distribution.
+
+
+Version 1.2.4: April 2008
+
+	* Methods:
+
+	- GIBBS: fixed possible infinite loops.
+
+	- HINV: fixed round-off error that occured for truncated 
+	  distributions when compiled with 'gcc-4.3 -O2' on some
+	  plattforms.
+
+
+Version 1.2.3: April 2008
+
+	* Function parser:
+
+	- moved (hidden) routines for code generator into
+	  external library.
+
+
+Version 1.2.2: April 2008
+
+	* Methods:
+
+	- AROU: run DARS by default (as stated in the manual)
+
+	- ARS: 
+	  new method unur_ars_set_max_iter():
+	  Sets maximum number of iterations of rejection loop.
+	  The loops aborts then and UNUR_INFINITY is returned.
+	  Thus (almost) infinite loops are prevented when invalid 
+	  PDFs are given but not detected during setup.
+
+	- GIBBS: fixed rare problem with infinite loops (see ARS)
+
+	- HRB and HRI: fixed possible infinite loop with
+	  invalid hazad rates.
+
+	* Uniform random number generators:
+
+	- unur_urng_prng_new() now supports 'unur_urng_seed'.
+
+
+Version 1.2.0: February 2008
+
+	* Methods:
+
+	- New call unur_gen_info() for creating info strings
+	  in interactive programming environments.
+	  This feature is controlled by the '--enable-info'
+	  configure flag.
+
+	- Renamed method TDRGW to ARS
+	  (avoid confusion with TDR)
+	  old functions available as macros.
+	  not available for string API.
+
+	- DARI now checks for distributions with negative domains.
+
+	* Inststallation:
+
+	- 'make check' now runs only a restricted set of tests.
+	  For additional tests run 'make fullcheck'.
+	  (These might fail occasionally when randomly chosen 
+	  distribution parameter are too extreme).
+
+
+Version 1.1.0: December 2007
+
+	* Methods:
+
+	- New method MVTDR
+
+	* Distributions:
+
+	- CONT (continuous univariate distribution):
+	  logarithm of CDF can be provided by user.
+
+
+Version 1.0.1: May 2007
+
+	* Methods:
+
+	- HINV: 
+	  . fixed problem with missing PDF.
+	  . better support for heavy-tailed distributions.
+	  . change default of u-resolution from 1.e-8 to 1.e-10.
+
+	* Distributions:
+
+	- CONT (continuous univariate distribution):
+	  compute PDF and dPDF when the CDF is set by a 
+	  unur_distr_cont_set_cdfstr() call.
+
+
+Version 1.0.0: April 2007
+
+	* Methods:
+
+	- New method HIST for sampling from histograms.
+
+	- New method CEXT, DEXT, and MVSTD: 
+	  wrapper for external generators for univariate contiuous,
+	  discrete, and multivariate continuous distributions, resp.
+
+	- HINV: fixed problem with truncated domains.
+
+	- DARI: check for positive domain.
+
+	- VMT is now deprecated. Its only usefull application
+	  is sampling from a multinormal distribution.
+	  Use new method MVSTD for this purpose instead.
+
+	* Distributions:
+
+	- Standard distributions: added F-distribution.
+
+	- CEMP (empirical distributions): added histogram.
+
+	- CVEC (Continuous multivariate distributions):
+
+	  . Added support for rectangular domains:
+
+	        unur_distr_cvec_set_domain_rect()
+
+	  . Using standardized marginal distributions is now
+	    deprecated:
+
+		unur_distr_cvec_set_stdmarginals()
+		unur_distr_cvec_set_stdmarginal_array()
+		unur_distr_cvec_set_stdmarginal_list()
+		unur_distr_cvec_get_stdmarginal()
+
+	* Uniform random number generators:
+
+	- unur_urng_fvoid_new() has been changed:
+	  first argument must be pointer to function of prototype
+	    double (*random)(void *state)
+
+	* Miscellaneous:
+
+	- Protoype of unur_run_tests() has changed: 
+	  it uses the output stream as additional argument 
+
+	- The UNU.RAN error handler has been been changed:
+
+	     unur_set_error_handler_off() allows to switch off
+	     error messages and warnings.
+
+	     unur_set_error_handler() allows to replace the
+	     default error handler (i.e. print a short message into a
+	     logfile) by a customized one.
+
+	  On the other hand it is not possible any more to suppress
+	  error messages by a compiler switch.
+
+	- More flags for the ./configure script.
+
+	- The size of file 'src/unuran_config.h' has been removed:
+	  Some of the macros are either deleted at all or moved into
+	  the file 'config.h' which is created/controlled by
+	  ./configure script.
+
+	- Script for creating MS Windows(R) DLL using MS Visual Studio
+	  2005: ./scripts/win32/build.sh
+  
+
+Version 0.9.0: January 2007
+
+	* This is a pre-1.0 release.
+
+	* Deprecated Routines:
+
+	  Deprecated routines (see release notes to Version 0.8.1
+	  below) are now disabled by default. They are still available
+	  but must be enable at using
+
+		./configure --enable-deprecated
+
+	  Notice: Deprecated routines are not tested any more and
+	  their usage is strongly discouraged.
+
+	* Wrapper functions for external sources of uniform random
+	  numbers are now enabled by configure flags and not by macros
+	  defined in file 'src/unuran_config.h'.
+
+	* The file 'src/unuran_config.h' is not installed any more. 
+	  It is now only included when the library is compiled.
+	  It should be removed from the global include path of the compiler.
+
+	* Some bugs have been fixed.
+
+
+Version 0.8.1: November 2006
+
+	* Methods:
+
+	- new method ITDR (Inverse Transformed Density Rejection)
+	  for distributions with monotone unbounded densities.
+
+	- Implemented new routine unur_reinit() for reinitializing
+	  existing generator object. This can be done by extracting
+	  the underlying distribution object by a unur_get_distr(),
+	  modify it and reinitialize the generator by running
+	  unur_reinit().
+
+	- More methods support reinitialization now.
+
+	* String API:
+
+	- New functions unur_makegen_ssu() and unur_makegen_dsu()
+	  to allow disribution object, generation method and 
+	  uniform random number generator as separate arguments.
+
+	- The keyword "urng" is deprecated now and will be removed
+	  in the next release.
+
+	* Distributions:
+
+	- DISCR:
+	  now unur_distr_discr_set_pmf() and unur_distr_discr_set_cdf()
+	  can be used after a unur_distr_discr_set_pv() call.
+	  However, the probability vector is then removed.
+
+	- added unur_distr_set_extobj() / unur_distr_get_extobj(): 
+	  Store pointer to external object that can be passed to
+	  PDF, CDF, PMF or similar functions 
+
+	* Deprecated calls:
+
+	  The API for UNU.RAN has been modified.
+	  ow there exists a general unur_reinit() call that replaces
+	  such a call for particular methods.
+	  Thus the following calls are now deprecated and will be
+	  removed in the next release:
+
+	     unur_dari_reinit()
+	     unur_dsrou_reinit()
+	     unur_srou_reinit()
+	     unur_ssr_reinit()
+	     unur_utdr_reinit()
+	     unur_tdr_reinit()
+	     unur_tdrgw_reinit()
+
+	  To avoid lots of calls for changing the parameters or domains
+	  of the underlying distribution the prefered method now is to 
+	  extract the distribution object from the generator object,
+	  use the corresponding calls for distributions to change it,
+	  and run unur_reinit().
+	  Thus the following calls are now deprecated and will be
+	  removed in the next release:
+
+	   . unur_cstd_chg_pdfparams(),
+	   . unur_dari_chg_pmfparams(), unur_dari_chg_domain(),
+	     unur_dari_chg_mode(), unur_dari_upd_mode(),
+	     unur_dari_chg_pmfsum(), unur_dari_upd_pmfsum(), and
+	   . unur_dsrou_chg_pmfparams(), unur_dsrou_chg_domain(),
+	     unur_dsrou_chg_mode(), unur_dsrou_upd_mode(),
+	     unur_dsrou_chg_pmfsum(), unur_dsrou_upd_pmfsum(), and
+	   . unur_dstd_chg_pmfparams(),
+	   . unur_ninv_chg_pmfparams(),
+	   . unur_srou_chg_pdfparams(), unur_srou_chg_domain(),
+	     unur_srou_chg_mode(), unur_srou_upd_mode(), 
+	     unur_srou_chg_pdfarea(), unur_srou_upd_pdfarea()
+	   . unur_ssr_chg_pdfparams(), unur_ssr_chg_domain(),
+	     unur_ssr_chg_mode(), unur_ssr_upd_mode(), 
+	     unur_ssr_chg_pdfarea(), unur_ssr_upd_pdfarea()
+	   . unur_utdr_chg_pdfparams(), unur_utdr_chg_domain(),
+	     unur_utdr_chg_mode(), unur_utdr_upd_mode(), 
+	     unur_utdr_chg_pdfarea(), unur_utdr_upd_pdfarea()
+
+	  Other calls:	  
+
+	   . removed unur_arou_set_center() as this functionality is 
+	     already covered by the unur_distr_cont_set_center() call.
+
+	   . removed unur_tdr_set_center() as this functionality is 
+	     already covered by the unur_distr_cont_set_center() call.
+
+	* Bug fixes:
+
+	- fixed segfault when calling unur_urng_free() with RngStreams
+	  object.
+
+
+Version 0.7.2: March 2006
+
+	- fixed function prototype that contained C++ keyword
+
+
+Version 0.7.1: January 2006
+
+	- fixed non-ASCII C compliant code in tests directory
+
+
+Version 0.7.0: January 2006
+
+	* Methods:
+
+	- new method TDRGW (robust variant of TDR - variant of Gilks & Wild)
+
+	- new method NORTA (NORmal To Anything)
+
+	- new method HITROU  
+
+	- new method GIBBS
+
+	- method TDR: added reinit routine
+
+	- method TABL: construction points can be set by new function 
+	  unur_tdr_set_cpoints(). It also replaces function 
+	  unur_tabl_set_nstp() which should not be used any more
+	  (but is still available for compatibility).
+
+	- method MCORR: extended to cover generation of random
+	  correlation matrices with given eigenvalues.
+
+	* Distributions:
+
+	- added new distribution type for full conditional distributions
+
+	- continuous distribution objects (CONT) have a slot for the center
+	  of the distribution. It is now set for the distribution
+	  directly. This mechanism replaces the _set_ calls for 
+	  all methods that make use of the center.
+
+	- interface for setting and getting parameter-arrays for 
+	  multivariate distributions (CVEC) has been renamed.
+
+	- adding multivariate Cauchy and Student distributions.
+
+	* Uniform random number generator:
+
+	- new flexible interface to uniform random number generators.
+	  No compiler switches necessary. Thus it is now possible to
+	  use random numbers from different libraries without 
+	  recompiling UNU.RAN.
+
+	- The generic interface to uniform random number generators
+	  has been enhanced. However, it cannot be accessed directly any more.
+	  Use the corresponding calls instead (see also the message above). 
+
+
+Version 0.6.0: June 2005
+
+	- precompiled version for Windows 
+
+
+Version 0.5.0: August 2004
+
+	- UNU.RAN now makes use of IEEE 754 compliant floating point
+	  arithmetic. In particular, 1./0. and 0./0. must result in 
+	  infinity and NaN (not a number), respectively, and must not
+	  cause a floating point exception.
+	  For all modern compting architecture this is implemented in
+	  hardware or in software using a special compiler flag.
+
+	- new methods NROU and VNROU
+
+	- new method MCORR
+
+	- return codes of _set_ and _get_ functions have been changed:
+	  in case of successful execution 0 (or UNUR_SUCCESS) is returned 
+	  (instead of 1 in previous versions). 
+	  Thus it is possible to return some non-zero error code in case 
+	  of an failure.
+
+	- the API of method VMT has changed
+
+	- added new disribution type MATR for matrix distributions.
+	  (Currently only used for creating random covariance matrices)
+
+	- multivariate distribution objects now contain marginal distributions.
+
+	- unur_distr_cvec_set_covar() now checks for positive definiteness of
+	  given covariance matrix.
+
+	- fixed bug in function that (automatically) computes a 
+	  probability vector by means of the probability mass
+	  function. This caused methods that require explicitly given
+	  probability vectors (like DAU) to truncate the last entry.
+
+	- some other minor bug fixes
+
+
+Version 0.4.5: July 2003
+
+	- added method DSS (discrete sequential search)
+
+	- added rerandomized ARS to method AROU
+
+	- bug fixes with discrete distributions
+
+
+Version 0.4.4: July 2003
+
+	- "orderstatistics" need not be last entry in string API
+
+	- replaced unur_tabl_set_variant_setup() by unur_tabl_set_usedars()
+	  with a slightly different interface.
+
+
+Version 0.4.3: June 2003
+
+	- fixed problem with prepocessor for MacOS X
+
+	- fixed bug in Kinderman-Ramage Gaussian variate generator
+
+
+Version 0.4.2: March 2003
+
+	- new interface for unur_tdr_eval_invcdfhat()
+
+	- fixed bug in error handling of method AROU
+
+
+Version 0.4.1: January 2003
+
+	- use build-in generator as default uniform random number generator
+
+	- string API: fixed bug with string 'inf' in cygwin.
+		      parsing of numbers does not depend on locale any more
+
+	- fixed bug in Makefile
+
+
+Version 0.4.0: January 2003
+	
+	- added methods HRB, HRD, and HRI for distributions with given
+	  hazard rates (bounded, decreasing, and increasing, resp.)
+
+	- added method EMPL (empirical CDF with linear interpolation)
+	  (for sake of completeness; method not recommended)
+
+	- support for shared libraries
+
+	- reorganization of source tree
+
+	- bug fixes
+
+
+Version 0.3.0: October 2002
+
+	- added method HINV (Hermite interpolation based INVersion of CDF)
+
+	- new interface for using uniform random number generators;
+	  all settings are now in ./src/unuran_config.h
+
+	- added support for more uniform random number generator packages
+
+	- included better build-in uniform pseudo-random number generator
+
+	- added unur_gen_clone() call
+
+	- added const qualifier in function prototypes where appropriate
+
+	- fixed broken computation of window width in method EMPK
+
+	- many bug fixes
+
+
+Version 0.2.0: June 2002
+
+	- added new simple API (String interface)
+
+	- added method AUTO (automatic)
+
+	- added method DSROU (discrete simple ratio of uniforms)
+
+	- improved method for finding construction points in methods TDR and AROU
+	  (Derandomized adaptive rejection sampling)
+
+	- many bug fixes
+
+
+Version 0.1.0: March 2001
+
+	- First public release.

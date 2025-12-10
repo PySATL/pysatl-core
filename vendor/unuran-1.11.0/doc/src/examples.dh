@@ -1,0 +1,269 @@
+
+=NODE  Examples  Examples
+=UP TOP [20]
+
+=DESCRIPTION
+
+   The examples in this chapter should compile cleanly and can be
+   found in the directory @file{examples} of the source tree of
+   UNU.RAN. Assuming that UNU.RAN as well as the PRNG libraries 
+   have been installed properly (@pxref{Installation}) each
+   of these can be compiled (using the GCC in this example) with
+
+   @example
+      gcc -Wall -O2 -o example example.c -lunuran -lprng -lm
+   @end example 
+
+   @noindent
+   @emph{Remark:} @code{-lprng} must be omitted when the PRNG library
+   is not installed. Then however some of the examples might not work.
+
+   The library uses three objects:
+   @code{UNUR_DISTR}, @code{UNUR_PAR} and @code{UNUR_GEN}.
+   It is not important to understand the details of these objects but
+   it is important not to changed the order of their creation.
+   The distribution object can be destroyed @emph{after} the generator
+   object has been made. (The parameter object is freed automatically
+   by the unur_init() call.) It is also important to check the result
+   of the unur_init() call. If it has failed the NULL pointer is
+   returned and causes a segmentation fault when used for sampling.
+
+   We give all examples with the UNU.RAN standard API and the more
+   convenient string API.
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_0  As short as possible
+=UP Examples [05]
+
+=DESCRIPTION
+
+Select a distribution and let UNU.RAN do all necessary steps.
+
+@smallexample
+@include ref_example0.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_0_str  As short as possible (String API)
+=UP Examples [06]
+
+=DESCRIPTION
+
+Select a distribution and let UNU.RAN do all necessary steps.
+
+@smallexample
+@include ref_example0_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_1  Select a method
+=UP Examples [10]
+
+=DESCRIPTION
+
+Select method AROU and use it with default parameters.
+
+@smallexample
+@include ref_example1.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+
+=NODEX  Example_1_str  Select a method (String API)
+=UP Examples [11]
+
+=DESCRIPTION
+
+Select method AROU and use it with default parameters.
+
+@smallexample
+@include ref_example1_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_2  Arbitrary distributions
+=UP Examples [20]
+
+=DESCRIPTION
+
+If you want to sample from a non-standard distribution,
+UNU.RAN might be exactly what you need. 
+Depending on the information is available, a method
+must be choosen for sampling, 
+see @ref{Concepts} for an overview and 
+@ref{Methods} for details.
+
+@smallexample
+@include ref_example2.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_2_str  Arbitrary distributions (String API)
+=UP Examples [21]
+
+=DESCRIPTION
+
+If you want to sample from a non-standard distribution,
+UNU.RAN might be exactly what you need. 
+Depending on the information is available, a method
+must be choosen for sampling, 
+see @ref{Concepts} for an overview and 
+@ref{Methods} for details.
+
+@smallexample
+@include ref_example2_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_3  Change parameters of the method
+=UP Examples [30]
+
+=DESCRIPTION
+
+Each method for generating random numbers allows several
+parameters to be modified. If you do not want to use default values,
+it is possible to change them.
+The following example illustrates how to change parameters.
+For details see @ref{Methods}.
+
+@smallexample
+@include ref_example3.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_3_str  Change parameters of the method (String API)
+=UP Examples [31]
+
+=DESCRIPTION
+
+Each method for generating random numbers allows several
+parameters to be modified. If you do not want to use default values,
+it is possible to change them.
+The following example illustrates how to change parameters.
+For details see @ref{Methods}.
+
+@smallexample
+@include ref_example3_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_4  Change uniform random generator
+=UP Examples [40]
+
+=DESCRIPTION
+
+All generator object use the same default uniform random number
+generator by default. This can be changed to any generator of your
+choice such that each generator object has its own random number
+generator or can share it with some other objects.
+It is also possible to change the default generator at any time.
+See @ref{URNG,,Using uniform random number generators},
+for details.
+
+The following example shows how the uniform random number generator
+can be set or changed for a generator object. It requires the 
+RNGSTREAMS library to be installed and used. Otherwise the example must be
+modified accordingly.
+
+@smallexample
+@include ref_example_rngstreams.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_reinit  Change parameters of underlying distribution
+=UP Examples [43]
+
+=DESCRIPTION
+
+One a generator object has been created it allows to draw samples from
+the distribution with the given parameters.
+However, some methods allow to change the parameters of the underlying
+distribution and reinitialize the generator object again.
+Thus when the parameters of the distribution vary for each draw we
+save overhead for destroying the old object and creating a new one.
+
+The following example shows how the parameters of a GIG distribution
+can be changed when method CSTD is used.
+
+@smallexample
+@include ref_example_reinit.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_anti  Sample pairs of antithetic random variates
+=UP Examples [50]
+
+=DESCRIPTION
+Using Method TDR it is easy to sample pairs of antithetic random variates.
+
+@smallexample
+@include ref_example_anti.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_anti_str  Sample pairs of antithetic random variates (String API)
+=UP Examples [51]
+
+=DESCRIPTION
+Using Method TDR it is easy to sample pairs of antithetic random variates.
+
+@smallexample
+@include ref_example_anti_str.texi
+@end smallexample
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODEX  Example_More  More examples
+=UP Examples [60]
+=DESCRIPTION
+
+@xref{Methods_for_CONT,,Methods for continuous univariate distributions}.
+
+@xref{Methods_for_CEMP,,Methods for continuous empirical univariate distributions}.
+
+@xref{Methods_for_CVEMP,,Methods for continuous empirical multivariate distributions}.
+
+@xref{Methods_for_DISCR,,Methods for discrete univariate distributions}.
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+

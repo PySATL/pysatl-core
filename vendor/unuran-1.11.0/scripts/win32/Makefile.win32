@@ -1,0 +1,184 @@
+
+# --- Compiler and linker options -------------------------------------------
+
+# VC Compiler flags
+CFLAGS = -O1 -W3 -nologo -D_CRT_SECURE_NO_DEPRECATE -MD \
+	  -DHAVE_CONFIG_H -I./ -I./src/ -I./src/tests
+CTESTFLAGS = -O2 -W3 -nologo -MD -I./ -I./src/ -I./src/tests
+
+# VC Linker flags
+LINKFLAGS = -nologo -incremental:no -machine:IX86 
+
+
+# --- Definitions -----------------------------------------------------------
+
+# Where to find source files
+TOP_SRCDIR := .
+SCRIPTS_DIR=$(TOP_SRCDIR)/scripts
+TESTS_DIR=$(TOP_SRCDIR)/tests
+
+
+# Files for RngStreams libary
+RNGSTREAM_SRC := $(TOP_SRCDIR)/src/uniform/RngStream.c
+RNGSTREAM_H   := $(TOP_SRCDIR)/src/uniform/RngStream.h
+UNURAN_RNGSTREAM_H := $(TOP_SRCDIR)/src/uniform/unuran_urng_rngstreams.h
+URNG_RNGSTREAM_H   := $(TOP_SRCDIR)/src/uniform/urng_rngstreams.h
+
+RNGSTREAM_CFLAGS := $(shell test -z ${USE_RNGSTREAM} \
+	|| echo "-I./src/uniform -DUNURAN_HAS_RNGSTREAM -DUNURAN_SUPPORTS_RNGSTREAM -DUNUR_URNG_DEFAULT_RNGSTREAM" )
+
+
+# UNU.RAN version: major.minor
+UNURAN_VERSION=$(shell \
+	grep PACKAGE_VERSION $(TOP_SRCDIR)/config.h | \
+	sed -e 's/.*_VERSION\s*\"\(.*\)\..*\"/\1/')
+
+# UNU.RAN library name
+UNURAN_LIBNAME=libunuran$(shell echo $(UNURAN_VERSION) | sed 's/\.//')
+
+
+# libUNURAN 
+UNURAN_SRC := $(wildcard $(TOP_SRCDIR)/src/*/*.c)
+UNURAN_OBJ := $(UNURAN_SRC:.c=.obj)
+UNURAN_H   := $(TOP_SRCDIR)/src/unuran.h.in \
+	      $(TOP_SRCDIR)/src/tests/unuran_tests.h
+UNURAN_SOURCE_H := $(wildcard $(TOP_SRCDIR)/src/*/*_source.h)
+
+
+# DLL files
+UNURAN_DEF=$(WINDIST_DIR)/$(UNURAN_LIBNAME).def
+UNURAN_LIB=$(WINDIST_DIR)/$(UNURAN_LIBNAME).lib
+UNURAN_DLL=$(WINDIST_DIR)/$(UNURAN_LIBNAME).dll
+
+# Header files for creating .DEF file
+DEF_H := $(UNURAN_H) \
+	 $(shell test -z ${USE_PRIVATE} || echo "$(UNURAN_SOURCE_H)") \
+	 $(shell test -z ${USE_RNGSTREAM} || echo "$(UNURAN_RNGSTREAM_H)" )
+
+INT=$(shell test -z ${USE_PRIVATE} || echo "-I")
+
+
+# Examples
+EXAMPLES_SRC := $(wildcard $(TOP_SRCDIR)/examples/*.c) \
+	$(wildcard $(WINDIST_DIR)/example*.c)
+EXAMPLES_OBJ := $(EXAMPLES_SRC:.c=.obj)
+EXAMPLES_EXE := $(EXAMPLES_SRC:.c=.exe)
+
+# Test suite
+UNURANTEST_SRC := $(wildcard $(TESTS_DIR)/testdistributions/*.c) \
+		  $(TESTS_DIR)/testroutines.c $(TESTS_DIR)/testcounter.c
+UNURANTEST_OBJ := $(UNURANTEST_SRC:.c=.obj)
+
+TESTS_CONF := $(filter-out $(TESTS_DIR)/README.conf \
+                           $(TESTS_DIR)/t_deprecated%, \
+                $(wildcard $(TESTS_DIR)/*.conf))
+TESTS_SRC := $(TESTS_CONF:.conf=.c)
+TESTS_OBJ := $(TESTS_SRC:.c=.obj)
+TESTS_EXE := $(TESTS_SRC:.c=.exe)
+
+
+# Some special files:
+#    header file with constants for floating point arithmetic 
+FPCONST_H = $(TOP_SRCDIR)/src/utils/unur_fp_const_source.h
+
+
+# --- Make DLL --------------------------------------------------------------
+
+all: $(UNURAN_DLL)
+
+
+# Create DLL
+$(UNURAN_DLL): $(FPCONST_H) $(UNURAN_OBJ) $(UNURAN_DEF)
+	link $(LINKFLAGS) -DLL -out:$(UNURAN_DLL) \
+		$(UNURAN_OBJ) -def:$(UNURAN_DEF)
+
+$(UNURAN_DEF): $(DEF_H) $(UNURAN_RNGSTREAM_H)
+	$(SCRIPTS_DIR)/win32/make_dll_def.pl -V $(UNURAN_VERSION) $(INT) \
+		-L $(UNURAN_LIBNAME) $(DEF_H) > $(UNURAN_DEF)
+
+%.obj: %.c
+	$(CC) $(CFLAGS) $(RNGSTREAM_CFLAGS) -Fo$@ -c $<
+
+$(UNURAN_RNGSTREAM_H): $(URNG_RNGSTREAM_H)
+	$(SCRIPTS_DIR)/make_urng_header.pl \
+		$(URNG_RNGSTREAM_H) > $(UNURAN_RNGSTREAM_H)
+
+$(FPCONST_H): $(SCRIPTS_DIR)/compute_machine_constants.exe
+	$(SCRIPTS_DIR)/compute_machine_constants.exe > $(FPCONST_H)
+
+$(SCRIPTS_DIR)/compute_machine_constants.exe: $(SCRIPTS_DIR)/compute_machine_constants.obj 
+	$(LD) -nologo -Fe$(SCRIPTS_DIR)/compute_machine_constants.exe \
+		$(SCRIPTS_DIR)/compute_machine_constants.obj
+
+
+# --- Run tests -------------------------------------------------------------
+
+# Compile, link and run examples
+examples: $(EXAMPLES_EXE)
+	for f in $(EXAMPLES_EXE); do \
+		echo "running $$f ..."; \
+		eval $$f; \
+	done
+	
+$(EXAMPLES_EXE): $(EXAMPLES_OBJ)
+	$(LD) -nologo -O2 -W3 -Fe$@ $(@:.exe=.obj) $(UNURAN_LIB) 
+
+$(EXAMPLES_OBJ): $(EXAMPLES_SRC)
+	$(CC) $(CFLAGS) $(RNGSTREAM_CFLAGS) -Fo$@ -c $(@:.obj=.c) 
+
+
+# Run test suite
+check: $(UNURANTEST_OBJ) $(TESTS_EXE) 
+	@for f in $(TESTS_EXE); do \
+		echo "running $$f ..."; \
+		eval $$f; \
+	done
+
+$(TESTS_SRC): $(TESTS_CONF)
+	$(TESTS_DIR)/make_test_files.pl $(TOP_SRCDIR) $(@:.c=.conf) > $@ 
+
+$(TESTS_EXE): $(TESTS_OBJ) $(UNURANTEST_OBJ) 
+	$(LD) -nologo -Fe$@ $(@:.exe=.obj) $(UNURANTEST_OBJ) $(UNURAN_LIB) 
+
+$(TESTS_OBJ): $(TESTS_SRC)
+	$(CC) $(CFLAGS) $(RNGSTREAM_CFLAGS) -Fo$@ -c $(@:.obj=.c) 
+
+
+# --- Create ZIP file ------------------------------------------------------
+
+ZIPFILE := unuran-$(shell \
+	grep PACKAGE_VERSION $(TOP_SRCDIR)/config.h | \
+	sed -e 's/.*_VERSION\s*\"\(.*\)\"/\1/')-win32.zip
+
+UNURANWIN_DIR := unuran
+
+zip:
+	@echo "Create ZIP file '$(ZIPFILE)' ..."
+	test ! -d $(UNURANWIN_DIR) || rm -rf $(UNURANWIN_DIR)
+	test ! -f $(ZIPFILE) || rm -f $(ZIPFILE)
+	test -d $(WINDIST_DIR) && \
+		mv $(WINDIST_DIR) $(UNURANWIN_DIR) && \
+		zip -r $(ZIPFILE) $(UNURANWIN_DIR) && \
+		rm -rf $(UNURANWIN_DIR)
+
+
+# --- Clear working space --------------------------------------------------
+
+# Remove created files
+clean:
+	rm -rf $(WINDIST_DIR)
+	rm -rf $(UNURANWIN_DIR)
+	rm -f $(ZIPFILE)
+	rm -f $(UNURAN_OBJ)
+	rm -f $(SCRIPTS_DIR)/compute_machine_constants.exe
+	rm -f $(SCRIPTS_DIR)/compute_machine_constants.obj
+	rm -f $(EXAMPLES_OBJ) $(EXAMPLES_EXE)
+	rm -f $(TESTS_SRC) $(TESTS_OBJ) $(TESTS_EXE)
+	rm -f $(UNURANTEST_OBJ)
+	rm -f $(RNGSTREAM_SRC) $(RNGSTREAM_H)
+	rm -f t_*.log unuran.log
+	rm -f `find . -type f -name "*.manifest"`
+
+
+.PHONY: check clean examples
+

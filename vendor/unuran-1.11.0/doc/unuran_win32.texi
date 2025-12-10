@@ -1,0 +1,452 @@
+\input texinfo   @c -*-texinfo-*-
+
+@c %**start of header
+@setfilename unuran_win32.info
+@settitle    Using UNU.RAN with Microsoft Visual C
+@iftex
+@afourpaper
+@end iftex
+@footnotestyle end
+@setchapternewpage odd
+@c %**end of header
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Some data about this software
+@c 
+
+@dircategory Scientific software
+@direntry
+* unuran_win32: (unuran_win32).  Using UNU.RAN with Microsoft Visual C
+@end direntry
+
+@c Version ...
+@include version_win32.texi
+@include unuran_win32_libname.texi
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Copyright
+@c 
+
+@copying
+@noindent
+Copyright @copyright{} 2000--2007 Institut fuer Statistik, WU Wien.
+
+@noindent
+Permission is granted to make and distribute verbatim
+copies of this manual provided the copyright notice and
+this permission notice are preserved on all copies.
+@end copying
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Titlepage ...
+@c 
+
+@titlepage
+@title Using UNU.RAN with Microsoft Visual C
+@subtitle UNU.RAN -- Universal Non-Uniform RANdom number generators
+@subtitle Version @value{VERSION}, @value{UPDATED}
+
+@author Josef Leydold
+@author Wolfgang H@"ormann
+@author Engin Durmaz
+
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Table of contents 
+@c 
+
+@contents
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c insert automatically generated documentation ...
+@c 
+
+@node TOP
+@top  Using UNU.RAN with Microsoft Visual C
+
+@menu
+* Installation:: Installation of binary distribution
+* URNG:: Uniform random number generator
+* IDE:: Building your own project in Visual Studio
+* CLI:: Building your own project on the command line
+* Examples:: Two Examples
+@end menu
+
+@ifinfo
+@noindent
+This is the online-documentation of UNU.RAN.@*
+Version: @value{VERSION}@*
+Date: @value{UPDATED}
+@end ifinfo
+
+This document describes how to use Microsoft Visual Studio to
+create a C or C++ project and link the target with UNU.RAN.
+
+@uref{http://statmath.wu.ac.at/unuran,UNU.RAN}
+(Universal Non-Uniform RAndom Number generator) is
+a collection of algorithms for generating non-uniform
+pseudorandom variates as a library of C functions
+designed and implemented by the 
+@uref{http://statmath.wu.ac.at/arvag,ARVAG}
+(Automatic Random VAriate Generation) project group in Vienna, and
+released under the GNU Public License (GPL).
+
+This binary distribution also has support for Pierre L'Ecuyers
+@uref{http://statmath.wu.ac.at/software/RngStreams,RngStreams}
+library. This library is already compiled into the distributed DLL,
+the corresponding header file is included in this package.
+
+The DLL is linked against the C run-time library @file{MSVCRT.lib}.
+Thus the file @file{MSVCR80.DLL} must be available at run time for 
+applications linked with UNU.RAN and @file{MSVCRT.lib} (i.e., included
+in the envirenment variate @env{PATH}).
+For details see the 
+@uref{http://msdn2.microsoft.com/en-us/library/60k1461a(VS.80).aspx,Microsoft Visual C++}
+manual.
+
+@c --------------------------------------------------------------------
+
+@node Installation, URNG, TOP, TOP
+@chapter Installation of Binary Distribution
+
+@enumerate
+@item
+Download @value{ZIPFILENAME} from the UNU.RAN 
+@uref{http://statmath.wu.ac.at/unuran/download.html,download}
+page.
+
+@item
+Unpack @value{ZIPFILENAME}. It creates directory @file{unuran} which
+contains the following files:
+
+@table @file
+@item unuran.h
+Header file to be included in your application source file.
+(Contains function prototypes, typedefs and macros.)
+
+@item  RngStream.h
+@itemx unuran_urng_rngstreams.h
+Header files required for using the @file{RngStream} library.
+
+@item @value{LIBUNURAN}.def
+Module-definition file.
+(Declares all functions exported the UNU.RAN library.)
+
+@item  @value{LIBUNURAN}.dll
+@itemx @value{LIBUNURAN}.dll.manifest
+DLL (Dynamic link library) and its manifest file (must always be
+located in the same directory).
+
+@item @value{LIBUNURAN}.lib
+Import library file.
+
+@item @value{LIBUNURAN}.exp
+Library export file.
+
+@item unuran.pdf
+UNU.RAN User Manual.
+
+@item unuran_win32.pdf
+Short description for building your own application using UNU.RAN with
+Microsoft Visual C.
+
+@item  example1.c
+@itemx example2.c
+Two example files. 
+@end table
+
+@item
+@emph{Optional:}
+Move directory @file{unuran} into an appropriate place, e.g.
+@file{C:\unuran} (or maybe the folder where you build your
+application).
+
+Throughout this document, the UNU.RAN installation folder is referred
+to as @file{<UNURANDIR>}. 
+For example, if UNU.RAN has been installed in the folder
+@file{C:\unuran}, references to
+@file{<UNURANDIR>\@value{LIBUNURAN}.lib} 
+represent @file{C:\unuran\@value{LIBUNURAN}.lib}. 
+
+@item
+@emph{Optional:}
+Add @file{<UNURANDIR>} to the @env{PATH} environment variable.
+Thus your application can find the location of @value{LIBUNURAN}.dll
+when it is started.
+@end enumerate
+
+
+@c --------------------------------------------------------------------
+
+@node URNG, IDE, Installation, TOP
+@chapter  Uniform Random Number Generator
+
+This binary distribution uses Pierre L'Ecuyers
+@uref{http://statmath.wu.ac.at/software/RngStreams,RngStreams}
+library as its default uniform random number generator.
+This library uses a package seed. Thus you should add the 
+following piece of code at the beginning of your application (at least
+before you call any of the UNU.RAN functions):
+
+@example
+unsigned long seed[] = @{111u, 222u, 333u, 444u, 555u, 666u@};
+RngStream_SetPackageSeed(seed);
+@end example
+
+@noindent
+where @code{111u}, @dots{}, @code{666u} should be replaced by your
+seeds. 
+
+@sp 1
+@noindent
+@emph{Remark:} 
+UNU.RAN works with any source of uniform random numbers.
+We refer to the UNU.RAN for details if you want to use your own
+uniform random number generator instead of the @file{RngStreams}
+library. 
+
+
+@c --------------------------------------------------------------------
+
+@node IDE, CLI, URNG, TOP
+@chapter  Building Your Own Project in Visual Studio
+
+@emph{Note:} 
+The information below applies to the Visual C++ .NET 2005.
+
+@sp 1
+
+Let us assume that you want to build a target named
+@file{example.exe} and have:
+
+@itemize
+@item 
+a source file named @file{example.c} which uses the C API of the
+UNU.RAN library (or alternatively a C++ file @file{example.cpp});
+@item
+a folder where this file is located and which we refer to as
+@file{<MYAPPDIR>}.
+@end itemize
+
+One way to build your project is to create a @emph{Solution} named
+@file{example.sln} as described here.
+
+@enumerate
+@item
+Start Microsoft Visual Studio .NET 2005.
+
+@item
+Build the @file{example.sln} solution: 
+
+From the @file{File} menu, select @file{New}, and then
+@file{Project}.
+
+When the @file{New Project} dialog box appears then
+
+@itemize @minus
+@item
+In the @file{Project Types} pane, select @file{Visual C++ Win32 Projects}.
+@item
+In the @file{Templates pane}, select the @file{Win32 Console Project} icon.
+@item
+Fill in the project name (@samp{example}).
+@item
+If necessary, correct the location of the project (to
+@file{<MYAPPDIR>}).
+@item
+Click @file{OK}.
+@end itemize
+
+When the Win32 Application Wizard appears then
+
+@itemize @minus
+@item
+Click on @file{Application Settings}.
+@item
+Select @file{Console Application} as application type.
+@item
+Make sure that @file{Empty Project} is checked in 
+@file{Additional Options}.
+@item
+Click @file{Finish}.
+@end itemize
+
+This creates a solution, @file{example}, with a single project,
+@file{example}. You can view the contents of the solution by selecting
+@file{Solution Explorer} in the @file{View} menu.
+
+@item
+Add your source file to the project.
+From the @file{Project} menu, choose @file{Add Existing Item}:
+
+@itemize @minus
+@item
+Move to folder @file{<MYAPPDIR>} and select @file{example.c}.
+@item
+Click @file{Add}.
+@end itemize
+
+@item
+Set some options so that the project knows where to find the UNU.RAN
+include files and the UNU.RAN libraries.
+
+@itemize @minus
+@item
+From the @file{Project} menu, choose @file{example Properties}.
+The @file{example Property Pages} dialog box appears.
+@item
+In the @file{Configuration} drop-down list, select @file{Release}.
+@item
+Select @file{C/C++} in the @file{Configuration Properties} tree.
+@item
+Select @file{General}.
+@item
+In the @file{Additional Include Directories} field
+@itemize .
+@item
+add directory @file{<UNURANDIR>};
+@item
+choose @file{No} for @file{Detect 64-bit Portability Issues}.
+@end itemize
+@item
+Select @file{Linker} in the @file{Configuration Properties} tree.
+@itemize .
+@item
+Select @file{General} and then select @file{Additional Library
+Directories}.
+@item
+Add directory @file{<UNURANDIR>}.
+@item
+Select @file{Input} and then select @file{Additional Dependencies}.
+Add library file @file{@value{LIBUNURAN}.lib}.
+@end itemize
+@item
+Click @file{OK} to close the @file{example Property Pages} dialog box.
+@end itemize
+
+@item 
+Set the default project configuration.
+
+@itemize @minus
+@item
+From the @file{Build} menu, select @file{Configuration Manager}.
+@item
+Select @file{Release} in the @file{Active Solution Configuration}
+drop-down list.
+@item
+Click @file{Close}.
+@end itemize
+
+@item
+Finally, to build the project, from the @file{Build} menu, select
+@file{Build Solution}.
+
+@end enumerate
+
+After completion of the compiling and linking process, the target is
+created. The full path of the executable is
+@file{<MYAPPDIR>\example\Release\example.exe}. Notice that, if you
+want to run the @file{example.exe} by clicking on it, you need to
+locate the DLL file in the same directory or adjust the @env{PATH}
+environment variable for the DLL (@pxref{Installation}).
+
+
+@c --------------------------------------------------------------------
+
+@node CLI, Examples, IDE, TOP
+@chapter  Building Your Own Project on the Command Line  
+
+First you have to set the appropriate environment variables to enable
+32-bit command-line builds by means of the @file{vcvars32.bat} file:
+
+@enumerate
+@item
+At the command prompt, change to the @file{\bin} subdirectory of your
+Visual C++ installation.
+
+@item
+Run @file{vcvars32.bat} by typing @code{VCVARS32}.
+@end enumerate
+
+Then change to your application folder @file{<MYAPPDIR>}) that
+contains your source file(s) (C or C++).
+Assume you have one C source file @file{example.c}. Then you can
+compile and link your executable by
+
+@example 
+cl /O2 /W3 /MD /I<UNURANDIR> example.c @value{LIBUNURAN}.lib /link /LIBPATH:<UNURANDIR>
+@end example
+
+which creates the file @file{example.exe}.
+
+When you want to run @file{example} then the location of the DLL 
+@value{LIBUNURAN}.dll (and that of the C run-time library
+@file{msvcr80.dll}) have to be included in the environment variable
+@env{PATH} (or you need to locate these DLLs in the same directory).
+
+
+@c --------------------------------------------------------------------
+
+@node Examples, Example1, CLI, TOP
+@chapter  Two Examples
+
+Here we give small examples. These show
+
+@itemize
+@item
+How to seed the seed for the 
+@uref{http://statmath.wu.ac.at/software/RngStreams,RngStreams}
+library.
+
+@item
+How to create an UNU.RAN generator for a given target distribution.
+For more detailed information we refer to the 
+@uref{http://statmath.wu.ac.at/unuran/doc/unuran.html,UNU.RAN manual}.
+
+@item
+How to use an independent stream of uniform random numbers for one of
+these UNU.RAN generators.
+
+@item
+We demonstrate the usage of the easy to use String API.
+
+@item
+We furthermore show the same example with the more flexible C API.
+@end itemize
+
+@menu
+* Example1:: The String API
+* Example2:: The C API
+@end menu
+
+
+@c --------------------------------------------------------------------
+
+@node Example1, Example2, Examples, Examples
+@section  The String API
+
+@smallexample
+@include ref_example_win32_1.texi
+@end smallexample
+
+
+@c --------------------------------------------------------------------
+
+@node Example2, , Example1, Examples
+@section  The C API
+
+@smallexample
+@include ref_example_win32_2.texi
+@end smallexample
+
+@c --------------------------------------------------------------------
+@bye

@@ -1,0 +1,469 @@
+
+=NODE Intro Introduction
+=UP TOP [10]
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODE  UsageDoc	 Usage of this document
+=UP  Intro [20]
+
+=DESCRIPTION
+   We designed this document in a way such that one can
+   use UNU.RAN with reading as little as necessary.
+   Read @ref{Installation} for the instructions to
+   install the library.
+   @ref{Concepts,,Concepts of UNU.RAN},
+   discribes the basics of UNU.RAN.
+   It also has a short guideline for choosing an appropriate method.
+   In @ref{Examples} examples are given that can be copied and modified.
+   They also can be found in the directory @file{examples} in the
+   source tree.
+
+   Further information are given in consecutive chapters.
+   @ref{Distribution_objects,,Handling distribution objects},
+   describes how to create and manipulate distribution objects.
+   @ref{Stddist,,standard distributions},
+   describes predefined distribution objects that are ready to use.
+   @ref{Methods} describes the various methods in detail.
+   For each of possible distribution classes 
+   (continuous, discrete, empirical, multivariate)
+   there exists a short overview section that can be used to choose an
+   appropriate method followed by sections that describe each of the
+   particular methods in detail.
+   These are merely for users with some knowledge about
+   the methods who want to change method-specific parameters and can
+   be ignored by others.
+
+   Abbreviations and explanation of some basic terms can be found in
+   @ref{Glossary}.
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODE  UsageLib	 Using the library
+=UP Intro [40]
+
+=DESCRIPTION
+
+   @subsubheading ANSI C Compliance
+
+   The library is written in ANSI C and is intended to conform to the
+   ANSI C standard.  It should be portable to any system with a
+   working ANSI C compiler.
+
+   The library does not rely on any non-ANSI extensions in the
+   interface it exports to the user.  Programs you write using UNU.RAN
+   can be ANSI compliant.  Extensions which can be used in a way
+   compatible with pure ANSI C are supported, however, via conditional
+   compilation.	 This allows the library to take advantage of compiler
+   extensions on those platforms which support them. 
+
+   To avoid namespace conflicts all exported function names and
+   variables have the prefix @code{unur_}, while exported macros have
+   the prefix @code{UNUR_}.
+
+
+   @subsubheading Compiling and Linking
+
+   If you want to use the library you must include the UNU.RAN header
+   file
+
+   @example
+      #include <unuran.h>
+   @end example
+
+   @noindent
+   If you also need the test routines then also add
+
+   @example
+      #include <unuran_tests.h>
+   @end example
+
+   @noindent
+   If wrapper functions for external sources of uniform random number
+   generators are used, the corresponding header files must also be
+   included, e.g.,
+
+   @example
+      #include <unuran_urng_rngstream.h>
+   @end example
+
+   @noindent
+   If these header files are not installed on the standard search path
+   of your compiler you will also need to provide its location to the
+   preprocessor as a command line flag.	 The default location of the
+   @file{unuran.h} is @file{/usr/local/include}.  A typical compilation
+   command for a source file @file{app.c} with the GNU C compiler
+   @code{gcc} is,
+
+   @example
+      gcc -I/usr/local/include -c app.c
+   @end example
+
+   @noindent
+   This results in an object file @file{app.o}.	 The default include
+   path for @code{gcc} searches @file{/usr/local/include}
+   automatically so the @code{-I} option can be omitted when UNU.RAN is
+   installed in its default location.
+
+   The library is installed as a single file, @file{libunuran.a}.  A
+   shared version of the library is also installed on systems that
+   support shared libraries.  The default location of these files is
+   @file{/usr/local/lib}.  To link against the library you need to
+   specify the main library.  The following example shows how to link
+   an application with the library (and the the RNGSTREAMS library if you
+   decide to use this source of uniform pseudo-random numbers), 
+
+   @example
+      gcc app.o -lunuran -lrngstreams -lm
+   @end example
+
+
+   @subsubheading Shared Libraries
+
+   To run a program linked with the shared version of the library it
+   may be necessary to define the shell variable
+   @code{LD_LIBRARY_PATH} to include the directory where the library
+   is installed.  For example, 
+
+   @example
+      LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+   @end example
+
+   @noindent
+   To compile a statically linked version of the program instead, use the
+   @code{-static} flag in @code{gcc},
+
+   @example
+      gcc -static app.o -lunuran -lrngstreams -lm
+   @end example
+
+
+   @subsubheading Compatibility with C++
+
+   The library header files automatically define functions to have
+   @code{extern "C"} linkage when included in C++ programs.
+
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODE  Concepts Concepts of UNU.RAN
+=UP Intro [50]
+
+=DESCRIPTION
+   UNU.RAN is a C library for generating non-uniformly distributed
+   random variates. Its emphasis is on the generation of non-standard
+   distribution and on streams of random variates of special purposes.
+   It is designed to provide a consistent tool to 
+   sample from distributions with various properties. 
+   Since there is no universal method that fits for all situations,
+   various methods for sampling are implemented.
+
+   UNU.RAN solves this complex task by means of an object oriented
+   programming interface. Three basic objects are used:
+
+   @itemize @bullet
+   @item distribution object @code{UNUR_DISTR}@*
+      Hold all information about the random variates that should be
+      generated.
+
+   @item generator object @code{UNUR_GEN}@*
+      Hold the generators for the given distributions.
+      Two generator objects are completely independent of each other.
+      They may share a common uniform random number generator or have
+      their owns.
+
+   @item parameter object @code{UNUR_PAR}@*
+      Hold all information for creating a generator object. It is
+      necessary due to various parameters and switches for each of
+      these generation methods. 
+
+      Notice that the parameter objects only hold pointers to arrays
+      but do not have their own copy of such an array. 
+      Especially, if a dynamically allocated array is used
+      it @emph{must not} be freed until the generator object has
+      been created!
+   
+   @end itemize
+
+   The idea behind these structures is that creatin distributions, 
+   choosing a generation method and draing samples are orthogonal
+   (ie. independent) functions of the library. 
+   The parameter object is only introduced due to the necessity to
+   deal with various parameters and switches for
+   each of these generation methods which are required to adjust the
+   algorithms to unusual distributions with extreme properties but
+   have default values that are suitable for most applications.
+   These parameters and the data for distributions are set by various
+   functions.
+
+   Once a generator object has been created sampling (from the
+   univariate continuous distribution) can be done by
+   the following command:
+
+   @example
+      double x = unur_sample_cont(generator);
+   @end example
+
+   @noindent
+   Analogous commands exist for discrete and multivariate
+   distributions.
+   For detailed examples that can be copied and modified
+   see @ref{Examples}.
+
+
+   @subheading Distribution objects
+   
+   All information about a distribution are stored in objects
+   (structures) of type @code{UNUR_DISTR}.
+   UNU.RAN has five different types of distribution objects:
+
+   @table @code
+   @item cont
+      Continuous univariate distributions.
+   @item cvec
+      Continuous multivariate distributions.
+   @item discr
+      Discrete univariate distributions.
+   @item cemp
+      Continuous empirical univariate distribution, ie. given by a sample.
+   @item cvemp
+      Continuous empirical multivariate distribution, ie. given by a sample.
+   @item matr
+      Matrix distributions.
+
+   @end table
+
+   @noindent
+   Distribution objects can be
+   created from scratch by the following call
+
+   @example
+      distr = unur_distr_<type>_new();
+   @end example
+
+   @noindent
+   where @code{<type>} is one of the five possible types from the
+   above table.
+   Notice that these commands only create an @emph{empty} object which
+   still must be filled by means of calls for each type of
+   distribution object
+   (@pxref{Distribution_objects,,Handling distribution objects}).
+   The naming scheme of these functions is designed to indicate the
+   corresponding type of the distribution object and the task to be
+   performed. It is demonstated on the following example.
+
+   @example
+     unur_distr_cont_set_pdf(distr, mypdf);
+   @end example
+
+   @noindent
+   This command stores a PDF named @code{mypdf} in the distribution
+   object @code{distr} which must have the type @code{cont}.
+
+   Of course UNU.RAN provides an easier way to use standard distributions.
+   Instead of using @command{unur_distr_<type>_new} calls and fuctions
+   @command{unur_distr_<type>_set_<@dots{}>} for setting data,
+   objects for standard distribution can be created by a single call.
+   Eg. to get an object for the normal distribution with mean 2 and
+   standard deviation 5 use
+
+   @example
+      double parameter[2] = @{2.0 ,5.0@};
+      UNUR_DISTR *distr = unur_distr_normal(parameter, 2);
+   @end example
+
+   @noindent
+   For a list of standard distributions
+   see @ref{Stddist,,Standard distributions}.
+
+
+   @subheading Generation methods
+
+   The information that a distribution object must contain depends
+   heavily on the chosen generation method choosen.
+
+   Brackets indicate optional information while a tilde indicates
+   that only an approximation must be provided.
+   See @ref{Glossary}, for unfamiliar terms.
+
+   @include methods_cont.texi
+
+   @include methods_cemp.texi
+
+   @include methods_cvec.texi
+
+   @include methods_cvemp.texi
+
+   @include methods_discr.texi
+
+   @include methods_matr.texi
+
+   @include methods_mcmc.texi
+
+   Because of tremendous variety of possible problems, UNU.RAN provides many
+   methods. All information for creating a generator object has to be
+   collected in a parameter object first.
+   For example, if the task is to sample from a continuous distribution
+   the method AROU might be a good choice. Then the call
+
+   @example
+      UNUR_PAR *par = unur_arou_new(distribution);
+   @end example
+
+   @noindent
+   creates an parameter object @code{par} with a pointer to the
+   distribution object and default values for all necessary parameters
+   for method AROU.
+   Other methods can be used by replacing @code{arou} with the name
+   of the desired methods (in lower case letters):
+
+   @example
+      UNUR_PAR *par = unur_<method>_new(distribution);
+   @end example
+
+   @noindent
+   This sets the default values for all necessary parameters for the
+   chosen method. These are suitable for almost all
+   applications. Nevertheless, it is possible to control the behavior
+   of the method using corresponding @command{set} calls for each method.
+   This might be necessary to adjust the algorithm for an unusual
+   distribution with extreme properties, or just for fine tuning the
+   perforence of the algorithm.
+   The following example demonstrates how to change the maximum
+   number of iterations for method NINV to the value 50:
+
+   @example
+      unur_ninv_set_max_iteration(par, 50);
+   @end example
+
+   @noindent
+   All available methods are described in details in 
+   @ref{Methods}.
+  
+
+   @subheading Creating a generator object
+
+   Now it is possible to create a generator object:
+
+   @example
+      UNUR_GEN *generator = unur_init(par);
+      if (generator == NULL) exit(EXIT_FAILURE);
+   @end example
+
+   @noindent
+   @strong{Important:} You must always check whether unur_init() has
+   been executed successfully. Otherwise the NULL pointer is returned
+   which causes a segmentation fault when used for sampling.
+
+   @noindent
+   @strong{Important:}
+   The call of unur_init() @strong{destroys} the parameter object!@*
+   Moreover, it is recommended to call unur_init() immediately after
+   the parameter object @code{par} has created and modified.
+
+   An existing generator object is a rather static construct.
+   Nevertheless, some of the parameters can still be modified by
+   @command{chg} calls, e.g.
+
+   @example
+      unur_ninv_chg_max_iteration(gen, 30);
+   @end example
+  
+   @noindent
+   Notice that it is important @emph{when} parameters are
+   changed because different functions must be used:
+
+   The function name includes the term @command{set} and the first
+   argument must be of type @code{UNUR_PAR} when the parameters are
+   changed @emph{before} the generator object is created.
+
+   The function name includes the term @command{chg} and the first
+   argument must be of type @code{UNUR_GEN} when the parameters are
+   changed for an @emph{existing} generator object.
+
+   For details see @ref{Methods}.
+
+
+   @subheading Sampling
+
+   You can now use your generator object in any place of your program
+   to sample from your distribution. You only have to take care about
+   the type of variates it computes: @code{double}, @code{int} or a 
+   vector (array of @code{double}s). 
+   Notice that at this point it does not matter whether you are
+   sampling from a gamma distribution, a truncated normal distribution
+   or even an empirical distribution.
+
+
+   @subheading Reinitializing
+
+   It is possible for a generator object to change the parameters and
+   the domain of the underlying distribution. This must be done by
+   extracting this object by means of a unur_get_distr() call and
+   changing the distribution using the correspondig set calls, 
+   see @ref{Distribution_objects,,Handling distribution objects}.
+   The generator object @strong{must} then be reinitialized by means
+   of the unur_reinit() call.
+
+   @emph{Important}: Currently not all methods allow reinitialization,
+   see the description of the particular method (keyword @i{Reinit}).
+
+
+   @subheading Destroy
+
+   When you do not need your generator object any more, you should
+   destroy it:
+
+   @example
+      unur_free(generator);
+   @end example
+
+   
+   @subheading Uniform random numbers
+
+   Each generator object can have its own uniform random number
+   generator or share one with others.
+   When created a parameter object the pointer for the uniform random
+   number generator is set to the default generator. However, it can be
+   changed at any time to any other generator:
+
+   @example
+      unur_set_urng(par, urng);
+   @end example
+
+   @noindent
+   or
+
+   @example
+      unur_chg_urng(generator, urng);
+   @end example
+
+   @noindent
+   respectively.
+   See @ref{URNG,,Using uniform random number generators},
+   for details.
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+=NODE  Contact Contact the authors
+=UP  Intro [60]
+
+=DESCRIPTION
+   If you have any problems with UNU.RAN, suggestions how to improve
+   the library, or find a bug, please contact us via email
+   @email{unuran@@statmath.wu.ac.at}.
+
+   For news please visit out homepage at
+   @uref{http://statmath.wu.ac.at/unuran/}.
+
+=EON
+
+/*---------------------------------------------------------------------------*/
+
+

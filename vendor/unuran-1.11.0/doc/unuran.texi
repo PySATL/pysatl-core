@@ -1,0 +1,74 @@
+\input texinfo   @c -*-texinfo-*-
+
+@c %**start of header
+@setfilename unuran.info
+@settitle    UNU.RAN User Manual
+@iftex
+@afourpaper
+@end iftex
+@footnotestyle end
+@setchapternewpage odd
+@c %**end of header
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Some data about this software
+@c 
+
+@dircategory Scientific software
+@direntry
+* unuran: (unuran).  UNU.RAN -- Universal Non-Uniform Random number generator
+@end direntry
+
+@c Version ...
+@include version.texi
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Copyright
+@c 
+
+@copying
+@noindent
+Copyright @copyright{} 2000--2012 Institut fuer Statistik, WU Wien.
+
+@noindent
+Permission is granted to make and distribute verbatim
+copies of this manual provided the copyright notice and
+this permission notice are preserved on all copies.
+@end copying
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Titlepage ...
+@c 
+
+@titlepage
+@title UNU.RAN User Manual
+@subtitle Generating non-uniform random numbers
+@subtitle Version @value{VERSION}, @value{UPDATED}
+
+@author Josef Leydold
+@author Wolfgang H@"ormann
+
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c Table of contents
+@c 
+
+@contents
+
+@c ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@c 
+@c insert automatically generated documentation ...
+@c 
+
+@include unuran_src.texi
+
+@c --------------------------------------------------------------------
+@bye

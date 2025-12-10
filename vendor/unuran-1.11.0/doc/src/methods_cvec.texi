@@ -1,0 +1,11 @@
+@cartouche
+@noindent
+Methods for @b{continuous multivariate distributions}@*
+sample with @command{unur_sample_vec}
+
+@noindent
+NORTA: Requires rank correlation matrix and marginal distributions. @*
+VNROU: Requires the PDF. @*
+MVSTD: Generator for built-in standard distributions.  @*
+MVTDR: Requires PDF and gradiant of PDF.
+@end cartouche

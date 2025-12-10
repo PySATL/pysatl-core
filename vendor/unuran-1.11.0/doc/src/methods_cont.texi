@@ -1,0 +1,26 @@
+@cartouche
+@noindent 
+Methods for @b{continuous univariate distributions}@*
+sample with @command{unur_sample_cont}
+
+@multitable {method} {PDF} {dPDF} {CDF} {mode} {area} {build-in standard distributionxx}
+@item method @tab PDF @tab dPDF @tab CDF  @tab mode @tab area @tab other
+@item AROU   @tab  x  @tab  x   @tab      @tab  [x] @tab      @tab T-concave
+@item ARS    @tab  x  @tab  x   @tab      @tab      @tab      @tab T-concave
+@item CEXT   @tab     @tab      @tab      @tab      @tab      @tab wrapper for external generator
+@item CSTD   @tab     @tab      @tab      @tab      @tab      @tab build-in standard distribution
+@item HINV   @tab [x] @tab [x]  @tab  x   @tab      @tab      @tab
+@item HRB    @tab     @tab      @tab      @tab      @tab      @tab bounded hazard rate
+@item HRD    @tab     @tab      @tab      @tab      @tab      @tab decreasing hazard rate
+@item HRI    @tab     @tab      @tab      @tab      @tab      @tab increasing hazard rate
+@item ITDR   @tab  x  @tab  x   @tab      @tab   x  @tab      @tab monotone with pole
+@item NINV   @tab [x] @tab      @tab  x   @tab      @tab      @tab
+@item NROU   @tab  x  @tab      @tab      @tab  [x] @tab      @tab 
+@item PINV   @tab  x  @tab      @tab [x]  @tab  [~] @tab      @tab 
+@item SROU   @tab  x  @tab      @tab      @tab   x  @tab   x  @tab T-concave
+@item SSR    @tab  x  @tab      @tab      @tab   x  @tab   x  @tab T-concave
+@item TABL   @tab  x  @tab      @tab      @tab   x  @tab  [~] @tab all local extrema
+@item TDR    @tab  x  @tab  x   @tab      @tab      @tab      @tab T-concave
+@item UTDR   @tab  x  @tab      @tab      @tab   x  @tab   ~  @tab T-concave
+@end multitable
+@end cartouche

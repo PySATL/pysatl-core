@@ -1,0 +1,16 @@
+@cartouche
+@noindent 
+Methods for @b{discrete univariate distributions}@*
+sample with @command{unur_sample_discr}
+
+@multitable {method} {PMF} {PV} {mode} {area} {build-in standard distribution}
+@item method@tab PMF @tab  PV @tab mode @tab sum @tab other
+@item DARI  @tab  x  @tab     @tab  x   @tab  ~  @tab T-concave
+@item DAU   @tab [x] @tab  x  @tab      @tab     @tab 
+@item DEXT  @tab     @tab     @tab      @tab     @tab wrapper for external generator
+@item DGT   @tab [x] @tab  x  @tab      @tab     @tab 
+@item DSROU @tab  x  @tab     @tab  x   @tab  x  @tab T-concave
+@item DSS   @tab [x] @tab  x  @tab      @tab  x  @tab 
+@item DSTD  @tab     @tab     @tab      @tab     @tab build-in standard distribution
+@end multitable
+@end cartouche

@@ -1,0 +1,247 @@
+
+(*) Simple Markups and TAGs
+    =======================
+
+Great parts of the UNU.RAN User Manual are generated automatically from
+the library header files by means of the make_texi.pl script.
+
+Thus all files in the unuran tree that end in .h or .dh are scanned.
+(Files ending in .dh are files header files that only contains
+documentation.)
+
+Simple markups (TAGs) are used to indicate relevant parts.
+A TAG has the regular expression  /^\s+=[A-Z]+/, i.e. `=' followed by
+some capital letters.
+(C comment strings `/*' are ignored.)
+
+The body of the documentation uses texinfo with some additional macros
+(see below).
+
+There are some switches in ./doc/src/make_texi.pl:
+
+ (*) $PAGEBREAKS: When set to 1 (non-nil) pagebreaks are inserts before 
+     each =METHOD and =NODEX tag.
+
+ (*) $LISTOFCALLS: When set to 1 (non-nil) lists of functions calls 
+     (with hyperlinks) are added to top of Function Reference sections
+     in the HTML version of the manual.
+
+
+(*) Nodes
+    =====
+
+Nodes start with a node TAG and contain everything until the next 
+=EON TAG (`End-Of-Node') or end of file.
+
+Valid node TAGs are
+
+	=TOP		for the top node
+	=DISTR          for handling distribution objects
+	=METHOD         for generation methods
+	=APPENDIX       for nodes in the appendix
+	=NODE           generic node
+	=NODEX          generic node, starts new page
+
+A header file that has no such TAG or with a different first TAG is
+ignored and not included into the documentation.
+
+Node TAGs must have two arguments:
+The first word is the name of the node and must be unique in the
+entire documentation.
+The remaining part of the line is treated as the node title,
+used for the texinfo sectioning commands.
+These two parts are used AS IS by texinfo.
+
+
+(*) Section TAGs
+    ============
+
+TAGs are used to scan the node and partition it into sections. A
+node section starts with a TAG and ends with the line before the next
+TAG (or end of file). It depends on the TAG how the read text is
+processed further.
+
+The following TAGs are valid:
+
+=END 	The corresponding node section is simply ignored. Thus it can
+	be used as end markup of a subsection (thus its name).
+
+=UP	Required!
+	the first word is the super node, i.e. the node to which it is
+	a subnode. 
+	It might be followed (optionally) by anything with the regular
+	expression /\[\w+\]/, e.g. [14a].
+	It is used to sort subnodes (lexicographically ordering of the
+	string between the brachets is used).
+	If it is omitted the node name is used instead.
+
+=REQUIRED	List of required parameters.
+	Contains a list of parameter that are required for the method.
+
+=OPTIONAL	List of optional parameters.
+	Contains a list of parameters that are optional for the
+	method.
+
+=SPEED  Generation speed of generator method.
+
+=SEEALSO	Similar methods.
+	List of methods that work similar as this method.	
+	(not implemented yet)
+
+=ABSTRACT	Abstract.
+	A very short description of method. Used in an overview.
+	(not implemented yet)
+
+=REF	References for method or distribution.
+	Each reference has to be enclosed in square brackets 
+	"[ ... ]". More than one reference can given; but then only 
+	white space characters are allowed to separate them.
+	The format for the entries within the square brackets 
+	is the same as for the @unurbibref macro (see below).
+
+=PDF    PDF of distribution.
+
+=PMF    PMF of distribution.
+
+=CONST  Area below PDF or sum over PMF.
+
+=DOMAIN	Domain of PDF or PMF.
+
+=FPARAM	List of parameters of distribution.
+	Parameters must be given in the correct ordering.
+	Every line contains a parameter.
+	It is described by 5 fields which terminated by a colon `:'.
+	Eg:
+	    0    : alpha : > 0 :   : shape    :
+           [1]   : beta  : > 0 : 1 : scale    :
+	  [[2]]  : gamma :     : 0 : location :
+	
+	The first field is the number of the parameter. Square brackets
+	are used to indicate optional parameters. In this example
+	alpha is required. Alternative alpha and beta 
+	or alpha, beta and gamma can be provided.
+
+	The second field is the name of the parameter as it is
+	used in the =PDF, =CONSTANT and =DOMAIN subsections.
+	
+	The third field gives condition for the range of valid parameters.
+
+	The forth field gives the default value for optional parameters,
+	that are used when these are omitted.
+
+	The last field is a short description of the parameter.
+
+=STDGEN List of special generator for (UNU.RAN) standard distributions.
+	Each special generator must be given in one line.
+	The first entry is the identy for the special generator as given for
+	the unur_cstd_set_variant() and unur_dstd_set_variant() call.
+	Use DEF and INV as abbreviations for UNUR_STDGEN_DEFAULT and
+	UNUR_STDGEN_INVERSION, respectively. References must be given
+	in square brackets [...] as the last entry. Anything after the
+	references is ignored.
+	
+=DESCRIPTION	Discription of method. Can be used to print any text.
+
+=ROUTINES	Function reference.
+	List of all subroutines.
+	The text is formated in the following way:
+
+	lines starting with `#' are ignored.
+
+	The text consists of blocks which are separated by one or more
+	blank lines outside of C comments (everything within a C
+	comment is treated as a single line).
+	In particular blocks end at a `*/' followed by an empty line.
+
+	IMPORTANT:
+	A function with no description should be immediately followed
+	by `/* */' (on the next line).
+
+	All C comment markers `/*' and `*/' are removed.
+
+	A block that started with a C type declaration is treated as a
+	function prototype. Anything below the `;' till the end of the
+	block is interpreted as the function description.
+
+	An anchor will be made for each function using the key:
+	funct.<fn_name>, 
+	e.g. `funct.unur_set_urng' for function unur_set_urng.
+
+	If there is a function prototype with additional lines, it is
+	assumed that it has the same description as the following
+	function. (This is done recursively until a function prototype
+	with description is found.)
+
+	A "function prototype" without any arguments (with or without 
+	braces `( )' )is treated as a variable.
+
+	A block that starts with a `==DOC' is copied verbatim into the
+	texi file. (Notice that `==DOC' is not a TAG as described
+	above).
+
+=OBSOLETE	Functions that are obsolete and not documented any
+	more, but are still in the code for compatibility should be 
+	put after this tag. Notice that the regular expression for
+        finding this tag is {/\*\s*=OBSOLETE.*$}. Everything after
+	this tag is removed (and is not even part of the string API).
+
+
+(*) Common Transformation Rules
+    ===========================
+
+To avoid spoiling the header file with to many texinfo tags, the following
+transformations are made during file procession:
+
+NULL        --> @code{NULL}
+TRUE        --> @code{TRUE}
+FALSE       --> @code{FALSE}
+
+(\w+)\(\)   --> @command($1)
+		eg.: unur_set_urng()  --> @command{unur_set_urng}.
+		additionally hyperlinks are made automatically to
+		its definition in HTML output
+		(and in TeX and info with some restrictions).
+		NOTICE: there must not be blanks between the 
+		function name and `(' or the braces!
+
+to insert C comment sign into a header file use
+@cc_start   -->   /*
+@cc_stop    -->   */
+
+
+(*) Special Bibtex Macros
+    =====================
+
+There are a few additional texinfo macros. These start with @unur
+and are expanded by the make_texi.pl script and not passed directly to
+makeinfo. 
+
+@unurbibref	makes a reference to a book or journal listed in
+	references.dh. It only contains one such reference. If more
+	references are necessary then a series of such macros is
+	needed. The entry must be the corresponding anchor in the
+	reference.dh file. (The format in this file should be clear
+	from the other entries that already exist.)
+	Additional remarks, like "Sect.5" or "p.234" can follow but
+	must be separated by a colon ":". You are not allowed to use a
+	curly bracket "{" or "}". A comma "," is automatically
+	replaced by a semicolon. 
+	(These restrictions are due to texinfo).
+
+@unurimage	same as @image. But it will be easier to add vertical 
+	spaces later.
+
+@unurmath	same as @math. But we can use a more sophisticated 
+	typesetting (once upon a time in the future).
+	Warning: making documantation fails when unknown TeX macros 
+	appears, i.e., whenever new macros are used the make_texi.pl 
+	script must be modified (see function transform_tex()).
+
+	There are some differences to plain TeX:
+	 - use LaTeX-style \\ for new line (line break)
+
+	Notice: a trailing point or comma should be inside this macro
+	to avoid strang formating.
+
+@unurmathdisplay
+	diplaymode analog of @unurmath.
