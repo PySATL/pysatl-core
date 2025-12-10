@@ -5,7 +5,7 @@ Characteristic Graph Registry
 A directed graph over characteristic names for a fixed
 :class:`~pysatl_core.types.DistributionType`.
 
-- Nodes: ``GenericCharacteristicName``.
+- characteristics: ``GenericCharacteristicName``.
 - Edges: unary :class:`~pysatl_core.distributions.computation.ComputationMethod`
   (``1 source -> 1 target``).
 
@@ -14,6 +14,11 @@ indefinitive" semantics:
 
 Invariants
 ----------
+1. There is at least one *definitive* characteristic.
+2. The subgraph induced by the *definitive* characteristics is **strongly connected**.
+3. Every *indefinitive* characteristic is reachable from at least one *definitive* characteristic.
+4. No path from any *indefinitive* characteristic back to any *definitive* characteristic
+is allowed.
 1. There is at least one *definitive* node.
 2. The subgraph induced by the *definitive* nodes is **strongly connected**.
 3. Every *indefinitive* node is reachable from at least one *definitive* node.

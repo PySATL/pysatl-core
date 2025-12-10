@@ -1,3 +1,15 @@
+"""
+UNU.RAN API Specification
+========================
+
+This module defines the complete API specification for UNU.RAN integration.
+The interfaces described here will be implemented through C bindings to the
+UNU.RAN library.
+
+The API is designed to integrate seamlessly with the existing distribution
+sampling infrastructure in pysatl_core.
+"""
+
 from __future__ import annotations
 
 __author__ = "Artem Romanyuk"
@@ -14,6 +26,8 @@ import numpy.typing as npt
 if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.distributions.sampling import Sample
+
+from pysatl_core.types import Kind
 
 
 class UnuranMethod(StrEnum):
