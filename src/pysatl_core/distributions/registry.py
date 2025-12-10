@@ -320,6 +320,16 @@ class GenericCharacteristicRegister:
                     q.append(w)
         return seen
 
+    def reachable_from(
+        self,
+        start: GenericCharacteristicName,
+        allowed: set[GenericCharacteristicName] | None = None,
+    ) -> set[GenericCharacteristicName]:
+        """
+        Return all nodes reachable from ``start`` via graph traversal.
+        """
+        return self._reachable_from(start, allowed)
+
     def _reverse_adj(
         self,
     ) -> dict[GenericCharacteristicName, dict[GenericCharacteristicName, bool]]:
