@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from pathlib import Path
 from cffi import FFI
 
@@ -43,6 +42,9 @@ ffi.cdef("""
     int unur_distr_discr_set_cdf(UNUR_DISTR distribution, double (*cdf)(int, const struct unur_distr*));
     int unur_distr_discr_set_pv(UNUR_DISTR distribution, const double* pv, int n_pv);
     int unur_distr_discr_set_pmfparams(UNUR_DISTR distribution, const double* params, int n_params);
+    int unur_distr_discr_set_domain(UNUR_DISTR distribution, int left, int right);
+    int unur_distr_discr_set_pmfsum(UNUR_DISTR distribution, double sum);
+    int unur_distr_discr_make_pv(UNUR_DISTR distribution);
     
     UNUR_PAR unur_arou_new(const UNUR_DISTR distribution);
     UNUR_PAR unur_tdr_new(const UNUR_DISTR distribution);
@@ -164,55 +166,53 @@ def _build_unuran_library(unuran_dir: Path, build_dir: Path) -> tuple[Path | Non
     _print("Warning: Built library not found, will try to link with system library")
     return None, unuran_dir / "src"
 
+def main():
+    unuran_dir, unuran_src = _get_unuran_paths()
+    build_dir = unuran_dir.parent / "unuran-build"
 
-unuran_dir, unuran_src = _get_unuran_paths()
-build_dir = unuran_dir.parent / "unuran-build"
+    static_lib, include_dir = _build_unuran_library(unuran_dir, build_dir)
 
-static_lib, include_dir = _build_unuran_library(unuran_dir, build_dir)
-
-if static_lib and static_lib.exists():
-    _print(f"Using static library: {static_lib}")
-    ffi.set_source(
-        "_unuran_cffi",
-        """
-        #include "unuran.h"
-        """,
-        extra_objects=[str(static_lib)],
-        include_dirs=[str(include_dir)],
-        libraries=[],
-        extra_compile_args=["-std=c99", "-O2"],
-    )
-else:
-    import ctypes.util
-    system_lib = ctypes.util.find_library("unuran")
-    
-    if system_lib:
-        _print(f"Using system library: {system_lib}")
+    if static_lib and static_lib.exists():
+        _print(f"Using static library: {static_lib}")
         ffi.set_source(
             "_unuran_cffi",
             """
             #include "unuran.h"
             """,
-            libraries=["unuran"],
+            extra_objects=[str(static_lib)],
             include_dirs=[str(include_dir)],
-            library_dirs=[os.path.dirname(system_lib)] if system_lib else [],
+            libraries=[],
+            extra_compile_args=["-std=c99", "-O2"],
         )
     else:
-        _print("Warning: No pre-built library found, attempting direct source compilation")
-        _print("This may fail due to complex dependencies. Consider building UNURAN first.")
+        import ctypes.util
+        system_lib = ctypes.util.find_library("unuran")
         
-        ffi.set_source(
-            "_unuran_cffi",
-            """
-            #include "unuran.h"
-            """,
-            include_dirs=[str(include_dir)],
-            libraries=["unuran"],
-            extra_compile_args=["-std=c99"],
-        )
+        if system_lib:
+            _print(f"Using system library: {system_lib}")
+            ffi.set_source(
+                "_unuran_cffi",
+                """
+                #include "unuran.h"
+                """,
+                libraries=["unuran"],
+                include_dirs=[str(include_dir)],
+                library_dirs=[os.path.dirname(system_lib)] if system_lib else [],
+            )
+        else:
+            _print("Warning: No pre-built library found, attempting direct source compilation")
+            _print("This may fail due to complex dependencies. Consider building UNURAN first.")
+            
+            ffi.set_source(
+                "_unuran_cffi",
+                """
+                #include "unuran.h"
+                """,
+                include_dirs=[str(include_dir)],
+                libraries=["unuran"],
+                extra_compile_args=["-std=c99"],
+            )
 
-
-if __name__ == "__main__":
     _print("Compiling CFFI bindings for UNURAN...")
     _print(f"UNURAN source directory: {unuran_src}")
     _print(f"Include directory: {include_dir}")
@@ -220,3 +220,8 @@ if __name__ == "__main__":
         _print(f"Static library: {static_lib}")
     ffi.compile(verbose=True)
     _print("Compilation complete!")
+
+
+if __name__ == "__main__":
+    main()
+    
