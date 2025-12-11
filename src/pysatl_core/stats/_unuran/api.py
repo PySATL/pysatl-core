@@ -1,15 +1,3 @@
-"""
-UNU.RAN API Specification
-========================
-
-This module defines the complete API specification for UNU.RAN integration.
-The interfaces described here will be implemented through C bindings to the
-UNU.RAN library.
-
-The API is designed to integrate seamlessly with the existing distribution
-sampling infrastructure in pysatl_core.
-"""
-
 from __future__ import annotations
 
 __author__ = "Artem Romanyuk"
@@ -26,8 +14,6 @@ import numpy.typing as npt
 if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.distributions.sampling import Sample
-
-from pysatl_core.types import Kind
 
 
 class UnuranMethod(StrEnum):
@@ -51,6 +37,7 @@ class UnuranMethod(StrEnum):
 
     # Rejection methods
     ARS = "ars"  # Adaptive rejection sampling
+    AROU = "arou"  # Automatic ratio-of-uniforms
     HINV = "hinv"  # Hermite interpolation inversion
     NINV = "ninv"  # Numerical inversion
 
@@ -177,76 +164,6 @@ class UnuranSampler(Protocol):
         """Whether the sampler has been successfully initialized."""
         ...
 
-    @classmethod
-    def create(
-        cls,
-        distr: Distribution,
-        config: UnuranMethodConfig | None = None,
-        **override_options: Any,
-    ) -> UnuranSampler:
-        """
-        Create a UNU.RAN sampler for the given distribution.
-
-        This method delegates to C bindings to UNU.RAN. It analyzes the
-        distribution's available characteristics and creates an appropriate sampler.
-
-        Parameters
-        ----------
-        distr : Distribution
-            The distribution to create a sampler for.
-        config : UnuranMethodConfig | None, optional
-            Method configuration. If ``None``, uses default configuration
-            (auto method selection, PDF allowed, no seed).
-        **override_options : Any
-            Options that override the config:
-            - ``method``: override the method
-            - ``seed``: override the seed
-            - Other method-specific parameters
-
-        Returns
-        -------
-        UnuranSampler
-            A configured sampler instance.
-
-        Raises
-        ------
-        RuntimeError
-            If the distribution type is not supported (currently only univariate
-            continuous and discrete distributions are supported), or if UNU.RAN
-            cannot create a sampler with the available characteristics.
-        ValueError
-            If the configuration or override options are invalid.
-
-        Notes
-        -----
-        - The method queries the distribution's analytical computations and
-          computation strategy to determine available characteristics (PDF, CDF, PPF)
-        - For continuous distributions, PDF is typically required for rejection methods
-        - For discrete distributions, PMF is required
-        - If PPF is available and ``use_ppf=True``, inversion methods are preferred
-        - The actual method selection depends on UNU.RAN's internal heuristics when
-          ``method=AUTO``
-
-        Examples
-        --------
-        Create a sampler with automatic method selection:
-
-            >>> config = UnuranMethodConfig(method=UnuranMethod.AUTO)
-            >>> sampler = UnuranSampler.create(distr, config)
-            >>> variates = sampler.sample(1000)
-
-        Create a sampler with a specific method:
-
-            >>> config = UnuranMethodConfig(
-            ...     method=UnuranMethod.TDR,
-            ...     method_params={"accuracy": 1e-6}
-            ... )
-            >>> sampler = UnuranSampler.create(distr, config)
-        """
-        from pysatl_core.stats._unuran.bindings import create_sampler_impl
-
-        return create_sampler_impl(distr, config, **override_options)
-
 
 class UnuranSamplingStrategy(Protocol):
     """
@@ -298,89 +215,3 @@ class UnuranSamplingStrategy(Protocol):
     def default_config(self) -> UnuranMethodConfig:
         """Default method configuration."""
         ...
-
-def _get_available_characteristics(distr: Distribution) -> set[str]:
-    """
-    Get the set of available characteristic names for a distribution.
-
-    This helper function queries the distribution's analytical computations
-    and uses the characteristic graph to determine all reachable characteristics.
-    
-    The function works by:
-    1. Getting all analytical (base) characteristics from the distribution
-    2. For each analytical characteristic, finding all characteristics reachable
-       through the graph using BFS
-    3. Combining all reachable characteristics into a single set
-
-    Parameters
-    ----------
-    distr : Distribution
-        The distribution to query.
-
-    Returns
-    -------
-    set[str]
-        Set of available characteristic names (e.g., {"pdf", "cdf", "ppf"}).
-        Includes both analytical characteristics and those reachable through
-        the characteristic graph.
-
-    Notes
-    -----
-    - If the distribution has no analytical computations, returns an empty set
-    - The graph is obtained from the distribution type registry
-    - Characteristics are considered "available" if they can be computed either
-      analytically or through graph-based conversions
-    """
-    from pysatl_core.distributions.registry import distribution_type_register
-
-    analytical_chars = set(distr.analytical_computations.keys())
-    
-    if not analytical_chars:
-        return set()
-    
-    reg = distribution_type_register().get(distr.distribution_type)
-    
-    available = set(analytical_chars)
-    
-    for src_char in analytical_chars:
-        reachable = reg.reachable_from(src_char, allowed=None)
-        available.update(reachable)
-    
-    return available
-
-
-def _select_best_method(
-    available_chars: set[str],
-    kind: Kind,
-    config: UnuranMethodConfig,
-) -> UnuranMethod:
-    """
-    Select the best UNU.RAN method based on available characteristics.
-
-    This function implements heuristics for method selection when
-    ``method=AUTO``.
-
-    Parameters
-    ----------
-    available_chars : set[str]
-        Set of available characteristic names.
-    kind : Kind
-        Distribution kind (continuous or discrete).
-    config : UnuranMethodConfig
-        Method configuration.
-
-    Returns
-    -------
-    UnuranMethod
-        The selected method.
-
-    Notes
-    -----
-    - If PPF is available and ``use_ppf=True``, prefer PINV or HINV
-    - If PDF is available, prefer rejection methods (TDR, ARS)
-    - If CDF is available, prefer numerical inversion (NINV)
-    - For discrete distributions, prefer discrete-specific methods
-    """
-    # This will be implemented with method selection heuristics
-    raise NotImplementedError("Helper function for method selection")
-
