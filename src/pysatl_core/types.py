@@ -100,8 +100,11 @@ NumPyNumber = np.floating[Any] | np.integer[Any]
 Number = NumPyNumber | int | float
 """Type alias for all numeric types."""
 
-NumericArray = NDArray[np.floating[Any] | np.integer[Any]]
+NumericArray = NDArray[NumPyNumber]
 """Type alias for numeric arrays."""
+
+ComplexArray = NDArray[np.complexfloating[Any]]
+"""Type alias for complex arrays."""
 
 BoolArray = NDArray[np.bool_]
 """Type alias for boolean arrays."""

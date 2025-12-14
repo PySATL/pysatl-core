@@ -26,7 +26,6 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
-import numpy.typing as npt
 from scipy.special import erf, erfinv
 
 from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
@@ -38,7 +37,13 @@ from pysatl_core.families.parametrizations import (
     parametrization,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.types import CharacteristicName, FamilyName, UnivariateContinuous
+from pysatl_core.types import (
+    CharacteristicName,
+    ComplexArray,
+    FamilyName,
+    NumericArray,
+    UnivariateContinuous,
+)
 
 if TYPE_CHECKING:
     from typing import Any
@@ -78,9 +83,7 @@ def _configure_normal_family() -> None:
     and social sciences as a simple model for complex random phenomena.
     """
 
-    def normal_pdf(
-        parameters: Parametrization, x: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def normal_pdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
         """
         Probability density function for normal distribution.
 
@@ -90,12 +93,12 @@ def _configure_normal_family() -> None:
         Distribution parameters object with fields:
             - mu: float (mean)
             - sigma: float (standard deviation)
-        x : npt.NDArray[np.float64]
+        x : NumericArray
             Points at which to evaluate the probability density function
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Probability density values at points x
         """
         parameters = cast(_MeanStd, parameters)
@@ -106,11 +109,9 @@ def _configure_normal_family() -> None:
         coefficient = 1.0 / (sigma * np.sqrt(2 * np.pi))
         exponent = -((x - mu) ** 2) / (2 * sigma**2)
 
-        return cast(npt.NDArray[np.float64], coefficient * np.exp(exponent))
+        return cast(NumericArray, coefficient * np.exp(exponent))
 
-    def normal_cdf(
-        parameters: Parametrization, x: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def normal_cdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
         """
         Cumulative distribution function for normal distribution.
 
@@ -120,22 +121,20 @@ def _configure_normal_family() -> None:
             Distribution parameters object with fields:
             - mu: float (mean)
             - sigma: float (standard deviation)
-        x : npt.NDArray[np.float64]
+        x : NumericArray
             Points at which to evaluate the cumulative distribution function
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Probabilities P(X ≤ x) for each point x
         """
         parameters = cast(_MeanStd, parameters)
 
         z = (x - parameters.mu) / (parameters.sigma * np.sqrt(2))
-        return cast(npt.NDArray[np.float64], 0.5 * (1 + erf(z)))
+        return cast(NumericArray, 0.5 * (1 + erf(z)))
 
-    def normal_ppf(
-        parameters: Parametrization, p: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def normal_ppf(parameters: Parametrization, p: NumericArray) -> NumericArray:
         """
         Percent point function (inverse CDF) for normal distribution.
 
@@ -145,12 +144,12 @@ def _configure_normal_family() -> None:
             Distribution parameters object with fields:
             - mu: float (mean)
             - sigma: float (standard deviation)
-        p : npt.NDArray[np.float64]
+        p : NumericArray
             Probability from [0, 1]
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Quantiles corresponding to probabilities p
             If p[i] is 0 or 1, then the result[i] is -inf and inf correspondingly
 
@@ -165,14 +164,12 @@ def _configure_normal_family() -> None:
         parameters = cast(_MeanStd, parameters)
 
         result = cast(
-            npt.NDArray[np.float64],
+            NumericArray,
             parameters.mu + parameters.sigma * np.sqrt(2) * erfinv(2 * p - 1),
         )
         return result
 
-    def normal_char_func(
-        parameters: Parametrization, t: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.complex128]:
+    def normal_char_func(parameters: Parametrization, t: NumericArray) -> ComplexArray:
         """
         Characteristic function of normal distribution.
 
@@ -182,19 +179,19 @@ def _configure_normal_family() -> None:
             Distribution parameters object with fields:
             - mu: float (mean)
             - sigma: float (standard deviation)
-        x : npt.NDArray[np.float64]
+        x : NumericArray
             Points at which to evaluate the characteristic function
 
         Returns
         -------
-        npt.NDArray[np.complex128]
+        ComplexArray
             Characteristic function values at points x
         """
         parameters = cast(_MeanStd, parameters)
 
         sigma = parameters.sigma
         mu = parameters.mu
-        return cast(npt.NDArray[np.complex128], np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
+        return cast(ComplexArray, np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
@@ -372,9 +369,7 @@ def _configure_uniform_family() -> None:
     about the possible values of a variable, representing maximum uncertainty.
     """
 
-    def uniform_pdf(
-        parameters: Parametrization, x: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def uniform_pdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
         """
         Probability density function for uniform distribution.
             - For x < lower_bound: returns 0
@@ -387,12 +382,12 @@ def _configure_uniform_family() -> None:
             Distribution parameters object with fields:
             - lower_bound: float (lower bound)
             - upper_bound: float (upper bound)
-        x : npt.NDArray[np.float64]
+        x : NumericArray
             Points at which to evaluate the probability density function
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Probability density values at points x
         """
         parameters = cast(_Standard, parameters)
@@ -404,9 +399,7 @@ def _configure_uniform_family() -> None:
             (x >= lower_bound) & (x <= upper_bound), 1.0 / (upper_bound - lower_bound), 0.0
         )
 
-    def uniform_cdf(
-        parameters: Parametrization, x: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def uniform_cdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
         """
         Cumulative distribution function for uniform distribution.
         Uses np.clip for vectorized computation:
@@ -419,12 +412,12 @@ def _configure_uniform_family() -> None:
             Distribution parameters object with fields:
             - lower_bound: float (lower bound)
             - upper_bound: float (upper bound)
-        x : npt.NDArray[np.float64]
+        x : NumericArray
             Points at which to evaluate the cumulative distribution function
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Probabilities P(X ≤ x) for each point x
         """
         parameters = cast(_Standard, parameters)
@@ -432,11 +425,11 @@ def _configure_uniform_family() -> None:
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
 
-        return np.clip((x - lower_bound) / (upper_bound - lower_bound), 0.0, 1.0)
+        return cast(
+            NumericArray, np.clip((x - lower_bound) / (upper_bound - lower_bound), 0.0, 1.0)
+        )
 
-    def uniform_ppf(
-        parameters: Parametrization, p: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
+    def uniform_ppf(parameters: Parametrization, p: NumericArray) -> NumericArray:
         """
         Percent point function (inverse CDF) for uniform distribution.
 
@@ -451,12 +444,12 @@ def _configure_uniform_family() -> None:
             Distribution parameters object with fields:
             - lower_bound: float (lower bound)
             - upper_bound: float (upper bound)
-        p : npt.NDArray[np.float64]
+        p : NumericArray
             Probability from [0, 1]
 
         Returns
         -------
-        npt.NDArray[np.float64]
+        NumericArray
             Quantiles corresponding to probabilities p
 
         Raises
@@ -471,11 +464,9 @@ def _configure_uniform_family() -> None:
         lower_bound = parameters.lower_bound
         upper_bound = parameters.upper_bound
 
-        return cast(npt.NDArray[np.float64], lower_bound + p * (upper_bound - lower_bound))
+        return cast(NumericArray, lower_bound + p * (upper_bound - lower_bound))
 
-    def uniform_char_func(
-        parameters: Parametrization, t: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.complex128]:
+    def uniform_char_func(parameters: Parametrization, t: NumericArray) -> ComplexArray:
         """
         Characteristic function of uniform distribution.
 
@@ -490,12 +481,12 @@ def _configure_uniform_family() -> None:
             Distribution parameters object with fields:
             - lower_bound: float (lower bound)
             - upper_bound: float (upper bound)
-        t : npt.NDArray[np.float64]
+        t : NumericArray
             Points at which to evaluate the characteristic function
 
         Returns
         -------
-        npt.NDArray[np.complex128]
+        ComplexArray
             Characteristic function values at points t
         """
         parameters = cast(_Standard, parameters)
@@ -511,7 +502,7 @@ def _configure_uniform_family() -> None:
         x = width * t_arr / (2 * np.pi)
         sinc_val = np.sinc(x)
 
-        return cast(npt.NDArray[np.complex128], sinc_val * np.exp(1j * center * t_arr))
+        return cast(ComplexArray, sinc_val * np.exp(1j * center * t_arr))
 
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of uniform distribution."""
