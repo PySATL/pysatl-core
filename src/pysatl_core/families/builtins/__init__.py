@@ -11,6 +11,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 
 from pysatl_core.families.builtins.continuous import (
+    configure_exponential_family,
     configure_normal_family,
     configure_uniform_family,
 )
@@ -18,4 +19,5 @@ from pysatl_core.families.builtins.continuous import (
 __all__ = [
     "configure_normal_family",
     "configure_uniform_family",
+    "configure_exponential_family",
 ]

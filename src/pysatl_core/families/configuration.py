@@ -4,8 +4,9 @@ Distribution Families Configuration
 
 This module defines and configures parametric distribution families for the PySATL library:
 
-- :class:`Normal Family` — Gaussian distribution with multiple parameterizations.
-- :class:`Uniform Family` — Uniform distribution with multiple parameterizations.
+- **Normal Family** — Gaussian distribution with multiple parameterizations.
+- **Uniform Family** — Uniform distribution with multiple parameterizations.
+- **Exponential Family** — Exponential distribution with multiple parameterizations.
 
 Notes
 -----
@@ -24,6 +25,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from functools import lru_cache
 
 from pysatl_core.families.builtins import (
+    configure_exponential_family,
     configure_normal_family,
     configure_uniform_family,
 )
@@ -44,8 +46,9 @@ def configure_families_register() -> ParametricFamilyRegister:
     ParametricFamilyRegister
         The global registry of parametric families.
     """
-    configure_normal_family()
+    configure_exponential_family()
     configure_uniform_family()
+    configure_normal_family()
     return ParametricFamilyRegister()
 
 

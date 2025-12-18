@@ -276,6 +276,7 @@ class CharacteristicName(StrEnum):
 class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
+    EXPONENTIAL = "Exponential"
 
 
 __all__ = [
