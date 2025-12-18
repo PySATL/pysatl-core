@@ -1,3 +1,13 @@
+"""
+UNU.RAN Default Sampling Strategy
+=================================
+
+This module provides the default UNU.RAN sampling strategy implementation that
+creates UNU.RAN samplers for distributions and converts the output to the
+standard Sample format. The strategy supports caching of samplers to improve
+performance with repeated sampling from the same distribution.
+"""
+
 from __future__ import annotations
 
 __author__ = "Artem Romanyuk"
@@ -5,13 +15,10 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import copy
-from typing import TYPE_CHECKING, Any, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 from pysatl_core.distributions.sampling import ArraySample
-from pysatl_core.stats._unuran.api import (
-    UnuranMethodConfig,
-    UnuranSamplingStrategy,
-)
+from pysatl_core.stats._unuran.api import UnuranMethodConfig, UnuranSamplingStrategy
 from pysatl_core.stats._unuran.bindings._core.unuran_sampler import DefaultUnuranSampler
 
 if TYPE_CHECKING:
@@ -23,10 +30,10 @@ if TYPE_CHECKING:
 class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
     """
     Default UNU.RAN sampling strategy implementation.
-    
+
     This strategy creates UNU.RAN samplers for distributions and converts
     the output to the standard Sample format.
-    
+
     Notes
     -----
     - Supports caching of samplers to improve performance with repeated sampling
@@ -38,12 +45,12 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
     def __init__(
         self,
         default_config: UnuranMethodConfig | None = None,
-        sampler_class: Optional[Type[UnuranSampler]] = None,
+        sampler_class: type[UnuranSampler] | None = None,
         use_cache: bool = True,
     ):
         """
         Initialize the sampling strategy.
-        
+
         Parameters
         ----------
         default_config : UnuranMethodConfig | None, optional
@@ -57,11 +64,11 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
             if the same distribution object is used in subsequent calls.
         """
         self._default_config = default_config or UnuranMethodConfig()
-        self._sampler_class: Type[UnuranSampler] = sampler_class or DefaultUnuranSampler
+        self._sampler_class: type[UnuranSampler] = sampler_class or DefaultUnuranSampler
         self._use_cache = use_cache
-        self._cached_sampler: Optional[UnuranSampler] = None
-        self._cached_distribution: Optional[Distribution] = None
-        self._cached_distribution_copy: Optional[Distribution] = None
+        self._cached_sampler: UnuranSampler | None = None
+        self._cached_distribution: Distribution | None = None
+        self._cached_distribution_copy: Distribution | None = None
 
     def sample(self, n: int, distr: Distribution, **options: Any) -> Sample:
         """
@@ -94,13 +101,20 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
         """
         if n < 0:
             raise ValueError(f"Number of samples must be non-negative, got {n}")
-        
+
         if self._use_cache:
-            if (
-                self._cached_sampler is not None
-                and self._cached_distribution is not None
-                and distr is self._cached_distribution
-            ):
+            can_reuse_cache = False
+            if self._cached_sampler is not None and self._cached_distribution is not None:
+                if distr is self._cached_distribution:
+                    can_reuse_cache = True
+                elif self._cached_distribution_copy is not None:
+                    try:
+                        if distr == self._cached_distribution_copy:
+                            can_reuse_cache = True
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+
+            if can_reuse_cache:
                 sampler = self._cached_sampler
             else:
                 sampler = self._sampler_class(distr, self._default_config, **options)
@@ -109,19 +123,17 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
                 try:
                     self._cached_distribution_copy = copy.deepcopy(distr)
                 except (TypeError, ValueError, AttributeError):
-                    self._cached_sampler = None
                     self._cached_distribution_copy = None
         else:
             sampler = self._sampler_class(distr, self._default_config, **options)
-        
+
         samples_1d = sampler.sample(n)
-        
+
         samples_2d = samples_1d.reshape(-1, 1)
-        
+
         return ArraySample(samples_2d)
 
     @property
     def default_config(self) -> UnuranMethodConfig:
         """Default method configuration."""
         return self._default_config
-

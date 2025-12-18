@@ -1,9 +1,9 @@
 [build-system]
 build-backend = "poetry.core.masonry.api"
 
-requires = [ 
-    "poetry-core>=1.9",
-    "cffi>=1.16.0",
+requires = [
+  "cffi>=1.16",
+  "poetry-core>=1.9",
 ]
 
 [tool.poetry]
@@ -59,6 +59,7 @@ coverage = { version = ">=7.5", extras = [ "toml" ] }
 pre-commit = ">=3.6"
 types-setuptools = "*"
 scipy-stubs = ">=1.13.0.0"
+types-cffi = ">=1.17.0.0"
 
 [tool.poetry.group.docs.dependencies]
 jupyter = "^1.1.1"

@@ -22,7 +22,9 @@ Examples
 --------
 Create a UNU.RAN sampling strategy for a distribution:
 
-    >>> from pysatl_core.stats._unuran import create_unuran_strategy, UnuranMethodConfig, UnuranMethod
+    >>> from pysatl_core.stats._unuran import (
+    >>>     create_unuran_strategy, UnuranMethodConfig, UnuranMethod
+    >>> )
     >>> config = UnuranMethodConfig(method=UnuranMethod.AUTO)
     >>> strategy = create_unuran_strategy(config)
     >>> sample = strategy.sample(n=1000, distr=my_distribution)
@@ -40,11 +42,16 @@ from pysatl_core.stats._unuran.api import (
     UnuranSampler,
     UnuranSamplingStrategy,
 )
+from pysatl_core.stats._unuran.bindings import (
+    DefaultUnuranSampler,
+    DefaultUnuranSamplingStrategy,
+)
 
 __all__ = [
     "UnuranMethod",
     "UnuranMethodConfig",
     "UnuranSampler",
     "UnuranSamplingStrategy",
+    "DefaultUnuranSampler",
+    "DefaultUnuranSamplingStrategy",
 ]
-

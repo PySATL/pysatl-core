@@ -95,6 +95,11 @@ class UnuranMethodConfig:
         If ``True``, allow using PDF for rejection-based methods.
     use_cdf : bool, default False
         If ``True``, allow using CDF for inversion-based methods.
+    use_registry_characteristics : bool, default True
+        If ``True``, allow using distribution characteristics from the registry
+        in addition to those directly available in the Distribution object.
+        If ``False``, use only characteristics that are directly available
+        in the Distribution object, without querying the registry.
     seed : int | None, default None
         Random seed for the sampler. If ``None``, uses system entropy.
 
@@ -105,6 +110,9 @@ class UnuranMethodConfig:
       typically need PDF)
     - The ``use_*`` flags control which distribution characteristics can be
       used, but do not guarantee their use
+    - When ``use_registry_characteristics`` is ``True``, characteristics may
+      be retrieved from the distribution registry if not directly available
+      in the Distribution object
     """
 
     method: UnuranMethod = UnuranMethod.AUTO
@@ -112,6 +120,7 @@ class UnuranMethodConfig:
     use_ppf: bool = False
     use_pdf: bool = True
     use_cdf: bool = False
+    use_registry_characteristics: bool = True
     seed: int | None = None
 
     def __post_init__(self) -> None:
