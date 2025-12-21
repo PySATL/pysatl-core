@@ -103,27 +103,9 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
             raise ValueError(f"Number of samples must be non-negative, got {n}")
 
         if self._use_cache:
-            can_reuse_cache = False
-            if self._cached_sampler is not None and self._cached_distribution is not None:
-                if distr is self._cached_distribution:
-                    can_reuse_cache = True
-                elif self._cached_distribution_copy is not None:
-                    try:
-                        if distr == self._cached_distribution_copy:
-                            can_reuse_cache = True
-                    except (TypeError, ValueError, AttributeError):
-                        pass
-
-            if can_reuse_cache:
-                sampler = self._cached_sampler
-            else:
-                sampler = self._sampler_class(distr, self._default_config, **options)
-                self._cached_sampler = sampler
-                self._cached_distribution = distr
-                try:
-                    self._cached_distribution_copy = copy.deepcopy(distr)
-                except (TypeError, ValueError, AttributeError):
-                    self._cached_distribution_copy = None
+            sampler = self._maybe_get_cached_sampler(distr)
+            if sampler is None:
+                sampler = self._create_and_cache_sampler(distr, **options)
         else:
             sampler = self._sampler_class(distr, self._default_config, **options)
 
@@ -132,6 +114,38 @@ class DefaultUnuranSamplingStrategy(UnuranSamplingStrategy):
         samples_2d = samples_1d.reshape(-1, 1)
 
         return ArraySample(samples_2d)
+
+    def _maybe_get_cached_sampler(self, distr: Distribution) -> UnuranSampler | None:
+        """Return cached sampler if present and distribution matches."""
+        cached_sampler = self._cached_sampler
+        cached_distribution = self._cached_distribution
+
+        if cached_sampler is None or cached_distribution is None:
+            return None
+
+        if distr is cached_distribution:
+            return cached_sampler
+
+        cached_distribution_copy = self._cached_distribution_copy
+        if cached_distribution_copy is not None:
+            try:
+                if distr == cached_distribution_copy:
+                    return cached_sampler
+            except (TypeError, ValueError, AttributeError):
+                return None
+
+        return None
+
+    def _create_and_cache_sampler(self, distr: Distribution, **options: Any) -> UnuranSampler:
+        """Create sampler instance and populate cache."""
+        sampler = self._sampler_class(distr, self._default_config, **options)
+        self._cached_sampler = sampler
+        self._cached_distribution = distr
+        try:
+            self._cached_distribution_copy = copy.deepcopy(distr)
+        except (TypeError, ValueError, AttributeError):
+            self._cached_distribution_copy = None
+        return sampler
 
     @property
     def default_config(self) -> UnuranMethodConfig:

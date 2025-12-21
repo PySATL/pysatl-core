@@ -68,6 +68,7 @@ matplotlib = "^3.10.6"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+exclude = [ "vendor" ]
 
 format.line-ending = "lf"
 
@@ -81,6 +82,9 @@ lint.isort.combine-as-imports = true
 lint.isort.force-single-line = false
 lint.isort.known-first-party = [ "pysatl_core" ]
 lint.isort.order-by-type = true
+
+[tool.codespell]
+skip = "vendor/**"
 
 [tool.pytest.ini_options]
 addopts = "-q --cov=pysatl_core --cov-report=term-missing"

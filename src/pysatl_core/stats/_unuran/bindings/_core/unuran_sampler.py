@@ -107,13 +107,18 @@ class DefaultUnuranSampler:
         self.config = config or UnuranMethodConfig()
         self.override_options = override_options
 
-        method = override_options.get("method", self.config.method)
+        method_option = override_options.get("method", self.config.method)
         seed = override_options.get("seed", self.config.seed)
 
-        try:
-            from pysatl_core.stats._unuran.bindings import _unuran_cffi
-        except (ImportError, AttributeError):
-            import _unuran_cffi
+        from pysatl_core.stats._unuran.bindings import _unuran_cffi
+
+        if _unuran_cffi is None:
+            raise RuntimeError(
+                "UNURAN CFFI bindings are not available. "
+                "Please build them via `python "
+                "src/pysatl_core/stats/_unuran/bindings/_cffi_build.py` "
+                "or install pysatl-core with the compiled extension."
+            )
 
         self._ffi = _unuran_cffi.ffi
         self._lib = _unuran_cffi.lib
@@ -134,22 +139,31 @@ class DefaultUnuranSampler:
         self._kind = distr_type.kind
         self._is_continuous = self._kind == Kind.CONTINUOUS
 
-        available_chars = distr.analytical_computations.keys()
+        if isinstance(method_option, UnuranMethod):
+            method = method_option
+        else:
+            try:
+                method = UnuranMethod(str(method_option))
+            except ValueError as exc:  # pragma: no cover - defensive
+                raise ValueError(f"Unsupported UNU.RAN method: {method_option}") from exc
+
         if self.config.use_registry_characteristics:
-            available_chars = _get_available_characteristics(distr)
+            available_chars: set[GenericCharacteristicName] = _get_available_characteristics(distr)
+        else:
+            available_chars = {str(name) for name in distr.analytical_computations}
 
         if method == UnuranMethod.AUTO:
             method = self._select_method(available_chars)
 
-        self._method = method
+        self._method: UnuranMethod = method
 
         self._unuran_distr = None
         self._unuran_par = None
         self._unuran_gen = None
-        self._callbacks = []  # Keep callbacks alive
+        self._callbacks: list[Any] = []  # Keep callbacks alive
         self._cleaned_up = False  # Flag to prevent double cleanup
 
-        self._initialize_unuran(available_chars, seed)
+        self._initialize_unuran(seed)
 
     def _select_method(self, available_chars: set[GenericCharacteristicName]) -> UnuranMethod:
         """
@@ -173,7 +187,7 @@ class DefaultUnuranSampler:
         """
         return _select_best_method(available_chars, self._kind, self.config)
 
-    def _create_pdf_callback(self):
+    def _create_pdf_callback(self) -> Any:
         """
         Create PDF callback function for continuous distributions.
 
@@ -198,14 +212,14 @@ class DefaultUnuranSampler:
         if CharacteristicName.PDF in analytical_comps:
             pdf_func = analytical_comps[CharacteristicName.PDF]
 
-            def pdf_callback(x: float, distr_ptr) -> float:
+            def pdf_callback(x: float, distr_ptr: Any) -> float:
                 return float(pdf_func(x))
 
             return self._ffi.callback("double(double, const struct unur_distr*)", pdf_callback)
 
         return None
 
-    def _create_pmf_callback(self):
+    def _create_pmf_callback(self) -> Any:
         """
         Create PMF callback function for discrete distributions.
 
@@ -233,7 +247,7 @@ class DefaultUnuranSampler:
         if CharacteristicName.PMF in analytical_comps:
             pmf_func = analytical_comps[CharacteristicName.PMF]
 
-            def pmf_callback(k: int, distr_ptr) -> float:
+            def pmf_callback(k: int, distr_ptr: Any) -> float:
                 return float(pmf_func(float(k)))
 
             return self._ffi.callback("double(int, const struct unur_distr*)", pmf_callback)
@@ -242,14 +256,14 @@ class DefaultUnuranSampler:
         if CharacteristicName.PDF in analytical_comps:
             pdf_func = analytical_comps[CharacteristicName.PDF]
 
-            def pmf_callback(k: int, distr_ptr) -> float:
+            def pmf_callback(k: int, distr_ptr: Any) -> float:
                 return float(pdf_func(float(k)))
 
             return self._ffi.callback("double(int, const struct unur_distr*)", pmf_callback)
 
         return None
 
-    def _create_cdf_callback(self):
+    def _create_cdf_callback(self) -> Any:
         """
         Create CDF callback function for the distribution.
 
@@ -274,20 +288,24 @@ class DefaultUnuranSampler:
 
             if self._is_continuous:
 
-                def cdf_callback(x: float, distr_ptr) -> float:
+                def cdf_callback_cont(x: float, distr_ptr: Any) -> float:
                     return float(cdf_func(x))
 
-                return self._ffi.callback("double(double, const struct unur_distr*)", cdf_callback)
+                return self._ffi.callback(
+                    "double(double, const struct unur_distr*)", cdf_callback_cont
+                )
             else:
 
-                def cdf_callback(k: int, distr_ptr) -> float:
+                def cdf_callback_discr(k: int, distr_ptr: Any) -> float:
                     return float(cdf_func(float(k)))
 
-                return self._ffi.callback("double(int, const struct unur_distr*)", cdf_callback)
+                return self._ffi.callback(
+                    "double(int, const struct unur_distr*)", cdf_callback_discr
+                )
 
         return None
 
-    def _create_dpdf_callback(self):
+    def _create_dpdf_callback(self) -> Any:
         """
         Create derivative PDF (dPDF) callback function.
 
@@ -619,12 +637,15 @@ class DefaultUnuranSampler:
         if domain_info is None:
             # Support is unavailable or unbounded, determine from PMF
             domain_left, domain_right = self._determine_domain_from_pmf()
-        elif domain_info[1] is None:
-            # Left boundary known, but right is unbounded
-            domain_left, domain_right = self._determine_domain_from_pmf(domain_info[0])
         else:
-            # Both boundaries known from support
-            domain_left, domain_right = domain_info
+            domain_left_candidate, domain_right_candidate = domain_info
+            if domain_right_candidate is None:
+                # Left boundary known, but right is unbounded
+                domain_left, domain_right = self._determine_domain_from_pmf(domain_left_candidate)
+            else:
+                # Both boundaries known from support
+                domain_left = domain_left_candidate
+                domain_right = domain_right_candidate
 
         # Set domain in UNURAN
         result = self._lib.unur_distr_discr_set_domain(
@@ -737,7 +758,7 @@ class DefaultUnuranSampler:
             self._cleanup()
             raise
 
-    def _create_parameter_object(self):
+    def _create_parameter_object(self) -> Any:
         """
         Create UNURAN parameter object based on selected method.
 
@@ -942,8 +963,7 @@ class DefaultUnuranSampler:
         # This would require access to the underlying RNG object
         # For now, we just reinitialize if needed
         if not self.is_initialized:
-            available_chars = _get_available_characteristics(self.distr)
-            self._initialize_unuran(available_chars, seed)
+            self._initialize_unuran(seed)
 
     @property
     def method(self) -> UnuranMethod:

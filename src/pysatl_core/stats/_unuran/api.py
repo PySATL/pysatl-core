@@ -27,8 +27,6 @@ if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.distributions.sampling import Sample
 
-from pysatl_core.types import Kind
-
 
 class UnuranMethod(StrEnum):
     """
@@ -143,6 +141,15 @@ class UnuranSampler(Protocol):
     - Multiple calls to ``sample()`` produce independent variates
     - The sampler is bound to the distribution characteristics used at creation
     """
+
+    def __init__(
+        self,
+        distr: Distribution,
+        config: UnuranMethodConfig | None = None,
+        **override_options: Any,
+    ) -> None:
+        """Initialize the sampler for ``distr`` with optional configuration overrides."""
+        ...
 
     def sample(self, n: int) -> npt.NDArray[np.float64]:
         """

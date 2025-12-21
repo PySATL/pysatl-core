@@ -19,6 +19,7 @@ exclude: >
     | \.gitignore$
     | LICENSE$
     | .*\.md$
+    | vendor/.*
   )$
 
 repos:
@@ -67,3 +68,4 @@ repos:
           - scipy>=1.13
           - pytest>=8
           - scipy-stubs>=1.13
+          - types-setuptools>=75
