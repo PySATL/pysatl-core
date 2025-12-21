@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from cffi import FFI
+from cffi import FFI  # type: ignore[import-untyped]
 
 # TODO: Replace with logging
 ENABLE_PRINTS = False
