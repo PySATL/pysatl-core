@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+__author__ = "Artem Romanyuk"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
 from importlib import import_module
 from types import ModuleType
 

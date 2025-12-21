@@ -120,8 +120,8 @@ class DefaultUnuranSampler:
                 "or install pysatl-core with the compiled extension."
             )
 
-        self._ffi = _unuran_cffi.ffi
-        self._lib = _unuran_cffi.lib
+        self._ffi: Any = _unuran_cffi.ffi
+        self._lib: Any = _unuran_cffi.lib
 
         distr_type = distr.distribution_type
         if not isinstance(distr_type, EuclideanDistributionType):
@@ -137,7 +137,7 @@ class DefaultUnuranSampler:
             )
 
         self._kind = distr_type.kind
-        self._is_continuous = self._kind == Kind.CONTINUOUS
+        self._is_continuous: bool = self._kind == Kind.CONTINUOUS
 
         if isinstance(method_option, UnuranMethod):
             method = method_option
@@ -157,11 +157,11 @@ class DefaultUnuranSampler:
 
         self._method: UnuranMethod = method
 
-        self._unuran_distr = None
-        self._unuran_par = None
-        self._unuran_gen = None
+        self._unuran_distr: Any | None = None
+        self._unuran_par: Any | None = None
+        self._unuran_gen: Any | None = None
         self._callbacks: list[Any] = []  # Keep callbacks alive
-        self._cleaned_up = False  # Flag to prevent double cleanup
+        self._cleaned_up: bool = False  # Flag to prevent double cleanup
 
         self._initialize_unuran(seed)
 

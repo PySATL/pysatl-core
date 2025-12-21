@@ -6,6 +6,10 @@ Compiles UNURAN from sources in vendor/unuran-1.11.0/ and creates Python binding
 
 from __future__ import annotations
 
+__author__ = "Artem Romanyuk"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
 import os
 import subprocess
 from pathlib import Path
