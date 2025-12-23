@@ -12,6 +12,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -234,6 +235,11 @@ def _setup_fallback_source(include_dir: Path) -> None:
 
 
 def main() -> None:
+    # TODO windows support
+    if os.name == "nt" or sys.platform.startswith("win"):
+        print("Skipping UNURAN CFFI build: Windows platform is not supported.")
+        return
+
     project_root = _get_project_root()
     unuran_dir, unuran_src = _get_unuran_paths()
     build_dir = unuran_dir.parent / "unuran-build"
