@@ -13,14 +13,14 @@ from .utils import get_unuran_error_message
 def _require_attr(lib: Any, attr_name: str) -> None:
     """
     Check if a required UNURAN CFFI attribute is available.
-    
+
     Parameters
     ----------
     lib : Any
         The UNURAN CFFI library object
     attr_name : str
         Name of the required attribute/function
-        
+
     Raises
     ------
     RuntimeError
@@ -29,7 +29,8 @@ def _require_attr(lib: Any, attr_name: str) -> None:
     if not hasattr(lib, attr_name):
         raise RuntimeError(
             f"{attr_name} is not available. "
-            "Please recompile CFFI module: cd src/pysatl_core/stats/_unuran/bindings && python3 _cffi_build.py"
+            "Please recompile CFFI module: "
+            "cd src/pysatl_core/stats/_unuran/bindings && python3 _cffi_build.py"
         )
 
 

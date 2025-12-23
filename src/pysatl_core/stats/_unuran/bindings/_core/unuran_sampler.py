@@ -15,7 +15,6 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import contextlib
-from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -201,67 +200,51 @@ class DefaultUnuranSampler:
         """
         return _select_best_method(available_chars, self._kind, self.config)
 
-    @wraps(create_pdf_callback)
     def _create_pdf_callback(self) -> Any:
         return create_pdf_callback(self)
 
-    @wraps(create_pmf_callback)
     def _create_pmf_callback(self) -> Any:
         return create_pmf_callback(self)
 
-    @wraps(create_cdf_callback)
     def _create_cdf_callback(self) -> Any:
         return create_cdf_callback(self)
 
-    @wraps(create_dpdf_callback)
     def _create_dpdf_callback(self) -> Any:
         return create_dpdf_callback()
 
-    @wraps(get_unuran_error_message)
     def _get_unuran_error_message(self, base_msg: str) -> str:
         return get_unuran_error_message(self._lib, self._ffi, base_msg)
 
-    @wraps(create_unuran_distribution)
     def _create_unuran_distribution(self) -> None:
         create_unuran_distribution(self)
 
-    @wraps(setup_continuous_callbacks)
     def _setup_continuous_callbacks(self) -> None:
         setup_continuous_callbacks(self)
 
-    @wraps(setup_discrete_callbacks)
     def _setup_discrete_callbacks(self) -> None:
         setup_discrete_callbacks(self)
 
-    @wraps(determine_domain_from_support)
     def _determine_domain_from_support(self) -> tuple[int, int | None] | None:
         return determine_domain_from_support(self)
 
-    @wraps(determine_domain_from_pmf)
     def _determine_domain_from_pmf(self, domain_left: int | None = None) -> tuple[int, int]:
         return determine_domain_from_pmf(self, domain_left)
 
-    @wraps(calculate_pmf_sum)
     def _calculate_pmf_sum(self, domain_left: int, domain_right: int) -> float:
         return calculate_pmf_sum(self, domain_left, domain_right)
 
-    @wraps(setup_dgt_method)
     def _setup_dgt_method(self) -> None:
         setup_dgt_method(self)
 
-    @wraps(create_and_init_generator)
     def _create_and_init_generator(self) -> None:
         create_and_init_generator(self)
 
-    @wraps(initialize_unuran_components)
     def _initialize_unuran(self, seed: int | None) -> None:
         initialize_unuran_components(self, seed)
 
-    @wraps(create_parameter_object)
     def _create_parameter_object(self) -> Any:
         return create_parameter_object(self)
 
-    @wraps(cleanup_unuran_resources)
     def _cleanup(self) -> None:
         cleanup_unuran_resources(self)
 

@@ -46,13 +46,17 @@ def determine_domain_from_support(sampler: Any) -> tuple[int, int | None] | None
 
         return None
 
-    try:
-        first = support.first()  # type: ignore[attr-defined]
-        last = support.last()  # type: ignore[attr-defined]
-        if first is not None and last is not None:
-            return (int(first), int(last))
-    except (AttributeError, TypeError):
-        pass
+    first_callable = getattr(support, "first", None)
+    last_callable = getattr(support, "last", None)
+
+    if callable(first_callable) and callable(last_callable):
+        try:
+            first = first_callable()
+            last = last_callable()
+            if first is not None and last is not None:
+                return (int(first), int(last))
+        except TypeError:
+            pass
 
     return None
 
