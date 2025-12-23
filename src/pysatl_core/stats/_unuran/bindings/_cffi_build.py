@@ -47,6 +47,8 @@ ffi.cdef("""
                                 double (*dpdf)(double, const struct unur_distr*));
     int unur_distr_cont_set_cdf(UNUR_DISTR distribution,
                                double (*cdf)(double, const struct unur_distr*));
+    int unur_distr_cont_set_invcdf(UNUR_DISTR distribution,
+                                   double (*invcdf)(double, const struct unur_distr*));
     int unur_distr_cont_set_domain(UNUR_DISTR distribution, double left, double right);
     int unur_distr_cont_set_mode(UNUR_DISTR distribution, double mode);
     int unur_distr_cont_set_pdfparams(UNUR_DISTR distribution, const double* params, int n_params);

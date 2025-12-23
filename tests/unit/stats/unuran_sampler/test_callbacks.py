@@ -78,6 +78,29 @@ class TestCallbacks:
         assert callable(callback)
         assert callback(4, None) == 4.5
 
+    def test_create_ppf_callback_continuous(self, sampler_stub: DefaultUnuranSampler) -> None:
+        """PPF callback should wrap the distribution's inverse CDF for continuous case."""
+        sampler_stub._is_continuous = True
+        sampler_stub.distr = SimpleNamespace(
+            analytical_computations={CharacteristicName.PPF: lambda u: u * 10}
+        )
+        callback = sampler_stub._create_ppf_callback()
+        assert callable(callback)
+        assert callback(0.3, None) == 3.0
+
+    def test_create_ppf_callback_requires_continuous_ppf(
+        self, sampler_stub: DefaultUnuranSampler
+    ) -> None:
+        """PPF callback should be unavailable for discrete samplers or missing characteristic."""
+        sampler_stub._is_continuous = False
+        sampler_stub.distr = SimpleNamespace(
+            analytical_computations={CharacteristicName.PPF: lambda u: u}
+        )
+        assert sampler_stub._create_ppf_callback() is None
+        sampler_stub._is_continuous = True
+        sampler_stub.distr = SimpleNamespace(analytical_computations={})
+        assert sampler_stub._create_ppf_callback() is None
+
     def test_create_dpdf_callback_is_none(self, sampler_stub: DefaultUnuranSampler) -> None:
         """Currently no dPDF callback should be created."""
         assert sampler_stub._create_dpdf_callback() is None

@@ -30,6 +30,7 @@ from pysatl_core.stats._unuran.bindings._core._unuran_sampler import (
     create_parameter_object,
     create_pdf_callback,
     create_pmf_callback,
+    create_ppf_callback,
     create_unuran_distribution,
     determine_domain_from_pmf,
     determine_domain_from_support,
@@ -208,6 +209,9 @@ class DefaultUnuranSampler:
 
     def _create_cdf_callback(self) -> Any:
         return create_cdf_callback(self)
+
+    def _create_ppf_callback(self) -> Any:
+        return create_ppf_callback(self)
 
     def _create_dpdf_callback(self) -> Any:
         return create_dpdf_callback()

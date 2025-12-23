@@ -3,6 +3,7 @@ from .callbacks import (
     create_dpdf_callback,
     create_pdf_callback,
     create_pmf_callback,
+    create_ppf_callback,
     setup_continuous_callbacks,
     setup_discrete_callbacks,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "create_parameter_object",
     "create_pdf_callback",
     "create_pmf_callback",
+    "create_ppf_callback",
     "create_unuran_distribution",
     "determine_domain_from_pmf",
     "determine_domain_from_support",

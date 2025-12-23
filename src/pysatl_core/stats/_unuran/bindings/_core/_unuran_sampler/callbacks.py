@@ -118,6 +118,31 @@ def create_cdf_callback(sampler: Any) -> Any | None:
     return sampler._ffi.callback("double(int, const struct unur_distr*)", cdf_callback_discr)
 
 
+def create_ppf_callback(sampler: Any) -> Any | None:
+    """
+    Create PPF (inverse CDF) callback for continuous distributions.
+
+    Returns
+    -------
+    CFFI callback or None
+        Callback wrapping the distribution's PPF computation, or None if the
+        distribution is not continuous or lacks a PPF implementation.
+    """
+    if not sampler._is_continuous:
+        return None
+
+    analytical_comps = sampler.distr.analytical_computations
+    if CharacteristicName.PPF not in analytical_comps:
+        return None
+
+    ppf_func = analytical_comps[CharacteristicName.PPF]
+
+    def ppf_callback(u: float, distr_ptr: Any) -> float:
+        return float(ppf_func(u))
+
+    return sampler._ffi.callback("double(double, const struct unur_distr*)", ppf_callback)
+
+
 def create_dpdf_callback() -> None:
     """
     Create derivative PDF (dPDF) callback function.
@@ -171,6 +196,11 @@ def setup_continuous_callbacks(sampler: Any) -> None:
     if cdf_callback:
         sampler._callbacks.append(cdf_callback)
         sampler._lib.unur_distr_cont_set_cdf(sampler._unuran_distr, cdf_callback)
+
+    ppf_callback = sampler._create_ppf_callback()
+    if ppf_callback and hasattr(sampler._lib, "unur_distr_cont_set_invcdf"):
+        sampler._callbacks.append(ppf_callback)
+        sampler._lib.unur_distr_cont_set_invcdf(sampler._unuran_distr, ppf_callback)
 
 
 def setup_discrete_callbacks(sampler: Any) -> None:

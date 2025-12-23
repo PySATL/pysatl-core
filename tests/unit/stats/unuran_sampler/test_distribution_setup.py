@@ -46,6 +46,7 @@ class TestDistributionSetup:
         sampler = object.__new__(DefaultUnuranSampler)
         sampler._callbacks = []
         sampler._unuran_distr = "DIST"
+        sampler._is_continuous = True
         sampler._lib = SimpleNamespace(
             unur_distr_cont_set_pdf=lambda dist, cb: 0,
             unur_distr_cont_set_dpdf=lambda dist, cb: 0,
@@ -56,10 +57,12 @@ class TestDistributionSetup:
             patch.object(DefaultUnuranSampler, "_create_pdf_callback", autospec=True) as mock_pdf,
             patch.object(DefaultUnuranSampler, "_create_dpdf_callback", autospec=True) as mock_dpdf,
             patch.object(DefaultUnuranSampler, "_create_cdf_callback", autospec=True) as mock_cdf,
+            patch.object(DefaultUnuranSampler, "_create_ppf_callback", autospec=True) as mock_ppf,
         ):
             mock_pdf.return_value = "PDF"
             mock_dpdf.return_value = None
             mock_cdf.return_value = "CDF"
+            mock_ppf.return_value = None
 
             sampler._setup_continuous_callbacks()
 
@@ -72,6 +75,7 @@ class TestDistributionSetup:
         sampler = object.__new__(DefaultUnuranSampler)
         sampler._callbacks = []
         sampler._unuran_distr = "DIST"
+        sampler._is_continuous = False
         sampler._lib = SimpleNamespace(
             unur_distr_discr_set_pmf=lambda dist, cb: 0,
             unur_distr_discr_set_cdf=lambda dist, cb: 0,
