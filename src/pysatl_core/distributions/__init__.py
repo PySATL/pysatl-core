@@ -1,5 +1,6 @@
 """
-Distributions subpackage
+Distributions Subpackage
+========================
 
 Core abstractions and implementations for probability distributions
 used throughout PySATL.
