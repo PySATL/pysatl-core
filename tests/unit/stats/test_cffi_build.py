@@ -4,13 +4,46 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+import os
 import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from pysatl_core.stats._unuran.bindings import _cffi_build as cffi_build
+
+IS_WINDOWS = os.name == "nt" or sys.platform.startswith("win")
+
+
+def _assert_windows_skips_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure main() returns early on Windows without invoking heavy build logic."""
+
+    def forbid(name: str) -> Callable[..., None]:
+        def _forbid(*args: object, **kwargs: object) -> None:
+            raise AssertionError(f"{name} should not be called on Windows.")
+
+        return _forbid
+
+    monkeypatch.setattr(cffi_build, "_get_unuran_paths", forbid("_get_unuran_paths"))
+    monkeypatch.setattr(cffi_build, "_build_unuran_library", forbid("_build_unuran_library"))
+    monkeypatch.setattr(cffi_build, "_setup_static_source", forbid("_setup_static_source"))
+    monkeypatch.setattr(cffi_build, "_setup_system_source", forbid("_setup_system_source"))
+    monkeypatch.setattr(cffi_build, "_setup_fallback_source", forbid("_setup_fallback_source"))
+
+    compile_called = SimpleNamespace(count=0)
+
+    class DummyFFI(SimpleNamespace):
+        def compile(self, verbose: bool = False) -> None:
+            compile_called.count += 1
+
+    monkeypatch.setattr(cffi_build, "ffi", DummyFFI())
+
+    cffi_build.main()
+
+    assert compile_called.count == 0
 
 
 @pytest.fixture
@@ -186,6 +219,9 @@ class TestCffiBuild:
     def test_main_prefers_static_library(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        if IS_WINDOWS:
+            _assert_windows_skips_build(monkeypatch)
+            return
         """Expects main() to use static lib when available and call compile()."""
         unuran_dir = tmp_path / "vendor" / "unuran-1.11.0"
         unuran_dir.mkdir(parents=True)
@@ -237,6 +273,9 @@ class TestCffiBuild:
     def test_main_falls_back_to_system_library(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        if IS_WINDOWS:
+            _assert_windows_skips_build(monkeypatch)
+            return
         """Confirms main() selects system library when static lib missing."""
         unuran_dir = tmp_path / "vendor" / "unuran-1.11.0"
         unuran_dir.mkdir(parents=True)
@@ -285,6 +324,9 @@ class TestCffiBuild:
     def test_main_uses_fallback_when_no_library_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        if IS_WINDOWS:
+            _assert_windows_skips_build(monkeypatch)
+            return
         """Checks final fallback path is used when neither static nor system lib exist."""
         unuran_dir = tmp_path / "vendor" / "unuran-1.11.0"
         unuran_dir.mkdir(parents=True)
