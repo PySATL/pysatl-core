@@ -1,2 +1,4 @@
 * text=auto eol=lf
 vendor/* linguist-generated
+vendor/* -diff
+vendor/* linguist-vendored
