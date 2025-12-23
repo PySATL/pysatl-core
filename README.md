@@ -37,10 +37,11 @@ git clone https://github.com/PySATL/pysatl-core.git
 cd pysatl-core
 ```
 
-Install dependencies (via Poetry):
+Install dependencies and build project (via Poetry):
 
 ```bash
 poetry install
+poetry build
 ```
 
 Or install the package locally with `pip` (editable):

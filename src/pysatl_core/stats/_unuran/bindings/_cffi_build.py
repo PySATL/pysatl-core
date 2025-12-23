@@ -20,6 +20,8 @@ from cffi import FFI  # type: ignore[import-untyped]
 # TODO: Replace with logging
 ENABLE_PRINTS = False
 
+MODULE_NAME = "pysatl_core.stats._unuran.bindings._unuran_cffi"
+
 
 def _print(*args: Any, **kwargs: Any) -> None:
     """Conditionally print based on ENABLE_PRINTS flag."""
@@ -197,7 +199,7 @@ def _setup_static_source(static_lib: Path, include_dir: Path) -> None:
     """Scenario 1: Link with the freshly built static library."""
     _print(f"Using static library: {static_lib}")
     ffi.set_source(
-        "_unuran_cffi",
+        MODULE_NAME,
         '#include "unuran.h"',
         extra_objects=[str(static_lib)],
         include_dirs=[str(include_dir)],
@@ -210,7 +212,7 @@ def _setup_system_source(include_dir: Path, system_lib_path: str) -> None:
     """Scenario 2: Link with a library installed in the system."""
     _print(f"Using system library: {system_lib_path}")
     ffi.set_source(
-        "_unuran_cffi",
+        MODULE_NAME,
         '#include "unuran.h"',
         libraries=["unuran"],
         include_dirs=[str(include_dir)],
@@ -223,7 +225,7 @@ def _setup_fallback_source(include_dir: Path) -> None:
     _print("Warning: No pre-built library found, attempting direct source compilation")
     _print("This may fail due to complex dependencies. Consider building UNURAN first.")
     ffi.set_source(
-        "_unuran_cffi",
+        MODULE_NAME,
         '#include "unuran.h"',
         include_dirs=[str(include_dir)],
         libraries=["unuran"],
@@ -232,6 +234,7 @@ def _setup_fallback_source(include_dir: Path) -> None:
 
 
 def main() -> None:
+    project_root = _get_project_root()
     unuran_dir, unuran_src = _get_unuran_paths()
     build_dir = unuran_dir.parent / "unuran-build"
 
@@ -254,7 +257,14 @@ def main() -> None:
     _print(f"Include directory: {include_dir}")
     if static_lib:
         _print(f"Static library: {static_lib}")
-    ffi.compile(verbose=True)
+
+    build_output_dir = project_root / "src"
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(build_output_dir)
+        ffi.compile(verbose=True)
+    finally:
+        os.chdir(previous_cwd)
     _print("Compilation complete!")
 
 
