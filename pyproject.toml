@@ -1,13 +1,11 @@
 [build-system]
+build-backend = "poetry.core.masonry.api"
+
 requires = [
   "cffi>=1.16",
   "poetry-core>=1.9",
   "setuptools>=69",
 ]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.build]
-script = "src/pysatl_core/stats/_unuran/bindings/_cffi_build.py"
 
 [tool.poetry]
 name = "pysatl-core"
@@ -46,6 +44,9 @@ include = [
 homepage = "https://github.com/PySATL/pysatl-core"
 repository = "https://github.com/PySATL/pysatl-core"
 urls.Issues = "https://github.com/PySATL/pysatl-core/issues"
+
+[tool.poetry.build]
+script = "src/pysatl_core/stats/_unuran/bindings/_cffi_build.py"
 
 [tool.poetry.dependencies]
 python = ">=3.12"

@@ -150,7 +150,7 @@ class TestCffiBuild:
 
         call = dummy_ffi.calls[0]
         assert call[0] == "set_source"
-        assert call[1][0] == "_unuran_cffi"
+        assert call[1][0] == cffi_build.MODULE_NAME
         assert call[2]["extra_objects"] == [str(static_lib)]
         assert call[2]["include_dirs"] == [str(include_dir)]
 
