@@ -11,6 +11,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,9 @@ from cffi import FFI  # type: ignore[import-untyped]
 ENABLE_PRINTS = False
 
 MODULE_NAME = "pysatl_core.stats._unuran.bindings._unuran_cffi"
+WINDOWS_PREBUILT_DIRNAME = "unuran-win32"
+WINDOWS_LIB_CANDIDATES = ("libunuran.lib", "unuran.lib")
+WINDOWS_DLL_CANDIDATES = ("libunuran.dll", "unuran.dll")
 
 
 def _print(*args: Any, **kwargs: Any) -> None:
@@ -233,31 +237,86 @@ def _setup_fallback_source(include_dir: Path) -> None:
     )
 
 
+def _find_windows_prebuilt_artifacts(
+    unuran_dir: Path,
+) -> tuple[Path, Path | None, Path]:
+    """
+    Locate Windows binaries placed under vendor/unuran-1.11.0/unuran-win32.
+    Returns (lib_path, dll_path, include_dir).
+    """
+    win_dir = unuran_dir / WINDOWS_PREBUILT_DIRNAME
+    if not win_dir.exists():
+        raise FileNotFoundError(
+            "Windows binaries not found. Download UNU.RAN for Windows and extract it to "
+            f"{win_dir} (see vendor/unuran-1.11.0/README.win32)."
+        )
+
+    lib_path = next(
+        (win_dir / name for name in WINDOWS_LIB_CANDIDATES if (win_dir / name).exists()), None
+    )
+    if lib_path is None:
+        raise FileNotFoundError(
+            f"UNURAN import library (*.lib) not found in {win_dir}. "
+            "Expected one of: " + ", ".join(WINDOWS_LIB_CANDIDATES)
+        )
+
+    dll_path = next(
+        (win_dir / name for name in WINDOWS_DLL_CANDIDATES if (win_dir / name).exists()), None
+    )
+    include_dir = win_dir if (win_dir / "unuran.h").exists() else unuran_dir / "src"
+    return lib_path, dll_path, include_dir
+
+
+def _setup_windows_prebuilt_source(lib_path: Path, include_dir: Path) -> None:
+    """Configure ffi to link against the prebuilt Windows import library."""
+    _print(f"Using Windows prebuilt library: {lib_path}")
+    ffi.set_source(
+        MODULE_NAME,
+        '#include "unuran.h"',
+        include_dirs=[str(include_dir)],
+        libraries=["unuran"],
+        library_dirs=[str(lib_path.parent)],
+        extra_compile_args=["/O2"],
+    )
+
+
+def _maybe_copy_windows_runtime(dll_path: Path | None, destination_dir: Path) -> None:
+    """Copy libunuran.dll next to the compiled extension so wheels include it."""
+    if dll_path is None or not dll_path.exists():
+        return
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    target = destination_dir / dll_path.name
+    shutil.copy2(dll_path, target)
+
+
 def main() -> None:
     project_root = _get_project_root()
     unuran_dir, unuran_src = _get_unuran_paths()
     build_dir = unuran_dir.parent / "unuran-build"
 
-    static_lib, include_dir = _build_unuran_library(unuran_dir, build_dir)
+    windows_dll: Path | None = None
 
-    if static_lib and static_lib.exists():
-        _setup_static_source(static_lib, include_dir)
+    if os.name == "nt":
+        lib_path, windows_dll, include_dir = _find_windows_prebuilt_artifacts(unuran_dir)
+        _setup_windows_prebuilt_source(lib_path, include_dir)
     else:
-        import ctypes.util
+        static_lib, include_dir = _build_unuran_library(unuran_dir, build_dir)
 
-        system_lib = ctypes.util.find_library("unuran")
-
-        if system_lib:
-            _setup_system_source(include_dir, system_lib)
+        if static_lib and static_lib.exists():
+            _setup_static_source(static_lib, include_dir)
         else:
-            _setup_fallback_source(include_dir)
+            import ctypes.util
+
+            system_lib = ctypes.util.find_library("unuran")
+
+            if system_lib:
+                _setup_system_source(include_dir, system_lib)
+            else:
+                _setup_fallback_source(include_dir)
 
     _print("Compiling CFFI bindings for UNURAN...")
     _print(f"UNURAN source directory: {unuran_src}")
     _print(f"Include directory: {include_dir}")
-    if static_lib:
-        _print(f"Static library: {static_lib}")
-
     build_output_dir = project_root / "src"
     previous_cwd = Path.cwd()
     try:
@@ -265,6 +324,9 @@ def main() -> None:
         ffi.compile(verbose=True)
     finally:
         os.chdir(previous_cwd)
+
+    bindings_dir = project_root / "src" / "pysatl_core" / "stats" / "_unuran" / "bindings"
+    _maybe_copy_windows_runtime(windows_dll, bindings_dir)
     _print("Compilation complete!")
 
 
