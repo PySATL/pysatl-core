@@ -1,6 +1,5 @@
 """
 Computation and Sampling Strategies
-===================================
 
 This module defines strategies for computing distribution characteristics
 and generating random samples.

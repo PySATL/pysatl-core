@@ -1,15 +1,12 @@
 """
-Distributions Subpackage
-========================
-
 Core abstractions and implementations for probability distributions
 used throughout PySATL.
 
 This package provides:
-- Distribution protocol and computational primitives
-- Characteristic graph registry with constraint-based filtering
-- Sampling interfaces and strategies
-- Support structures for distribution domains
+ - Distribution protocol and computational primitives
+ - Characteristic graph registry with constraint-based filtering
+ - Sampling interfaces and strategies
+ - Support structures for distribution domains
 """
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov"

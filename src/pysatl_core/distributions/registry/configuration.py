@@ -1,8 +1,8 @@
 """
 Default configuration and cached accessor for the global characteristic registry.
 
-- No auto-configuration in constructor.
-- Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
+ - No auto-configuration in constructor.
+ - Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
   singleton instance and seeds it with a set of edges.
 """
 
