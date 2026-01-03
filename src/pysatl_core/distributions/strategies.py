@@ -11,19 +11,18 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 
 from pysatl_core.distributions.registry import characteristic_registry
-from pysatl_core.distributions.sampling import ArraySample
+from pysatl_core.types import CharacteristicName, NumericArray
 
 if TYPE_CHECKING:
     from typing import Any
 
     from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.distributions.sampling import Sample
     from pysatl_core.types import GenericCharacteristicName
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
@@ -186,25 +185,27 @@ class DefaultComputationStrategy[In, Out]:
 class SamplingStrategy(Protocol):
     """Protocol for strategies that generate samples from distributions."""
 
-    def sample(self, n: int, distr: Distribution, **options: Any) -> Sample: ...
+    def sample(self, n: int, distr: Distribution, **options: Any) -> NumericArray: ...
 
 
 class DefaultSamplingUnivariateStrategy(SamplingStrategy):
     """
-    Default univariate sampler using inverse transform sampling.
+    Default univariate sampler based on inverse transform sampling.
 
     This strategy generates samples by applying the PPF (inverse CDF)
-    to uniform random variables.
+    to uniformly distributed random variables.
 
     Notes
     -----
     - Requires the distribution to provide a PPF computation method.
-    - Returns samples as a 2D array of shape (n, 1).
+    - Assumes that the PPF follows NumPy semantics (vectorized evaluation).
+    - Graph-derived PPFs (scalar-only) are currently not supported.
+    - Returns a NumPy array containing the generated samples.
     """
 
-    def sample(self, n: int, distr: Distribution, **options: Any) -> ArraySample:
+    def sample(self, n: int, distr: Distribution, **options: Any) -> NumericArray:
         """
-        Generate n samples from the distribution.
+        Generate samples from the distribution.
 
         Parameters
         ----------
@@ -213,15 +214,19 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
         distr : Distribution
             Distribution to sample from.
         **options : Any
-            Additional options passed to the PPF computation.
+            Additional options forwarded to the PPF computation.
 
         Returns
         -------
-        ArraySample
-            Samples as a 2D array of shape (n, 1).
+        NumericArray
+            NumPy array containing ``n`` generated samples.
+            The exact array shape depends on the distribution and sampling strategy.
         """
-        ppf = distr.query_method("ppf", **options)
+        ppf = distr.query_method(CharacteristicName.PPF, **options)
         rng = np.random.default_rng()
         U = rng.random(n)
-        vals = np.array([ppf(Ui) for Ui in U], dtype=np.float64).reshape(n, 1)
-        return ArraySample(vals)
+        # TODO: Now it will be based on the fact that the characteristic
+        #  has NumPy semantics (It is much more faster), that is,
+        #  it will not work with the graph computed characteristics currently.
+        samples = ppf(U)
+        return cast(NumericArray, samples)

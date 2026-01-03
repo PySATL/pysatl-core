@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 from scipy.special import erf, erfinv
 
-from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
@@ -41,6 +40,10 @@ def configure_normal_family() -> None:
     """
     Configure and register the Normal distribution family.
     """
+
+    if ParametricFamilyRegister.contains(FamilyName.NORMAL):
+        return
+
     NORMAL_DOC = """
     Normal (Gaussian) distribution.
 
@@ -218,7 +221,6 @@ def configure_normal_family() -> None:
             CharacteristicName.SKEW: skew_func,
             CharacteristicName.KURT: kurt_func,
         },
-        sampling_strategy=DefaultSamplingUnivariateStrategy(),
         support_by_parametrization=_support,
     )
     Normal.__doc__ = NORMAL_DOC
