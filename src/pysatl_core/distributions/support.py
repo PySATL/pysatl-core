@@ -1,6 +1,5 @@
 """
 Support Structures for Probability Distributions
-================================================
 
 This module defines support structures for probability distributions,
 including continuous intervals and discrete point sets.

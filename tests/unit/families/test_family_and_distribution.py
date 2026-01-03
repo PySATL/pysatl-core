@@ -4,6 +4,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+import numpy as np
 import pytest
 
 from pysatl_core.families import ParametricFamilyRegister
@@ -28,10 +29,14 @@ class TestFamilyRegistrationAndSampling(TestBaseFamily):
         distr = fam.distribution("base", value=0.0)
 
         n = 128
-        sample = distr.sample(n)
-        assert sample.shape == (n, 1)
-        arr = sample.array
-        assert (arr >= 0.0).all() and (arr <= 1.0).all()
+        samples = distr.sample(n)
+
+        assert isinstance(samples, np.ndarray)
+
+        flat = np.asarray(samples, dtype=np.float64).reshape(-1)
+        assert flat.shape == (n,)
+
+        assert ((flat >= 0.0) & (flat <= 1.0)).all()
 
         computations = distr.analytical_computations
         assert set(computations) == {

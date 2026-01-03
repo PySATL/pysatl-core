@@ -1,6 +1,5 @@
 """
 Computation Primitives and Conversions
-======================================
 
 Core building blocks for computing distribution characteristics and
 conversions between them (e.g., PDF to CDF, CDF to PPF).

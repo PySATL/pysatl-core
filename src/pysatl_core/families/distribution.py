@@ -13,17 +13,17 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from pysatl_core.distributions.distribution import Distribution
 from pysatl_core.families.registry import ParametricFamilyRegister
+from pysatl_core.types import NumericArray
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
 
     from pysatl_core.distributions.computation import AnalyticalComputation
-    from pysatl_core.distributions.sampling import Sample
     from pysatl_core.distributions.strategies import (
         ComputationStrategy,
         SamplingStrategy,
@@ -167,20 +167,23 @@ class ParametricFamilyDistribution(Distribution):
         """Get the support of this distribution."""
         return self._support
 
-    def sample(self, n: int, **options: Any) -> Sample:
+    def sample(self, n: int, **options: Any) -> NumericArray:
         """
-        Generate samples from this distribution.
+        Generate random samples from the distribution.
 
         Parameters
         ----------
         n : int
             Number of samples to generate.
         **options : Any
-            Additional options for sampling.
+            Additional sampling options forwarded to the underlying
+            sampling strategy.
 
         Returns
         -------
-        Sample
-            Generated samples.
+        NumericArray
+            NumPy array containing ``n`` generated samples.
+            The exact array shape depends on the distribution and
+            the sampling strategy.
         """
-        return self.sampling_strategy.sample(n, distr=self, **options)
+        return cast(NumericArray, self.sampling_strategy.sample(n, distr=self, **options))

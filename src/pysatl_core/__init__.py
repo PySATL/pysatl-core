@@ -1,7 +1,4 @@
 """
-PySATL Core
-===========
-
 Core framework for probabilistic distributions providing type definitions,
 distribution abstractions, characteristic computation graphs, and parametric
 family management.

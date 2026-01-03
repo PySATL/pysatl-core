@@ -84,6 +84,26 @@ class ParametricFamilyRegister:
         self._registered_families[family.name] = family
 
     @classmethod
+    def contains(cls, name: str) -> bool:
+        """
+        Check whether a parametric family with the given name
+        is registered in the registry.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parametric family.
+
+        Returns
+        -------
+        bool
+            ``True`` if the family is present in the registry,
+            ``False`` otherwise.
+        """
+        self = cls()
+        return name in self._registered_families
+
+    @classmethod
     def _reset(cls) -> None:
         """
         Clear the registry (for testing purposes).

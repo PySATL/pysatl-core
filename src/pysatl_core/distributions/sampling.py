@@ -1,6 +1,5 @@
 """
 Sampling Interfaces
-===================
 
 This module defines protocols and implementations for sample containers
 used in distribution sampling.
@@ -23,6 +22,7 @@ if TYPE_CHECKING:
     import numpy.typing as npt
 
 
+# TODO: This is probably a stillborn idea, it's better to just use NumPy arrays.
 class Sample(Protocol):
     """
     Protocol for sample containers.
@@ -42,6 +42,7 @@ class Sample(Protocol):
     def shape(self) -> tuple[int, ...]: ...
 
 
+# TODO: This is probably a stillborn idea, it's better to just use NumPy arrays.
 class ArraySample:
     """
     Array-backed sample container.

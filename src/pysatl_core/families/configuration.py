@@ -1,6 +1,5 @@
 """
 Distribution Families Configuration
-====================================
 
 This module defines and configures parametric distribution families for the PySATL library:
 

@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
@@ -39,6 +38,10 @@ def configure_uniform_family() -> None:
     """
     Configure and register the Uniform distribution family.
     """
+
+    if ParametricFamilyRegister.contains(FamilyName.CONTINUOUS_UNIFORM):
+        return
+
     UNIFORM_DOC = """
     Uniform (continuous) distribution.
 
@@ -250,7 +253,6 @@ def configure_uniform_family() -> None:
             CharacteristicName.SKEW: skew_func,
             CharacteristicName.KURT: kurt_func,
         },
-        sampling_strategy=DefaultSamplingUnivariateStrategy(),
         support_by_parametrization=_support,
     )
     Uniform.__doc__ = UNIFORM_DOC

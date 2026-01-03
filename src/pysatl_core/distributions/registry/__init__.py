@@ -1,5 +1,5 @@
 """
-Characteristic Registry package.
+Characteristic Registry package
 
 This package provides a graph-based registry for mathematical distribution
 characteristics (PDF, CDF, PMF, PPF, etc.) with constraint-based filtering.
