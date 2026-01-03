@@ -1,0 +1,36 @@
+/* Code */
+.highlight {
+    border-radius: 5px;
+    padding: 1em;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+
+table, th, td {
+    border: 1px solid #ddd;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+/* Header improvements */
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+
+/* Copy button */
+.copybtn {
+    opacity: 0.3;
+    transition: opacity 0.3s;
+}
+
+.copybtn:hover {
+    opacity: 1;
+}
