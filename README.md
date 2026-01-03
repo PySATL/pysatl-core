@@ -8,27 +8,42 @@
 [![CI][status-shield]][status-url]
 [![MIT License][license-shield]][license-url]
 
-**PySATL Core** is a minimal kernel for probability distributions: a distribution protocol, computation strategies, numeric converters between characteristics, and a dependency graph of characteristics. The kernel is designed as a foundation for other PySATL modules (CPD, etc.), with a focus on strict typing, extensibility, and reproducible computations.
+**PySATL Core** is the computational core of the PySATL project, providing abstractions and infrastructure for probability distributions, parametric families, characteristic-based computations, and sampling.
 
-## Features
+The library is designed as a **foundational kernel** rather than a ready-to-use end-user package. Its primary goals are explicit probabilistic structure, extensibility, and suitability as a basis for further stochastic and statistical tooling.
 
-- `Distribution` protocol with the minimal implementation `StandaloneEuclideanUnivariateDistribution`.
-- Analytical and fitted computations for characteristics (`pdf`, `cdf`, `ppf`, etc.).
-- Conversions between characteristics: `ppf↔cdf`, `cdf↔pdf` and their compositions.
-- Characteristic registry as a directed graph with invariants and path-based planning.
-- Sampling strategies (by default sampling via `ppf`).
-- Strict typing (`mypy --strict`), modern Python 3.12+.
+> **Project status**  
+> PySATL Core is currently in **early alpha**.  
+> It is **not published** to package managers such as `pip` yet.  
+> To experiment with the library, clone the repository and work with it locally.
+
+---
+
+## ✨ Key features
+
+- **Parametric families of distributions** with multiple parametrizations  
+  (e.g. Normal: `meanStd`, `meanPrec`).
+- A global **family registry** for configuring, querying, and extending available distribution families.
+- **Characteristic computation graph** (`CharacteristicRegistry`) that allows computing
+  arbitrary characteristics by specifying only a minimal analytical subset.
+- Distribution objects exposing common probabilistic operations
+  (sampling, analytical and fitted computations).
+- Clear separation between *distribution definitions*, *parametrizations*,
+  *computation strategies*, and *characteristics*.
+- Modern Python with strict static typing (PEP 695).
 
 ---
 
 ## Requirements
 
-- Python **3.12+**
+- Python **3.12+** (the project relies on **PEP 695** syntax)
 - NumPy **2.x**
 - SciPy **1.13+**
-- Poetry (for development)
+- Poetry (recommended for development)
 
-## Installation
+---
+
+## Installation (from source)
 
 Clone the repository:
 
@@ -37,136 +52,99 @@ git clone https://github.com/PySATL/pysatl-core.git
 cd pysatl-core
 ```
 
-Install dependencies (via Poetry):
+### Using Poetry (recommended)
 
 ```bash
-poetry install
+poetry install --with docs
 ```
 
-Or install the package locally with `pip` (editable):
+### Using pip (editable install)
 
 ```bash
-pip install -e .
+pip install -e ".[docs]"
 ```
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
-Below is a minimal example: define an analytical `ppf`, draw a sample, compute `cdf` and `pdf` through the kernel’s converters, and evaluate log-likelihood for a simple uniform case.
+Below is a compact example demonstrating the use of a **built-in Normal distribution**.
+It mirrors the example shown in the documentation (`examples/overview.ipynb`).
 
 ```python
-from pysatl_core.types import Kind
-from pysatl_core.distributions import (
-    AnalyticalComputation,
-    StandaloneEuclideanUnivariateDistribution,
-)
-from pysatl_core.distributions.characteristics import GenericCharacteristic
-
-# Characteristic names
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-
-# 1) A distribution with analytical PPF (identity on [0,1] for demo)
-dist_ppf = StandaloneEuclideanUnivariateDistribution(
-    kind=Kind.CONTINUOUS,
-    analytical_computations=[
-        AnalyticalComputation[float, float](PPF, lambda q: q)  # x := ppf(q)
-    ],
+from pysatl_core import (
+    FamilyName,
+    ParametricFamilyRegister,
+    configure_normal_family,
 )
 
-# 2) Sample 5 points (shape (n, d) = (5, 1))
-sample = dist_ppf.sample(5)
-print(sample.shape)  # -> (5, 1)
+configure_normal_family()
+normal_family = ParametricFamilyRegister.get(FamilyName.NORMAL)
 
-# 3) Compute characteristics via generic dispatch:
-CDF_ = GenericCharacteristic[float, float](CDF)
-PDF_ = GenericCharacteristic[float, float](PDF)
-
-x = 0.5
-print("cdf(0.5) =", CDF_(dist_ppf, x))  # cdf reconstructed from ppf
-print("pdf(0.5) =", PDF_(dist_ppf, x))  # pdf reconstructed from cdf
-
-# 4) Log-likelihood: define an analytical uniform pdf on [0,1]
-dist_uniform_pdf = StandaloneEuclideanUnivariateDistribution(
-    kind=Kind.CONTINUOUS,
-    analytical_computations=[
-        AnalyticalComputation[float, float](PDF, lambda t: 1.0 if 0.0 <= t <= 1.0 else 0.0)
-    ],
+normal = normal_family.distribution(
+    parametrization_name="meanStd",
+    mu=0.0,
+    sigma=1.0,
 )
 
-ll = dist_uniform_pdf.log_likelihood(sample)
-print("log-likelihood =", ll)  # for uniform on [0,1]: log(1) == 0
+normal_alt = normal_family.distribution(
+    parametrization_name="meanPrec",
+    mu=0.0,
+    tau=1.0,
+)
+
+samples = normal.sample(n=10_000)
+print(samples[:5])
+
+mean = normal.query_method("mean")()
+variance = normal.query_method("variance")()
+
+print(mean, variance)
 ```
 
-The idea is simple:
-- The **what** is defined by the characteristic name (`"pdf"`, `"cdf"`, `"ppf"`).
-- The **how** is decided by the computation strategy: it either picks an analytical implementation or reconstructs it from other characteristics using the registry graph (with optional caching).
+This example uses a **predefined family** and **predefined parametrizations**.
+PySATL Core also supports defining custom families, parametrizations,
+and characteristic graphs.
 
 ---
 
-## Concepts & Design
+## 📖 Documentation
 
-- **Distribution protocol.** A minimal stable interface for downstream PySATL modules.
-- **Analytical vs Fitted.** You can provide analytical functions; otherwise the kernel composes fitted methods from other available characteristics.
-- **Characteristic graph.** A directed graph over characteristic names for a fixed distribution type; path search yields a pipeline of converters.
-- **Sampling via PPF.** In the 1D Euclidean case, default sampling uses `ppf` with i.i.d. `U(0,1)`.
-- **Strict typing.** The codebase targets `mypy --strict` and static analysis.
+👉 **Online documentation:**  
+https://pysatl.github.io/pysatl-core/
+
+Documentation previews are automatically generated for pull requests and can be inspected via CI artifacts.
 
 ---
 
-## Development
+## 🧠 Concepts & design
 
-Set up the dev environment:
+- **ParametricFamily** — a family of distributions sharing a common mathematical form.
+- **Parametrization** — a concrete coordinate system for a family.
+- **Distribution** — a probabilistic object instantiated from a family and parametrization.
+- **Characteristic graph** — a directed graph describing relationships between computable characteristics.
+- **Registries** — explicit global registries enabling controlled extensibility.
+
+---
+
+## 🛠 Development
 
 ```bash
 poetry install --with dev
-```
-
-Run tests:
-
-```bash
-poetry run pytest -q
-```
-
-Coverage:
-
-```bash
-poetry run pytest --cov=pysatl_core --cov-report=term-missing
-```
-
-Static checks and style:
-
-```bash
-poetry run ruff check .
-poetry run mypy src
-```
-
-### Pre-commit
-
-Install hooks:
-
-```bash
-poetry run pre-commit install
-```
-
-Run manually:
-
-```bash
-poetry run pre-commit run --all-files --color always --verbose --show-diff-on-failure
+poetry run pytest
+poetry run pre-commit run --all-files
 ```
 
 ---
 
-## Roadmap
+## 🗺 Roadmap
 
-- Multivariate Euclidean distributions and sampling strategies.
-- Expanded converter registry and stronger invariants in the characteristic graph.
-- Mixtures and compositional operations in the core.
+- **Transformations module** for mixtures and distribution transformations.
+- Extension of characteristic graphs.
+- Stabilization of APIs and **publishing PySATL Core as an installable package**.
 
 ---
 
 ## License
 
-Distributed under the **MIT** License. See [LICENSE](LICENSE).
+Distributed under the **MIT License**. See [LICENSE](LICENSE).
