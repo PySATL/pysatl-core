@@ -10,6 +10,8 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
+from .builtins import *  # noqa: UP029
+from .builtins import __all__ as _builtins_all
 from .configuration import configure_families_register
 from .distribution import ParametricFamilyDistribution
 from .parametric_family import ParametricFamily
@@ -30,4 +32,8 @@ __all__ = [
     "constraint",
     "parametrization",
     "configure_families_register",
+    # builtins
+    *_builtins_all,
 ]
+
+del _builtins_all

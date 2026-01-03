@@ -11,14 +11,15 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+
+from pysatl_core.types import NumericArray
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
 
     from pysatl_core.distributions.computation import AnalyticalComputation
-    from pysatl_core.distributions.sampling import Sample
     from pysatl_core.distributions.strategies import (
         ComputationStrategy,
         Method,
@@ -113,7 +114,7 @@ class Distribution(Protocol):
         """
         return self.query_method(characteristic_name, **options)(value)
 
-    def sample(self, n: int, **options: Any) -> Sample:
+    def sample(self, n: int, **options: Any) -> NumericArray:
         """
         Generate random samples from the distribution.
 
@@ -122,11 +123,14 @@ class Distribution(Protocol):
         n : int
             Number of samples to generate.
         **options : Any
-            Additional sampling options.
+            Additional sampling options forwarded to the underlying
+            sampling strategy.
 
         Returns
         -------
-        Sample
-            Container with the generated samples.
+        NumericArray
+            NumPy array containing ``n`` generated samples.
+            The exact array shape depends on the distribution and
+            the sampling strategy.
         """
-        return self.sampling_strategy.sample(n, distr=self, **options)
+        return cast(NumericArray, self.sampling_strategy.sample(n, distr=self, **options))

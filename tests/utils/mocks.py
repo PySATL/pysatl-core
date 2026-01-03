@@ -12,21 +12,24 @@ import numpy as np
 
 from pysatl_core.distributions import (
     AnalyticalComputation,
-    ArraySample,
     ComputationStrategy,
     DefaultComputationStrategy,
     DefaultSamplingUnivariateStrategy,
     Distribution,
-    Sample,
     SamplingStrategy,
 )
 from pysatl_core.distributions.support import Support
-from pysatl_core.types import EuclideanDistributionType, GenericCharacteristicName, Kind
+from pysatl_core.types import (
+    EuclideanDistributionType,
+    GenericCharacteristicName,
+    Kind,
+    NumericArray,
+)
 
 
 class MockSamplingStrategy(SamplingStrategy):
-    def sample(self, n: int, distr: Distribution, **options: Any) -> Sample:
-        return ArraySample(np.random.random((n, 1)))
+    def sample(self, n: int, distr: Distribution, **options: Any) -> NumericArray:
+        return np.random.random((n, 1))
 
 
 @dataclass(slots=True)

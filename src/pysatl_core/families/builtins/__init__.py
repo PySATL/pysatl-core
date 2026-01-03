@@ -10,14 +10,11 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
-from pysatl_core.families.builtins.continuous import (
-    configure_exponential_family,
-    configure_normal_family,
-    configure_uniform_family,
-)
+from .continuous import *
+from .continuous import __all__ as _continuous_all
 
 __all__ = [
-    "configure_normal_family",
-    "configure_uniform_family",
-    "configure_exponential_family",
+    *_continuous_all,
 ]
+
+del _continuous_all

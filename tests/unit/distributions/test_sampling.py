@@ -15,12 +15,15 @@ class TestSampling(DistributionTestBase):
         distr = self.make_uniform_ppf_distribution()
 
         n = 1000
-        sample = distr.sample(n)
+        samples = distr.sample(n)
 
-        assert sample.shape == (n, 1)
-        arr = sample.array
-        assert np.isfinite(arr).all()
-        assert ((arr >= 0.0) & (arr <= 1.0)).all()
+        assert isinstance(samples, np.ndarray)
 
-        mean = float(arr.mean())
+        flat = np.asarray(samples, dtype=np.float64).reshape(-1)
+        assert flat.shape == (n,)
+
+        assert np.isfinite(flat).all()
+        assert ((flat >= 0.0) & (flat <= 1.0)).all()
+
+        mean = float(flat.mean())
         assert mean == pytest.approx(0.5, abs=0.1)
