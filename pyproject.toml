@@ -59,6 +59,13 @@ scipy-stubs = ">=1.13.0.0"
 [tool.poetry.group.docs.dependencies]
 jupyter = "^1.1.1"
 matplotlib = "^3.10.6"
+sphinx = "^7.3"
+sphinx-rtd-theme = "^2.0"
+sphinxcontrib-napoleon = "^0.7"
+sphinx-autodoc-typehints = "^2.0"
+sphinx-copybutton = "^0.5"
+myst-nb = "^1.3.0"
+linkify-it-py = "^2.0.3"
 
 [tool.ruff]
 target-version = "py312"
@@ -68,7 +75,7 @@ format.line-ending = "lf"
 
 lint.select = [ "B", "C4", "E", "F", "I", "ISC", "PIE", "SIM", "TID", "UP" ]
 lint.ignore = [ "B008", "E203" ]
-lint.per-file-ignores."__init__.py" = [ "F403" ]
+lint.per-file-ignores."**/__init__.py" = [ "F403" ]
 lint.fixable = [ "ALL" ]
 lint.unfixable = [  ]
 

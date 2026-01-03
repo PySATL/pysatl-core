@@ -125,3 +125,9 @@ poetry.lock
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Docs
+
+docs/build/*
+docs/source/api/*
+docs/source/examples/*
