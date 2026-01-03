@@ -1,6 +1,5 @@
 """
 Characteristic Graph (global) + View (per distribution profile)
-==============================================================
 
 This module defines the global characteristic registry and per-distribution views.
 
@@ -10,11 +9,11 @@ distribution profile sees a filtered view of this graph based on its specific
 features (kind, dimension, etc.).
 
 Core concepts:
-- **Nodes**: Characteristics (PDF, CDF, etc.) with presence and definitiveness rules
-- **Edges**: Unary computation methods between characteristics
-- **Constraints**: Rules that determine when nodes/edges are applicable
-- **View**: A filtered subgraph for a specific distribution
-- **Definitive characteristics**: Starting points for computations
+ - **Nodes**: Characteristics (PDF, CDF, etc.) with presence and definitiveness rules
+ - **Edges**: Unary computation methods between characteristics
+ - **Constraints**: Rules that determine when nodes/edges are applicable
+ - **View**: A filtered subgraph for a specific distribution
+ - **Definitive characteristics**: Starting points for computations
 """
 
 from __future__ import annotations

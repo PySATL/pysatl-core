@@ -1,6 +1,5 @@
 """
 Sampling Interfaces
-===================
 
 This module defines protocols and implementations for sample containers
 used in distribution sampling.

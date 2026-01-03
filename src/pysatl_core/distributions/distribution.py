@@ -1,6 +1,5 @@
 """
 Distribution Interface
-=====================
 
 This module defines the public Distribution protocol that serves as the
 abstract interface for all probability distributions in the system.

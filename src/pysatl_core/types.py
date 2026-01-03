@@ -1,6 +1,5 @@
 """
 Core Type Definitions
-=====================
 
 Fundamental types and data structures used throughout the PySATL core.
 """
