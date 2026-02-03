@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, Sized, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+from scipy.differentiate import jacobian
 from scipy.integrate import nquad
 from scipy.linalg import det
-from scipy.differentiate import jacobian
 
 from pysatl_core.distributions import (
     SamplingStrategy,
@@ -15,8 +15,8 @@ from pysatl_core.distributions import (
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import Parametrization, parametrization
 from pysatl_core.types import (
-    GenericCharacteristicName,
     DistributionType,
+    GenericCharacteristicName,
     ParametrizationName,
 )
 
@@ -137,9 +137,7 @@ class NaturalExponentialFamily(ParametricFamily):
     def log_density(self) -> ParametrizedFunction:
         def log_density_func(parametrization: Parametrization, x: Any) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            parametrization = self._transform_to_natural_parametrization(
-                parametrization
-            )
+            parametrization = self._transform_to_natural_parametrization(parametrization)
             if not self._support.accepts(x):
                 return float("-inf")
 
@@ -150,9 +148,7 @@ class NaturalExponentialFamily(ParametricFamily):
                 dot = dot[0]
 
             result = float(
-                np.log(self._normalization(x))
-                + dot
-                + self._log_partition(parametrization)
+                np.log(self._normalization(x)) + dot + self._log_partition(parametrization)
             )
             return result
 
@@ -188,20 +184,13 @@ class NaturalExponentialFamily(ParametricFamily):
                     theta = [theta]
                 parametrization = ExponentialFamilyParametrization(theta=theta)
                 # parametrization.theta = theta
-                return np.exp(
-                    np.dot(theta, alpha) + beta * self._log_partition(parametrization)
-                )[0]
+                return np.exp(np.dot(theta, alpha) + beta * self._log_partition(parametrization))[0]
 
             all_value = nquad(
-                lambda x: pdf(x) if self._parameter_space.accepts(x) else 0,
+                lambda x: pdf(x) if self._parameter_space.accepts(x) else 0,  # type: ignore[arg-type]
                 [(float("-inf"), float("+inf"))],
             )[0]
             return -np.log(all_value)
-
-        # TODO: remove hardcoding - Done, all hardcoding is only on user's hands
-        # 1. pr with prototype/draft - in progress
-        # 2. write instruction about to add distributions as member of exponential family - not started
-        # 3. parametrization's spaces (передавать в конструктор) - maybe impossible, discuss this with desiment on meeting
 
         def conjugate_sufficient_accepts(
             parametrization: ExponentialFamilyParametrization,
@@ -210,9 +199,9 @@ class NaturalExponentialFamily(ParametricFamily):
             xi = theta[:-1]
             nu = theta[-1]
 
-            return self._sufficient_statistics_values.accepts(
-                xi
-            ) and SpacePredicateArray([(0, float("+inf"))]).accepts(nu)
+            return self._sufficient_statistics_values.accepts(xi) and SpacePredicateArray(
+                [(0, float("+inf"))]
+            ).accepts(nu)
 
         return NaturalExponentialFamily(
             log_partition=conjugate_log_partition,
@@ -269,10 +258,8 @@ class NaturalExponentialFamily(ParametricFamily):
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: (
-                    np.dot(x, self.density(parametrization, x))
-                    if self._support.accepts(x)
-                    else 0
+                lambda x: (  # type: ignore[arg-type]
+                    np.dot(x, self.density(parametrization, x)) if self._support.accepts(x) else 0
                 ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
@@ -287,10 +274,8 @@ class NaturalExponentialFamily(ParametricFamily):
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: (
-                    x**2 * self.density(parametrization, x)
-                    if self._support.accepts(x)
-                    else 0
+                lambda x: (  # type: ignore[arg-type]
+                    x**2 * self.density(parametrization, x) if self._support.accepts(x) else 0
                 ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
@@ -301,10 +286,7 @@ class NaturalExponentialFamily(ParametricFamily):
     def _var(self) -> ParametrizedFunction:
         def func(parametrization: Parametrization, x: Any) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            return (
-                self._second_moment(parametrization, x)
-                - self._mean(parametrization, x) ** 2
-            )
+            return self._second_moment(parametrization, x) - self._mean(parametrization, x) ** 2
 
         return func
 
@@ -323,9 +305,7 @@ class NaturalExponentialFamily(ParametricFamily):
             alpha_post = self._sufficient(sample)
             beta_post = 1
 
-        return ExponentialConjugateHyperparameters(
-            alpha=alpha + alpha_post, beta=beta + beta_post
-        )
+        return ExponentialConjugateHyperparameters(alpha=alpha + alpha_post, beta=beta + beta_post)
 
 
 class ExponentialFamily(NaturalExponentialFamily):
@@ -356,9 +336,7 @@ class ExponentialFamily(NaturalExponentialFamily):
             return log_partition(ExponentialFamilyParametrization(theta=[theta]))
 
         natural_sufficient_statistics_values = SpacePredicate(
-            lambda eta: sufficient_statistics_values.accepts(
-                parameter_from_natural_parameter(eta)
-            )
+            lambda eta: sufficient_statistics_values.accepts(parameter_from_natural_parameter(eta))
         )
 
         self._natural_parameter = natural_parameter
