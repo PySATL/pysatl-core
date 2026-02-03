@@ -43,7 +43,7 @@ class ExponentialFamilyParametrization(Parametrization):
     Standard parametrization of Exponential Family.
     """
 
-    theta: list[float]  # TODO: mb more clever
+    theta: list[float]
 
 
 class ExponentialConjugateHyperparameters:
@@ -167,7 +167,6 @@ class NaturalExponentialFamily(ParametricFamily):
                 return [float("-inf"), float("-inf")]
 
             parametrization = ExponentialFamilyParametrization([theta])
-            # parametrization.theta = [theta]
             return [
                 theta,
                 self._log_partition(parametrization),
@@ -183,7 +182,6 @@ class NaturalExponentialFamily(ParametricFamily):
                 if not hasattr(theta, "__len__"):
                     theta = [theta]
                 parametrization = ExponentialFamilyParametrization(theta=theta)
-                # parametrization.theta = theta
                 return np.exp(np.dot(theta, alpha) + beta * self._log_partition(parametrization))[0]
 
             all_value = nquad(
