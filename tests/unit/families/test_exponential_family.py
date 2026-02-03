@@ -1,9 +1,10 @@
+from typing import Any, cast
+
 import numpy as np
 import pytest
 import scipy
-from typing import cast
+from numpy.testing import assert_allclose
 
-# from pysatl_core.distributions.computation import PDF
 from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.families import (
     ExponentialFamily,
@@ -14,22 +15,12 @@ from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import UnivariateContinuous
 
 
-# TODO: WRITE TEEEEEEESTS, MANY TESTS.
-def test_exponential():
-    # pass
-    # fam = NaturalExponentialFamily(
-    #     log_partition=lambda parametrization: np.log(-parametrization.theta[0]),
-    #     sufficient_statistics=lambda x: x,
-    #     normalization_constant=lambda _: 1,
-    #     # param_space=SpacePredicateArray([(0, float("+inf"))]),
-    #     support=SpacePredicateArray([(0, float("+inf"))]),
-    #     parameter_space=SpacePredicateArray([(float("-inf"), 0)]),
-    #     sufficient_statistics_values=SpacePredicateArray([(0, float("+inf"))]),
-    #     distr_type=UnivariateContinuous,
-    #     distr_parametrizations=["theta"],
-    #     sampling_strategy=DefaultSamplingUnivariateStrategy(),
-    # )
+def gamma_pdf(alpha: float, beta: float, x: float) -> float:
+    return scipy.stats.gamma(a=alpha, scale=1 / beta).pdf(x).item()
 
+
+@pytest.fixture(scope="function")
+def conjugate_for_exponential() -> ExponentialFamily:
     def get_parameter_from_natural_parameter(
         eta_parametrization: ExponentialFamilyParametrization,
     ):
@@ -39,11 +30,29 @@ def test_exponential():
             eta_parametrization = eta_parametrization[0]
         return -eta_parametrization
 
+    def natural_parameter(
+        theta_parametrization: Any,
+    ) -> Any:
+        if type(theta_parametrization) is ExponentialFamilyParametrization:
+            theta_parametrization = cast(
+                ExponentialFamilyParametrization, theta_parametrization
+            )
+            eta = -theta_parametrization.theta
+            return ExponentialFamilyParametrization(theta=eta)
+
+        return -1 * theta_parametrization
+
+    def transform_function(x: list[Any]) -> list[Any]:
+        if type(x) is not list:
+            return -x
+        return [-x[0]]
+
     fam = ExponentialFamily(
         log_partition=lambda parametrization: np.log(parametrization.theta[0]),
         sufficient_statistics=lambda x: x,
         normalization_constant=lambda _: 1,
         parameter_from_natural_parameter=get_parameter_from_natural_parameter,
+        natural_parameter=natural_parameter,
         parameter_space=SpacePredicateArray([(0, float("+inf"))]),
         sufficient_statistics_values=SpacePredicateArray([(0, float("+inf"))]),
         support=SpacePredicateArray([(0, float("+inf"))]),
@@ -52,22 +61,18 @@ def test_exponential():
         sampling_strategy=DefaultSamplingUnivariateStrategy(),
     )
 
-    conjugate_fam = fam
-    conjugate_fam = fam.conjugate_prior_family
+    conjugate_fam = fam.conjugate_prior_family.transform(transform_function)
     ParametricFamilyRegister().register(conjugate_fam)
-    # print(
-    #     fam.posterior_hyperparameters(
-    #         ExponentialConjugateHyperparameters(alpha=10, beta=1), [12]
-    #     )
-    # )
-    gamma_family: ExponentialFamily = cast(
-        ExponentialFamily, ParametricFamilyRegister().get("NaturalExponentialFamily")
+    return cast(
+        ExponentialFamily,
+        ParametricFamilyRegister().get("TransformedExponentialFamily"),
     )
-    print(type(gamma_family))
-    # conjugate = gamma_family.conjugate_prior_family
-    # exponential = gamma_family(theta=np.array([2]), parametrization_name="theta")
-    theta1 = 4
-    theta2 = 4
+
+
+@pytest.mark.parametrize("theta1", range(2, 5))
+@pytest.mark.parametrize("theta2", range(2, 5))
+def test_exponential_pdf(theta1, theta2, conjugate_for_exponential):
+    gamma_family: ExponentialFamily = conjugate_for_exponential
 
     alpha = theta2 + 1
     beta = theta1
@@ -77,25 +82,38 @@ def test_exponential():
     )
     pdf = exponential.computation_strategy.query_method("pdf", distr=exponential)
 
-    def gamma_pdf(alpha: float, beta: float, x: float):
-        return scipy.stats.gamma(a=alpha, scale=1 / beta).pdf(x).item()
+    x = [i / 10 for i in range(100)]
 
-    x = [i / 10 for i in range(-100, 100)]
-    # print(pdf(-x))
-    import matplotlib.pyplot as plt
-
-    plt.plot(x, [pdf(-xx) for xx in x], label="conjugate")
-    plt.plot(
-        x,
-        [gamma_pdf(alpha, beta, xx) for xx in x],
-        label=f"gamma({alpha}, {beta}) test",
+    assert_allclose(
+        [pdf(xx) for xx in x], [gamma_pdf(alpha, beta, xx) for xx in x], rtol=1e-6
     )
 
-    from scipy.integrate import quad
 
-    print(quad(pdf, float("-inf"), float("inf")))
-    # mean = exponential.computation_strategy.query_method("mean", distr=exponential)
-    # print(mean(12))
-    plt.legend()
-    plt.savefig("a.png")
-    # print(gamma_pdf(alpha, beta, x))
+@pytest.mark.parametrize("theta1", range(2, 5))
+@pytest.mark.parametrize("theta2", range(2, 5))
+def test_exponential_mean(theta1, theta2, conjugate_for_exponential):
+    gamma_family: ExponentialFamily = conjugate_for_exponential
+
+    alpha = theta2 + 1
+    beta = theta1
+
+    exponential = gamma_family(
+        theta=np.array([theta1, theta2]), parametrization_name="theta"
+    )
+    mean = exponential.computation_strategy.query_method("mean", distr=exponential)
+    assert np.isclose(mean(12), alpha / beta, rtol=1e-6)
+
+
+@pytest.mark.parametrize("theta1", range(2, 5))
+@pytest.mark.parametrize("theta2", range(2, 5))
+def test_exponential_var(theta1, theta2, conjugate_for_exponential):
+    gamma_family: ExponentialFamily = conjugate_for_exponential
+
+    alpha = theta2 + 1
+    beta = theta1
+
+    exponential = gamma_family(
+        theta=np.array([theta1, theta2]), parametrization_name="theta"
+    )
+    var = exponential.computation_strategy.query_method("var", distr=exponential)
+    assert np.isclose(var(12), alpha / beta**2, rtol=1e-6)
