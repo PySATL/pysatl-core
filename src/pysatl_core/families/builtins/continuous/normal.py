@@ -210,7 +210,7 @@ def configure_normal_family() -> None:
     Normal = ParametricFamily(
         name=FamilyName.NORMAL,
         distr_type=UnivariateContinuous,
-        distr_parametrizations=["meanStd", "meanPrec", "exponential"],
+        distr_parametrizations=["meanStd", "meanVar", "meanPrec", "exponential"],
         distr_characteristics={
             CharacteristicName.PDF: pdf,
             CharacteristicName.CDF: cdf,
@@ -245,6 +245,39 @@ def configure_normal_family() -> None:
         def check_sigma_positive(self) -> bool:
             """Check that standard deviation is positive."""
             return self.sigma > 0
+
+    @parametrization(family=Normal, name="meanVar")
+    class _MeanVar(Parametrization):
+        """
+        Standard parametrization of normal distribution.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of the distribution
+        var : float
+            Variance of the distribution
+        """
+
+        mu: float
+        var: float
+
+        @constraint(description="var > 0")
+        def check_var_positive(self) -> bool:
+            """Check that var is positive."""
+            return self.var > 0
+
+        def transform_to_base_parametrization(self) -> Parametrization:
+            """
+            Transform to Standard parametrization.
+
+            Returns
+            -------
+            Parametrization
+                Standard parametrization instance
+            """
+            sigma = math.sqrt(self.var)
+            return _MeanStd(mu=self.mu, sigma=sigma)
 
     @parametrization(family=Normal, name="meanPrec")
     class _MeanPrec(Parametrization):
