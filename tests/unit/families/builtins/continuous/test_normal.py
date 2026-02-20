@@ -41,7 +41,7 @@ class TestNormalFamily(BaseDistributionTest):
         assert self.normal_family.name == FamilyName.NORMAL
 
         # Check parameterizations
-        expected_parametrizations = {"meanStd", "meanPrec", "exponential"}
+        expected_parametrizations = {"meanStd", "meanVar", "meanPrec", "exponential"}
         assert set(self.normal_family.parametrization_names) == expected_parametrizations
         assert self.normal_family.base_parametrization_name == "meanStd"
 
@@ -53,6 +53,13 @@ class TestNormalFamily(BaseDistributionTest):
         assert dist.distribution_type == UnivariateContinuous
         assert dist.parameters == {"mu": 2.0, "sigma": 1.5}
         assert dist.parametrization_name == "meanStd"
+
+    def test_mean_var_parametrization_creation(self):
+        """Test creation of distribution with mean-variance parametrization."""
+        dist = self.normal_family(mu=2.0, var=2.25, parametrization_name="meanVar")
+
+        assert dist.parameters == {"mu": 2.0, "var": 2.25}
+        assert dist.parametrization_name == "meanVar"
 
     def test_mean_prec_parametrization_creation(self):
         """Test creation of distribution with mean-precision parametrization."""
@@ -74,6 +81,10 @@ class TestNormalFamily(BaseDistributionTest):
         # Sigma must be positive
         with pytest.raises(ValueError, match="sigma > 0"):
             self.normal_family(mu=0, sigma=-1.0)
+
+        # Var must be positive
+        with pytest.raises(ValueError, match="var > 0"):
+            self.normal_family(mu=0, var=-1.0, parametrization_name="meanVar")
 
         # Tau must be positive
         with pytest.raises(ValueError, match="tau > 0"):
@@ -113,6 +124,7 @@ class TestNormalFamily(BaseDistributionTest):
         "parametrization_name, params, expected_mu, expected_sigma",
         [
             ("meanStd", {"mu": 2.0, "sigma": 1.5}, 2.0, 1.5),
+            ("meanVar", {"mu": 2.0, "var": 2.25}, 2.0, 1.5),
             ("meanPrec", {"mu": 2.0, "tau": 0.25}, 2.0, math.sqrt(1 / 0.25)),
             ("exponential", {"a": -1 / (2 * 1.5**2), "b": 2 / (1.5**2)}, 2.0, 1.5),
         ],
