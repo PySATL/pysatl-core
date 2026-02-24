@@ -121,6 +121,8 @@ class TestExponentialFamily(BaseDistributionTest):
             CharacteristicName.CDF,
             CharacteristicName.PPF,
             CharacteristicName.CF,
+            CharacteristicName.LPDF,
+            CharacteristicName.SCORE,
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -131,12 +133,28 @@ class TestExponentialFamily(BaseDistributionTest):
     @pytest.mark.parametrize(
         "char_name, test_data, scipy_func, scipy_kwargs",
         [
-            (CharacteristicName.PDF, [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0], expon.pdf, {"scale": 2.0}),
-            (CharacteristicName.CDF, [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0], expon.cdf, {"scale": 2.0}),
+            (
+                CharacteristicName.PDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.pdf,
+                {"scale": 2.0},
+            ),
+            (
+                CharacteristicName.CDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.cdf,
+                {"scale": 2.0},
+            ),
             (
                 CharacteristicName.PPF,
                 [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999],
                 expon.ppf,
+                {"scale": 2.0},
+            ),
+            (
+                CharacteristicName.LPDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.logpdf,
                 {"scale": 2.0},
             ),
         ],
@@ -154,6 +172,33 @@ class TestExponentialFamily(BaseDistributionTest):
         expected_array = scipy_func(input_array, **scipy_kwargs)
 
         self.assert_arrays_almost_equal(result_array, expected_array)
+
+    def test_score_function(self):
+        """Test score function (gradient of log-pdf) for exponential distribution."""
+        dist = self.exponential_dist_example
+        score_func = dist.query_method(CharacteristicName.SCORE)
+
+        lambda_ = 0.5
+
+        x_scalar = 2.0
+        grad_scalar = score_func(x_scalar)
+        assert grad_scalar.shape == (1,)
+
+        expected_grad = 1.0 / lambda_ - x_scalar  # для x>=0
+        assert abs(grad_scalar[0] - expected_grad) < self.CALCULATION_PRECISION
+
+        x_out = -1.0
+        grad_out = score_func(x_out)
+        assert grad_out.shape == (1,)
+        assert grad_out[0] == 0.0
+
+        x_array = np.array([-1.0, 0.0, 1.0, 2.0, 3.0, 4.0])
+        grad_array = score_func(x_array)
+        assert grad_array.shape == (len(x_array), 1)
+
+        for idx, x_val in enumerate(x_array):
+            expected = 1.0 / lambda_ - x_val if x_val >= 0 else 0.0
+            assert abs(grad_array[idx, 0] - expected) < self.CALCULATION_PRECISION
 
     def test_characteristic_function_array_input(self):
         """Test characteristic function calculation with array input."""
