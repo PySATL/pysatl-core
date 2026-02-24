@@ -165,6 +165,55 @@ def configure_exponential_family() -> None:
         )
         return cast(ComplexArray, result)
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+        Distribution parameters object with field:
+            - lambda_: float (rate parameter)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x.
+            For x < 0 returns -np.inf.
+        """
+        parameters = cast(_Rate, parameters)
+        lambda_ = parameters.lambda_
+        return np.where(x >= 0, np.log(lambda_) - lambda_ * x, -np.inf)
+
+    def score(parameters: Parametrization, x: NumericArray) -> np.ndarray:
+        """
+        Score function (gradient of log-pdf w.r.t. lambda) for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with field:
+            - lambda_: float (rate parameter)
+        x : NumericArray
+            Points at which to evaluate the score. Can be a scalar or 1D array.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (..., 1). For scalar input, returns a 1D array of length 1.
+            For 1D array input of length N, returns a 2D array of shape (N, 1),
+            where each row corresponds to a data point and column corresponds to
+            gradient w.r.t. lambda.
+        """
+        parameters = cast(_Rate, parameters)
+        lambda_ = parameters.lambda_
+        # derivative of log pdf w.r.t lambda: 1/lambda - x (for x >= 0)
+        grad = np.where(x >= 0, 1.0 / lambda_ - x, 0.0)
+        # add trailing dimension to get (..., 1)
+        return grad[..., np.newaxis]
+
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of exponential distribution."""
         parameters = cast(_Rate, parameters)
@@ -213,6 +262,8 @@ def configure_exponential_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
+            CharacteristicName.SCORE: score,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
