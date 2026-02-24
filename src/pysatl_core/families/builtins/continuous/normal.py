@@ -168,6 +168,66 @@ def configure_normal_family() -> None:
         mu = parameters.mu
         return cast(ComplexArray, np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for normal distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - mu: float (mean)
+            - sigma: float (standard deviation)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x
+        """
+        parameters = cast(_MeanStd, parameters)
+        sigma = parameters.sigma
+        mu = parameters.mu
+
+        # log pdf = -0.5*log(2π) - log(σ) - (x-μ)²/(2σ²)
+        return cast(
+            NumericArray,
+            -0.5 * np.log(2 * np.pi) - np.log(sigma) - ((x - mu) ** 2) / (2 * sigma**2),
+        )
+
+    def score(parameters: Parametrization, x: NumericArray) -> np.ndarray:
+        """
+        Score function (gradient of log-pdf) for normal distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - mu: float (mean)
+            - sigma: float (standard deviation)
+        x : NumericArray
+            Points at which to evaluate the score. Can be a scalar or 1D array.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (..., 2). For scalar input, returns a 1D array of length 2.
+            For 1D array input of length N, returns a 2D array of shape (N, 2),
+            where each row corresponds to a data point and columns correspond to
+            gradients w.r.t. mu and sigma (in that order).
+        """
+        parameters = cast(_MeanStd, parameters)
+        mu = parameters.mu
+        sigma = parameters.sigma
+
+        x_minus_mu = x - mu
+        grad_mu = x_minus_mu / sigma**2
+        grad_sigma = -1.0 / sigma + (x_minus_mu**2) / sigma**3
+
+        # Stack along last axis to get (..., 2)
+        return np.stack([grad_mu, grad_sigma], axis=-1)
+
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of normal distribution."""
         parameters = cast(_MeanStd, parameters)
@@ -216,6 +276,8 @@ def configure_normal_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
+            CharacteristicName.SCORE: score,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
