@@ -191,6 +191,65 @@ def configure_uniform_family() -> None:
 
         return cast(ComplexArray, sinc_val * np.exp(1j * center * t_arr))
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for uniform distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lower_bound: float (lower bound)
+            - upper_bound: float (upper bound)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x
+            For x outside [lower_bound, upper_bound] returns -np.inf
+        """
+        parameters = cast(_Standard, parameters)
+        a = parameters.lower_bound
+        b = parameters.upper_bound
+        width = b - a
+        return np.where((x >= a) & (x <= b), -np.log(width), -np.inf)
+
+    def score(parameters: Parametrization, x: NumericArray) -> np.ndarray:
+        """
+        Score function (gradient of log-pdf) for uniform distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lower_bound: float (lower bound)
+            - upper_bound: float (upper bound)
+        x : NumericArray
+            Points at which to evaluate the score. Can be a scalar or 1D array.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (..., 2). For scalar input, returns a 1D array of length 2.
+            For 1D array input of length N, returns a 2D array of shape (N, 2),
+            where each row corresponds to a data point and columns correspond to
+            gradients w.r.t. lower_bound and upper_bound (in that order).
+        """
+        parameters = cast(_Standard, parameters)
+        a = parameters.lower_bound
+        b = parameters.upper_bound
+        width = b - a
+        inside = (x >= a) & (x <= b)
+
+        # Derivatives:
+        # d/da log pdf = 1/width, d/db log pdf = -1/width for points inside support
+        grad_a = np.where(inside, 1.0 / width, 0.0)
+        grad_b = np.where(inside, -1.0 / width, 0.0)
+
+        return np.stack([grad_a, grad_b], axis=-1)
+
     def mean_func(parameters: Parametrization, _: Any) -> float:
         """Mean of uniform distribution."""
         parameters = cast(_Standard, parameters)
@@ -248,6 +307,8 @@ def configure_uniform_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
+            CharacteristicName.SCORE: score,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
