@@ -148,6 +148,8 @@ class TestUniformFamily(BaseDistributionTest):
             CharacteristicName.CDF,
             CharacteristicName.PPF,
             CharacteristicName.CF,
+            CharacteristicName.LPDF,
+            CharacteristicName.SCORE,
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -176,6 +178,12 @@ class TestUniformFamily(BaseDistributionTest):
                 uniform.ppf,
                 {"loc": 2.0, "scale": 3.0},
             ),
+            (
+                CharacteristicName.LPDF,
+                [1.0, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0],
+                uniform.logpdf,
+                {"loc": 2.0, "scale": 3.0},
+            ),
         ],
     )
     def test_array_input_for_characteristics(self, char_name, test_data, scipy_func, scipy_kwargs):
@@ -191,6 +199,49 @@ class TestUniformFamily(BaseDistributionTest):
         expected_array = scipy_func(input_array, **scipy_kwargs)
 
         self.assert_arrays_almost_equal(result_array, expected_array)
+
+    def test_score_function(self):
+        """Test score function (gradient of log-pdf) for uniform distribution."""
+        dist = self.uniform_dist_example
+        score_func = dist.query_method(CharacteristicName.SCORE)
+
+        a, b = 2.0, 5.0
+        width = b - a
+
+        x_scalar = 3.0  # In the interval
+        grad_scalar = score_func(x_scalar)
+        assert grad_scalar.shape == (2,)
+
+        expected_grad_a = 1.0 / width
+        expected_grad_b = -1.0 / width
+        assert abs(grad_scalar[0] - expected_grad_a) < self.CALCULATION_PRECISION
+        assert abs(grad_scalar[1] - expected_grad_b) < self.CALCULATION_PRECISION
+
+        x_out = 1.0
+        grad_out = score_func(x_out)
+        assert grad_out.shape == (2,)
+        assert grad_out[0] == 0.0
+        assert grad_out[1] == 0.0
+
+        x_boundary = a
+        grad_boundary = score_func(x_boundary)
+        assert grad_boundary[0] == expected_grad_a
+        assert grad_boundary[1] == expected_grad_b
+
+        x_array = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        grad_array = score_func(x_array)
+        assert grad_array.shape == (len(x_array), 2)
+
+        for idx, x_val in enumerate(x_array):
+            inside = (x_val >= a) & (x_val <= b)
+            if inside:
+                expected_a = 1.0 / width
+                expected_b = -1.0 / width
+            else:
+                expected_a = 0.0
+                expected_b = 0.0
+            assert abs(grad_array[idx, 0] - expected_a) < self.CALCULATION_PRECISION
+            assert abs(grad_array[idx, 1] - expected_b) < self.CALCULATION_PRECISION
 
     def test_characteristic_function_array_input(self):
         """Test characteristic function calculation with array input."""

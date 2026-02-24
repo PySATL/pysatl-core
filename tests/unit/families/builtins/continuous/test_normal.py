@@ -149,6 +149,8 @@ class TestNormalFamily(BaseDistributionTest):
             CharacteristicName.CDF,
             CharacteristicName.PPF,
             CharacteristicName.CF,
+            CharacteristicName.LPDF,
+            CharacteristicName.SCORE,
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -177,6 +179,12 @@ class TestNormalFamily(BaseDistributionTest):
                 norm.ppf,
                 {"loc": 2.0, "scale": 1.5},
             ),
+            (
+                CharacteristicName.LPDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                norm.logpdf,
+                {"loc": 2.0, "scale": 1.5},
+            ),
         ],
     )
     def test_array_input_for_characteristics(self, char_name, test_data, scipy_func, scipy_kwargs):
@@ -192,6 +200,32 @@ class TestNormalFamily(BaseDistributionTest):
         expected_array = scipy_func(input_array, **scipy_kwargs)
 
         self.assert_arrays_almost_equal(result_array, expected_array)
+
+    def test_score_function(self):
+        """Test score function (gradient of log-pdf) for normal distribution."""
+        dist = self.normal_dist_example
+        score_func = dist.query_method(CharacteristicName.SCORE)
+
+        mu, sigma = 2.0, 1.5
+
+        x_scalar = 2.5
+        grad_scalar = score_func(x_scalar)
+        assert grad_scalar.shape == (2,)
+
+        expected_grad_mu = (x_scalar - mu) / sigma**2
+        expected_grad_sigma = -1.0 / sigma + (x_scalar - mu) ** 2 / sigma**3
+        assert abs(grad_scalar[0] - expected_grad_mu) < self.CALCULATION_PRECISION
+        assert abs(grad_scalar[1] - expected_grad_sigma) < self.CALCULATION_PRECISION
+
+        x_array = np.array([-1.0, 0.0, 1.0, 2.0, 3.0, 4.0])
+        grad_array = score_func(x_array)
+        assert grad_array.shape == (len(x_array), 2)
+
+        for idx, x_val in enumerate(x_array):
+            expected_mu = (x_val - mu) / sigma**2
+            expected_sigma = -1.0 / sigma + (x_val - mu) ** 2 / sigma**3
+            assert abs(grad_array[idx, 0] - expected_mu) < self.CALCULATION_PRECISION
+            assert abs(grad_array[idx, 1] - expected_sigma) < self.CALCULATION_PRECISION
 
     def test_characteristic_function_array_input(self):
         """Test characteristic function calculation with array input."""
