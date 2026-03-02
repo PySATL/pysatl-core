@@ -1,0 +1,4 @@
+[submodule "subprojects/unuran-pysatl"]
+	path = subprojects/unuran-pysatl
+	url = https://github.com/PySATL/unuran.git
+	branch = main

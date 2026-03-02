@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.o
 
 # Distribution / packaging
 .Python
@@ -127,7 +128,12 @@ poetry.lock
 .cursorindexingignore
 
 # Docs
-
 docs/build/*
 docs/source/api/*
 docs/source/examples/*
+
+# Log files
+*.log
+
+# Unuran build artifacts
+src/pysatl_core/sampling/unuran/bindings/_unuran_cffi.c
