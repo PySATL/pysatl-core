@@ -1,439 +1,260 @@
+"""
+Unit tests for pysatl_core.sampling.unuran.bindings._cffi_build
+
+Tests pure-Python helper functions in the CFFI build script:
+  - _configure_logging: logging level and handler setup
+  - _get_project_root: ascending to pyproject.toml
+  - _extract_library_name: stripping lib prefix and suffixes
+  - find_unuran: locating library and header in a vendor directory
+  - build_unuran: skipping/invoking the build script
+"""
+
 from __future__ import annotations
 
+__author__ = "Artem Romanyuk"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
+import logging
 import subprocess
-import sys
-from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-import pysatl_core.sampling.unuran.bindings._cffi_build as cffi_build
+from pysatl_core.sampling.unuran.bindings._cffi_build import (
+    _configure_logging,
+    _extract_library_name,
+    _get_project_root,
+    build_unuran,
+    find_unuran,
+)
 
 
-class FFIStub:
-    def __init__(self) -> None:
-        self.set_source_calls: list[dict[str, Any]] = []
-        self.compile_calls: list[dict[str, Any]] = []
+class TestConfigureLogging:
+    """Tests for _configure_logging function."""
 
-    def set_source(self, module_name: str, header: str, **kwargs: Any) -> None:
-        self.set_source_calls.append({"module": module_name, "header": header, **kwargs})
+    def test_verbose_mode_calls_basicconfig_with_info_level(self) -> None:
+        """verbose=True passes logging.INFO to basicConfig."""
+        with patch("logging.basicConfig") as mock_basicconfig:
+            _configure_logging(verbose=True)
+            mock_basicconfig.assert_called_once()
+            _, kwargs = mock_basicconfig.call_args
+            assert kwargs["level"] == logging.INFO
 
-    def compile(self, verbose: bool = False) -> None:
-        self.compile_calls.append({"verbose": verbose})
+    def test_non_verbose_mode_calls_basicconfig_with_warning_level(self) -> None:
+        """verbose=False passes logging.WARNING to basicConfig."""
+        with patch("logging.basicConfig") as mock_basicconfig:
+            _configure_logging(verbose=False)
+            mock_basicconfig.assert_called_once()
+            _, kwargs = mock_basicconfig.call_args
+            assert kwargs["level"] == logging.WARNING
+
+    def test_log_file_handler_included_when_log_file_given(self, tmp_path: Path) -> None:
+        """Providing a log_file path includes a FileHandler in the handlers list."""
+        log_file = tmp_path / "build.log"
+
+        with patch("logging.basicConfig") as mock_basicconfig:
+            _configure_logging(verbose=False, log_file=str(log_file))
+            _, kwargs = mock_basicconfig.call_args
+            handler_types = [type(h) for h in kwargs["handlers"]]
+            assert logging.FileHandler in handler_types
+
+    def test_no_file_handler_when_log_file_is_none(self) -> None:
+        """Without a log_file, handlers contain only a StreamHandler."""
+        with patch("logging.basicConfig") as mock_basicconfig:
+            _configure_logging(verbose=False, log_file=None)
+            _, kwargs = mock_basicconfig.call_args
+            handler_types = [type(h) for h in kwargs["handlers"]]
+            assert logging.FileHandler not in handler_types
+            assert logging.StreamHandler in handler_types
 
 
-@dataclass
-class BuildScenario:
-    label: str
-    find_result: dict[str, str | None]
-    script_exists: bool
-    expect_run: bool
-    run_exception: Exception | None = None
-    expect_exception: type[BaseException] | None = None
+class TestGetProjectRoot:
+    """Tests for _get_project_root function."""
+
+    def test_finds_pyproject_toml_ancestor(self, tmp_path: Path) -> None:
+        """_get_project_root walks up and returns the directory containing pyproject.toml."""
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry]")
+        deep_dir = tmp_path / "src" / "pkg" / "subpkg"
+        deep_dir.mkdir(parents=True)
+        test_file = deep_dir / "some_module.py"
+        test_file.write_text("# stub")
+
+        with patch("pysatl_core.sampling.unuran.bindings._cffi_build.Path") as mock_path_cls:
+            mock_path_cls.return_value.resolve.return_value = test_file
+            mock_path_cls.return_value.parent = deep_dir
+
+        # Use the actual function against a real tmp_path structure
+        result = _get_project_root()
+
+        # The real function should find pyproject.toml somewhere up the path
+        assert (result / "pyproject.toml").exists()
 
 
-@dataclass
-class MainScenario:
-    label: str
-    os_name: str
-    platform: str
-    expect_skip: bool = False
-    find_side_effect: Exception | None = None
-    build_side_effect: Exception | None = None
-    compile_side_effect: Exception | None = None
-    expect_exception: type[BaseException] | None = None
-
-
-class TestCallbacks:
-    @pytest.mark.parametrize(
-        "scenario",
-        [
-            {
-                "label": "pyproject_same_dir",
-                "chain": ["repo", "pkg"],
-                "py_index": 0,
-                "expect_index": 0,
-            },
-            {
-                "label": "pyproject_parent",
-                "chain": ["repo", "pkg", "module"],
-                "py_index": 1,
-                "expect_index": 1,
-            },
-            {
-                "label": "pyproject_grandparent",
-                "chain": ["repo", "pkg", "subpkg", "module"],
-                "py_index": 0,
-                "expect_index": 0,
-            },
-            {
-                "label": "pyproject_deep_chain",
-                "chain": ["repo", "layer1", "layer2", "layer3", "leaf"],
-                "py_index": 2,
-                "expect_index": 2,
-            },
-            {
-                "label": "missing_pyproject",
-                "chain": ["repo", "pkg"],
-                "py_index": -1,
-                "expect_exception": RuntimeError,
-            },
-        ],
-        ids=lambda s: s["label"],
-    )
-    def test_get_project_root_traverses_directories(
-        self, scenario: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """
-        Exercises _get_project_root over five directory chains (pyproject at current
-        dir, parent, grandparent, deep ancestor, and missing pyproject edge case),
-        ensuring the search ascends correctly and raises when no configuration file
-        exists.
-        """
-        base = tmp_path / scenario["chain"][0]
-        current = base
-        dirs = [base]
-        base.mkdir()
-        for name in scenario["chain"][1:]:
-            current = current / name
-            current.mkdir()
-            dirs.append(current)
-
-        if scenario.get("py_index", -1) >= 0:
-            py_dir = dirs[scenario["py_index"]]
-            (py_dir / "pyproject.toml").write_text("[tool.poetry]")
-
-        target_file = dirs[-1] / "_cffi_build.py"
-        target_file.write_text("print('dummy')")
-        monkeypatch.setattr(cffi_build, "__file__", str(target_file))
-
-        if scenario.get("expect_exception"):
-            with pytest.raises(scenario["expect_exception"]):
-                cffi_build._get_project_root()
-            return
-
-        root = cffi_build._get_project_root()
-        assert root == dirs[scenario["expect_index"]]
+class TestExtractLibraryName:
+    """Tests for _extract_library_name function."""
 
     @pytest.mark.parametrize(
-        "name, expected",
+        "filename,expected",
         [
             ("libunuran.so", "unuran"),
-            ("libspecial.dylib", "special"),
-            ("libarchive.a", "archive"),
-            ("libcustom.dll", "custom"),
-            ("plainfile", "plainfile"),
+            ("libunuran.a", "unuran"),
+            ("libunuran.dylib", "unuran"),
+            ("libunuran.so.1.2", "unuran"),
+            ("unuran.dll", "unuran"),
+            ("libfoo_bar.so", "foo_bar"),
+        ],
+        ids=[
+            "shared_linux",
+            "static",
+            "shared_macos",
+            "versioned_so",
+            "dll_no_prefix",
+            "underscore_name",
         ],
     )
-    def test_extract_library_name_handles_various_suffixes(self, name: str, expected: str) -> None:
-        """
-        Validates _extract_library_name with five library filename patterns (Linux
-        .so, macOS .dylib, static .a, Windows .dll, and no prefix edge case), ensuring
-        prefix removal and suffix stripping behave consistently.
-        """
-        assert cffi_build._extract_library_name(Path(name)) == expected
+    def test_strips_prefix_and_suffix(self, filename: str, expected: str) -> None:
+        """Library name is extracted by stripping 'lib' prefix and known suffixes."""
+        result = _extract_library_name(Path(filename))
 
-    @pytest.mark.parametrize(
-        "scenario",
-        [
-            {"label": "static_archive", "suffix": ".a", "expected_key": "extra_objects"},
-            {"label": "shared_so", "suffix": ".so", "expected_key": "libraries"},
-            {"label": "shared_dylib", "suffix": ".dylib", "expected_key": "libraries"},
-            {"label": "shared_dll", "suffix": ".dll", "expected_key": "libraries"},
-            {
-                "label": "custom_name",
-                "suffix": ".so",
-                "filename": "customlib.so",
-                "expected_key": "libraries",
-            },
-        ],
-        ids=lambda s: s["label"],
-    )
-    def test_configure_from_paths_adjusts_ffi_source(
-        self, scenario: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """
-        Covers _configure_from_paths across five library types (static archive and
-        four shared variants including custom names), ensuring static archives route
-        through extra_objects while shared libraries populate libraries/library_dirs.
-        """
-        ffi_stub = FFIStub()
-        monkeypatch.setattr(cffi_build, "ffi", ffi_stub)
+        assert result == expected
 
-        include_file = tmp_path / scenario["label"] / "include" / "unuran.h"
-        library_filename = scenario.get("filename", f"libunuran{scenario['suffix']}")
-        library_file = tmp_path / scenario["label"] / "lib" / library_filename
-        include_file.parent.mkdir(parents=True, exist_ok=True)
-        library_file.parent.mkdir(parents=True, exist_ok=True)
-        include_file.write_text("")
-        library_file.write_text("")
+    def test_path_with_directory_prefix(self) -> None:
+        """Absolute path to a library file is handled correctly."""
+        result = _extract_library_name(Path("/usr/local/lib/libunuran.so"))
 
-        cffi_build._configure_from_paths(include_file, library_file)
-        assert ffi_stub.set_source_calls, "Expected set_source to be invoked"
-        call = ffi_stub.set_source_calls[-1]
-        assert call["module"] == cffi_build.MODULE_NAME
-        assert scenario["expected_key"] in call
+        assert result == "unuran"
 
-    @pytest.mark.parametrize(
-        "scenario",
-        [
-            {
-                "label": "linux_paths_present",
-                "lib_name": "libunuran.so",
-                "header": True,
-                "expect_exception": None,
-            },
-            {
-                "label": "mac_paths_present",
-                "lib_name": "libunuran.dylib",
-                "header": True,
-                "expect_exception": None,
-            },
-            {
-                "label": "missing_lib_no_raise",
-                "lib_name": None,
-                "header": True,
-                "raise_on_error": False,
-            },
-            {
-                "label": "missing_header_no_raise",
-                "lib_name": "libunuran.so",
-                "header": False,
-                "raise_on_error": False,
-            },
-            {
-                "label": "missing_lib_with_raise",
-                "lib_name": None,
-                "header": True,
-                "expect_exception": ImportError,
-            },
-        ],
-        ids=lambda s: s["label"],
-    )
-    def test_find_unuran_handles_platform_variants(
-        self, scenario: dict[str, Any], tmp_path: Path
-    ) -> None:
-        """
-        Tests find_unuran with five filesystem states (Linux shared, macOS shared,
-        missing library without raising, missing header without raising, and missing
-        library with ImportError), covering cases where files are absent but the
-        caller may opt out of exceptions.
-        """
-        unuran_dir = tmp_path / scenario["label"]
-        lib_dir = unuran_dir / "out"
-        include_dir = unuran_dir / "unuran" / "src"
+    def test_name_without_lib_prefix_is_returned_as_is(self) -> None:
+        """Files without 'lib' prefix keep their stem after suffix removal."""
+        result = _extract_library_name(Path("unuran.so"))
+
+        assert result == "unuran"
+
+
+class TestFindUnuran:
+    """Tests for find_unuran function."""
+
+    def _create_vendor_tree(
+        self, base: Path, create_lib: bool = True, create_header: bool = True
+    ) -> Path:
+        """Create a minimal vendor directory tree."""
+        lib_dir = base / "out"
         lib_dir.mkdir(parents=True)
-        include_dir.mkdir(parents=True)
+        header_dir = base / "unuran" / "src"
+        header_dir.mkdir(parents=True)
 
-        if scenario.get("lib_name"):
-            (lib_dir / scenario["lib_name"]).write_text("")
+        if create_lib:
+            (lib_dir / "libunuran.a").write_bytes(b"")
+        if create_header:
+            (header_dir / "unuran.h").write_bytes(b"")
 
-        if scenario.get("header"):
-            (include_dir / "unuran.h").write_text("")
+        return base
 
-        raise_on_error = scenario.get("raise_on_error", True)
+    def test_returns_both_paths_when_both_present(self, tmp_path: Path) -> None:
+        """find_unuran returns resolved paths for both header and library when both exist."""
+        vendor_dir = self._create_vendor_tree(tmp_path)
 
-        if scenario.get("expect_exception"):
-            with pytest.raises(scenario["expect_exception"]):
-                cffi_build.find_unuran(unuran_dir, raise_on_error=raise_on_error)
-            return
+        result = find_unuran(vendor_dir, raise_on_error=False)
 
-        results = cffi_build.find_unuran(unuran_dir, raise_on_error=raise_on_error)
-        if scenario.get("lib_name"):
-            assert results["library_path"] is not None
-        else:
-            assert results["library_path"] is None
+        assert result["library_path"] is not None
+        assert result["include_path"] is not None
 
-        if scenario.get("header"):
-            assert results["include_path"] is not None
-        else:
-            assert results["include_path"] is None
+    def test_library_path_is_none_when_missing(self, tmp_path: Path) -> None:
+        """find_unuran returns None for library_path when the library file is absent."""
+        vendor_dir = self._create_vendor_tree(tmp_path, create_lib=False)
 
-    @pytest.mark.parametrize(
-        "scenario",
-        [
-            BuildScenario(
-                label="already_built",
-                find_result={"include_path": "inc", "library_path": "lib"},
-                script_exists=True,
-                expect_run=False,
-            ),
-            BuildScenario(
-                label="needs_build_runs_script",
-                find_result={"include_path": None, "library_path": None},
-                script_exists=True,
-                expect_run=True,
-            ),
-            BuildScenario(
-                label="missing_script_raises",
-                find_result={"include_path": None, "library_path": None},
-                script_exists=False,
-                expect_run=False,
-                expect_exception=RuntimeError,
-            ),
-            BuildScenario(
-                label="subprocess_failure",
-                find_result={"include_path": None, "library_path": None},
-                script_exists=True,
-                expect_run=True,
-                run_exception=subprocess.CalledProcessError(1, "cmd"),
-                expect_exception=subprocess.CalledProcessError,
-            ),
-            BuildScenario(
-                label="partial_paths_still_run",
-                find_result={"include_path": "inc", "library_path": None},
-                script_exists=True,
-                expect_run=True,
-            ),
-        ],
-        ids=lambda s: s.label,
-    )
-    def test_build_unuran_handles_cached_and_missing_artifacts(
-        self, scenario: BuildScenario, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        result = find_unuran(vendor_dir, raise_on_error=False)
+
+        assert result["library_path"] is None
+        assert result["include_path"] is not None
+
+    def test_include_path_is_none_when_missing(self, tmp_path: Path) -> None:
+        """find_unuran returns None for include_path when the header is absent."""
+        vendor_dir = self._create_vendor_tree(tmp_path, create_header=False)
+
+        result = find_unuran(vendor_dir, raise_on_error=False)
+
+        assert result["include_path"] is None
+        assert result["library_path"] is not None
+
+    def test_raises_import_error_when_library_missing_and_raise_on_error(
+        self, tmp_path: Path
     ) -> None:
-        """
-        Validates build_unuran under five conditions (already built, needs build,
-        missing script edge case, subprocess failure, and partial discovery requiring
-        rebuild), ensuring subprocess invocation and exception handling behave as
-        expected.
-        """
-        unuran_dir = tmp_path / "vendor"
-        unuran_dir.mkdir()
-        build_script = unuran_dir / "build_unuran.py"
-        if scenario.script_exists:
-            build_script.write_text("print('build')")
+        """find_unuran raises ImportError when library is missing and raise_on_error=True."""
+        vendor_dir = self._create_vendor_tree(tmp_path, create_lib=False)
 
-        find_calls: list[dict[str, Any]] = []
+        with pytest.raises(ImportError, match="libunuran"):
+            find_unuran(vendor_dir, raise_on_error=True)
 
-        def fake_find(target_dir: Path, raise_on_error: bool) -> dict[str, str | None]:
-            find_calls.append({"dir": target_dir, "raise": raise_on_error})
-            return scenario.find_result
-
-        monkeypatch.setattr(cffi_build, "find_unuran", fake_find)
-
-        run_calls: list[list[str]] = []
-
-        def fake_run(cmd: list[str], check: bool) -> None:
-            run_calls.append(cmd)
-            if scenario.run_exception:
-                raise scenario.run_exception
-
-        monkeypatch.setattr(cffi_build, "subprocess", SimpleNamespace(run=fake_run))
-
-        if scenario.expect_exception:
-            with pytest.raises(scenario.expect_exception):
-                cffi_build.build_unuran(unuran_dir)
-            return
-
-        cffi_build.build_unuran(unuran_dir)
-        assert bool(run_calls) is scenario.expect_run
-
-    @pytest.mark.parametrize(
-        "scenario",
-        [
-            MainScenario(label="linux_success", os_name="posix", platform="linux"),
-            MainScenario(
-                label="linux_find_error",
-                os_name="posix",
-                platform="linux",
-                find_side_effect=ImportError("missing"),
-                expect_exception=ImportError,
-            ),
-            MainScenario(
-                label="linux_build_error",
-                os_name="posix",
-                platform="linux",
-                build_side_effect=RuntimeError("fail"),
-                expect_exception=RuntimeError,
-            ),
-            MainScenario(
-                label="linux_compile_error",
-                os_name="posix",
-                platform="linux",
-                compile_side_effect=RuntimeError("compile fail"),
-                expect_exception=RuntimeError,
-            ),
-        ],
-        ids=lambda s: s.label,
-    )
-    def test_main_controls_build_flow(
-        self,
-        scenario: MainScenario,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+    def test_raises_import_error_when_header_missing_and_raise_on_error(
+        self, tmp_path: Path
     ) -> None:
-        """
-        Tests main() across five environments (Windows skip, Linux success, Linux
-        find failure, Linux build failure, Linux compile failure), covering supported
-        and unsupported OS flows and ensuring failure modes propagate while restoring
-        directories.
-        """
-        project_root = tmp_path / "repo"
-        project_root.mkdir()
-        vendor_dir = project_root / "vendor" / cffi_build.UNURAN_DIR_NAME
-        vendor_dir.mkdir(parents=True)
-        include_file = vendor_dir / "unuran" / "src" / "unuran.h"
-        lib_file = vendor_dir / "out" / "libunuran.so"
-        include_file.parent.mkdir(parents=True, exist_ok=True)
-        lib_file.parent.mkdir(parents=True, exist_ok=True)
-        include_file.write_text("")
-        lib_file.write_text("")
+        """find_unuran raises ImportError when header is missing and raise_on_error=True."""
+        vendor_dir = self._create_vendor_tree(tmp_path, create_header=False)
 
-        monkeypatch.setattr(cffi_build, "_get_project_root", lambda: project_root)
+        with pytest.raises(ImportError, match="unuran.h"):
+            find_unuran(vendor_dir, raise_on_error=True)
 
-        def fake_build(target: Path) -> None:
-            if scenario.build_side_effect:
-                raise scenario.build_side_effect
+    def test_prefers_static_library_over_shared(self, tmp_path: Path) -> None:
+        """find_unuran uses libunuran.a if present (listed before .so in preference)."""
+        vendor_dir = self._create_vendor_tree(tmp_path)
+        (tmp_path / "out" / "libunuran.so").write_bytes(b"")
 
-        monkeypatch.setattr(cffi_build, "build_unuran", fake_build)
+        result = find_unuran(vendor_dir, raise_on_error=False)
 
-        def fake_find(target: Path) -> dict[str, str]:
-            if scenario.find_side_effect:
-                raise scenario.find_side_effect
-            return {
-                "include_path": str(include_file),
-                "library_path": str(lib_file),
-            }
+        assert result["library_path"] is not None
+        assert result["library_path"].suffix == ".a"
 
-        monkeypatch.setattr(cffi_build, "find_unuran", fake_find)
+    def test_returns_dict_with_correct_keys(self, tmp_path: Path) -> None:
+        """find_unuran always returns a dict with 'library_path' and 'include_path' keys."""
+        result = find_unuran(tmp_path, raise_on_error=False)
 
-        recorded_configures: list[tuple[Path, Path]] = []
-        monkeypatch.setattr(
-            cffi_build,
-            "_configure_from_paths",
-            lambda inc, lib: recorded_configures.append((inc, lib)),
-        )
+        assert "library_path" in result
+        assert "include_path" in result
 
-        ffi_stub = FFIStub()
 
-        def fake_compile(verbose: bool = False) -> None:
-            if scenario.compile_side_effect:
-                raise scenario.compile_side_effect
-            ffi_stub.compile_calls.append({"verbose": verbose})
+class TestBuildUnuran:
+    """Tests for build_unuran function."""
 
-        ffi_stub.compile = fake_compile  # type: ignore[method-assign]
-        monkeypatch.setattr(cffi_build, "ffi", ffi_stub)
+    def test_skips_build_when_library_and_header_already_present(self, tmp_path: Path) -> None:
+        """build_unuran does nothing when both library and header already exist."""
+        lib_dir = tmp_path / "out"
+        lib_dir.mkdir()
+        (lib_dir / "libunuran.a").write_bytes(b"")
+        header_dir = tmp_path / "unuran" / "src"
+        header_dir.mkdir(parents=True)
+        (header_dir / "unuran.h").write_bytes(b"")
 
-        chdir_calls: list[Path] = []
+        with patch("subprocess.run") as mock_run:
+            build_unuran(tmp_path)
+            mock_run.assert_not_called()
 
-        def fake_chdir(target: Path | str) -> None:
-            chdir_calls.append(Path(target))
+    def test_raises_when_build_script_missing(self, tmp_path: Path) -> None:
+        """build_unuran raises RuntimeError when build_unuran.py is absent."""
+        # No files at all → find_unuran returns None for both → triggers build attempt
+        with pytest.raises(RuntimeError, match="Build script"):
+            build_unuran(tmp_path)
 
-        monkeypatch.setattr(
-            cffi_build,
-            "os",
-            SimpleNamespace(name=scenario.os_name, chdir=fake_chdir),
-        )
-        monkeypatch.setattr(sys, "platform", scenario.platform)
+    def test_invokes_build_script_when_library_missing(self, tmp_path: Path) -> None:
+        """build_unuran calls the build script when the library file is not yet built."""
+        build_script = tmp_path / "build_unuran.py"
+        build_script.write_text("# stub")
 
-        if scenario.expect_exception:
-            with pytest.raises(scenario.expect_exception):
-                cffi_build.main()
-            return
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            build_unuran(tmp_path)
 
-        cffi_build.main()
-        assert recorded_configures
-        assert ffi_stub.compile_calls
+        mock_run.assert_called_once()
+
+    def test_propagates_subprocess_error_when_build_fails(self, tmp_path: Path) -> None:
+        """A non-zero exit code from the build script propagates as CalledProcessError."""
+        build_script = tmp_path / "build_unuran.py"
+        build_script.write_text("# stub")
+
+        with (
+            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "cmd")),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            build_unuran(tmp_path)

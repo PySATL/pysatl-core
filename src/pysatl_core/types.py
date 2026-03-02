@@ -12,7 +12,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from math import inf
-from typing import Any, cast, overload
+from typing import TYPE_CHECKING, Any, cast, overload
+
+if TYPE_CHECKING:
+    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
 
 import numpy as np
 from mypy_extensions import KwArg
@@ -234,6 +237,9 @@ class Interval1D:
         return ContinuousSupportShape1D.BOUNDED_INTERVAL
 
 
+type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
+"""Type alias for a distribution computation method (analytical or fitted)."""
+
 type GenericCharacteristicName = str
 """Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
 
@@ -269,6 +275,7 @@ class CharacteristicName(StrEnum):
     """
 
     PDF = "pdf"
+    DPDF = "dpdf"
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
@@ -306,4 +313,5 @@ __all__ = [
     "NumericArray",
     "CharacteristicName",
     "FamilyName",
+    "Method",
 ]
