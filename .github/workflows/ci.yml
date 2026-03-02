@@ -21,6 +21,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Sync submodules to tracked branches
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --remote --recursive
+
       - name: Setup Python
         id: setup-python
         uses: actions/setup-python@v5
@@ -33,6 +38,35 @@ jobs:
           version: "1.8.3"
           virtualenvs-create: true
           virtualenvs-in-project: true
+
+      - name: Clean up PATH on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object {
+            $_ -notlike '*Git\usr\bin*' -and
+            $_ -notlike '*Strawberry*'
+          }) -join ';'
+          echo "PATH=$clean" >> $env:GITHUB_ENV
+
+      - name: Set up MSVC dev cmd
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          toolset: '14.29'
+          arch: x64
+
+      - name: Remove Git link.exe from PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $gitLink = "C:\Program Files\Git\usr\bin\link.exe"
+          if (Test-Path $gitLink) {
+            Rename-Item $gitLink "link_gnu_backup.exe"
+            Write-Host "Renamed Git link.exe -> link_gnu_backup.exe"
+          } else {
+            Write-Host "Git link.exe not found, nothing to do"
+          }
 
       - name: Cache pip wheels
         uses: actions/cache@v4
