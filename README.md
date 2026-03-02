@@ -39,6 +39,9 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 - Python **3.12+** (the project relies on **PEP 695** syntax)
 - NumPy **2.x**
 - SciPy **1.13+**
+- A C toolchain for compiling the UNURAN bindings:
+  - **Linux/macOS:** GCC (or Clang) plus standard build utilities.
+  - **Windows:** Microsoft Visual C++ Build Tools (MSVC) from Visual Studio or the standalone Build Tools installer.
 - Poetry (recommended for development)
 
 ---
@@ -50,6 +53,7 @@ Clone the repository:
 ```bash
 git clone https://github.com/PySATL/pysatl-core.git
 cd pysatl-core
+git submodule update --init --remote --recursive
 ```
 
 ### Using Poetry (recommended)
