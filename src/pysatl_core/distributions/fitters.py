@@ -32,14 +32,6 @@ if TYPE_CHECKING:
 
 def _resolve(distribution: Distribution, name: GenericCharacteristicName):
     """
-    Resolve an array-semantic characteristic from the distribution.
-
-    If the resolved callable is not natively array-semantic (e.g. it was
-    defined with scalar ``float`` inputs), it is automatically wrapped with
-    ``np.vectorize`` so that all array-fitters can call it uniformly.
-    The wrapping is done once at fit-time — call-time cost is the same as a
-    manual ``np.vectorize`` loop.
-
     Parameters
     ----------
     distribution : Distribution
@@ -197,11 +189,6 @@ def _build_tail_table(
         ``tail_from[i] = P(X >= xs[i])``, with ``tail_from[0] = 1.0``
         and ``tail_from[m] = 0.0``.  Normalised so that ``tail_from[0] == 1.0``
         to correct for any truncation of the finite grid.
-
-    Notes
-    -----
-    At call-time ``CDF(x) = 1 - tail_from[searchsorted(xs, x, side="right")]``,
-    reducing the entire evaluation to a single index lookup — no Python loops.
     """
     max_k = support.max_k
     residue = support.residue
@@ -282,12 +269,6 @@ def fit_pdf_to_cdf_1C(
     distribution: Distribution, /, **kwargs: Any
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``cdf`` from an array-semantic ``pdf`` via ``scipy.integrate.quad``.
-
-    Each query point is integrated independently with adaptive Gaussian
-    quadrature — the most accurate option for smooth PDFs with potentially
-    difficult tails or near-singularities.
-
     Parameters
     ----------
     distribution : Distribution
@@ -301,21 +282,12 @@ def fit_pdf_to_cdf_1C(
     FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``pdf → cdf`` conversion.  Accepts array inputs; each element
         is integrated independently.
-
-    Notes
-    -----
-    Call-time complexity is ``O(m · quad_cost)`` where ``m`` is the number
-    of query points.  For large arrays the no-scipy ``fit_pdf_to_cdf_1C_array``
-    (lookup-table) is significantly faster at the cost of some accuracy.
     """
     pdf_func = _resolve(distribution, CharacteristicName.PDF)
     limit = int(kwargs.get("limit", 200))
 
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_array = np.asarray(x, dtype=float)
-        scalar_input = x_array.ndim == 0
-        x_array = np.atleast_1d(x_array)
-
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
         def _single(xi: float) -> float:
             val, _ = _sp_integrate.quad(
                 lambda t: float(pdf_func(np.array([t]), **options).flat[0]),
@@ -324,7 +296,7 @@ def fit_pdf_to_cdf_1C(
             )
             return float(np.clip(val, 0.0, 1.0))
         result = np.frompyfunc(_single, 1, 1)(x_array).astype(float)
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     cdf_func = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _cdf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -338,11 +310,6 @@ def fit_cdf_to_pdf_1C(
     distribution: Distribution, /, **kwargs: Any
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``pdf`` as a vectorised 5-point central finite-difference of ``cdf``.
-
-    Identical to the no-scipy version in ``fitters_array.py`` — no quadrature
-    is needed for numerical differentiation.
-
     Parameters
     ----------
     distribution : Distribution
@@ -359,9 +326,7 @@ def fit_cdf_to_pdf_1C(
     cdf_func = _resolve(distribution, CharacteristicName.CDF)
     h = float(kwargs.get("h", 1e-5))
     def _pdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_array = np.asarray(x, dtype=float)
-        scalar_input = x_array.ndim == 0
-        x_array = np.atleast_1d(x_array)
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
         cdf_ph1 = np.asarray(cdf_func(x_array + h, **options), dtype=float)
         cdf_mh1 = np.asarray(cdf_func(x_array - h, **options), dtype=float)
         cdf_ph2 = np.asarray(cdf_func(x_array + 2 * h, **options), dtype=float)
@@ -369,7 +334,7 @@ def fit_cdf_to_pdf_1C(
 
         derivative = (-cdf_ph2 + 8.0 * cdf_ph1 - 8.0 * cdf_mh1 + cdf_mh2) / (12.0 * h)
         result = np.clip(derivative, 0.0, None)
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     pdf_func = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _pdf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -383,14 +348,6 @@ def fit_cdf_to_ppf_1C(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``ppf`` from an array-semantic ``cdf`` via fully-vectorised bisection.
-
-    At fit-time the effective support ``[x_lowest, x_highest]`` is estimated
-    via ``_estimate_support_bounds`` — exponential expansion from 0 until the
-    CDF tail probability falls below ``eps``.  This replaces the previous
-    hard-coded ``[-1e6, 1e6]`` range and avoids overflow in scalar CDFs (e.g.
-    ``math.exp``) that break far from the support.
-
     Parameters
     ----------
     distribution : Distribution
@@ -421,9 +378,7 @@ def fit_cdf_to_ppf_1C(
     x_lowest, x_highest = _estimate_support_bounds(cdf_func, eps=eps, x0=x0)
 
     def _ppf(q: NumericArray, **options: Any) -> NumericArray:
-        q_array = np.asarray(q, dtype=float)
-        scalar_input = q_array.ndim == 0
-        q_array = np.atleast_1d(q_array)
+        q_array = np.atleast_1d(np.asarray(q, dtype=float))
         result = np.full_like(q_array, np.nan)
         result[q_array <= 0.0] = -np.inf
         result[q_array >= 1.0] = np.inf
@@ -444,7 +399,7 @@ def fit_cdf_to_ppf_1C(
 
             result[interior] = 0.5 * (lowest + highest)
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     ppf_cast = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _ppf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -453,23 +408,18 @@ def fit_cdf_to_ppf_1C(
         func=ppf_cast,
     )
 
+
 def fit_ppf_to_cdf_1C(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``cdf`` by per-point ``scipy.optimize.brentq`` inversion of an array-semantic ``ppf``.
-
-    For each query point ``x``, solves ``ppf(q) = x`` for ``q ∈ (q_lo, q_hi)``
-    using Brent's method — guaranteed convergence and higher accuracy than
-    plain bisection for smooth PPFs.
-
     Parameters
     ----------
     distribution : Distribution
         Must expose an array-semantic ``ppf`` via the computation strategy.
-    q_lo : float, keyword, default 1e-12
+    q_lowest : float, keyword, default 1e-12
         Left bracket for the root search.
-    q_hi : float, keyword, default 1 - 1e-12
+    q_highest : float, keyword, default 1 - 1e-12
         Right bracket for the root search.
     max_iter : int, keyword, default 256
         Maximum iterations for ``brentq`` per query point.
@@ -480,11 +430,6 @@ def fit_ppf_to_cdf_1C(
         Fitted ``ppf → cdf`` conversion.  Accepts array inputs; each element
         is inverted independently via ``brentq``.
 
-    Notes
-    -----
-    Call-time complexity is ``O(m · brentq_cost)`` where ``m`` is the number
-    of query points.  For large arrays the no-scipy ``fit_ppf_to_cdf_1C_array``
-    (vectorised bisection) is faster; use this variant when accuracy is critical.
     """
     q_lowest = float(kwargs.get("q_lowest", 1e-12))
     q_highest = float(kwargs.get("q_highest", 1.0 - 1e-12))
@@ -493,9 +438,7 @@ def fit_ppf_to_cdf_1C(
 
     x_lowest, x_highest = -np.inf, np.inf
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_array = np.asarray(x, dtype=float)
-        scalar_input = x_array.ndim == 0
-        x_array = np.atleast_1d(x_array)
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
 
         result = np.empty_like(x_array)
         result[x_array <= x_lowest] = 0.0
@@ -515,7 +458,7 @@ def fit_ppf_to_cdf_1C(
 
             result[interior] = np.clip(np.frompyfunc(_single, 1, 1)(x_in).astype(float), 0.0, 1.0)
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     cdf_func = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _cdf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -531,13 +474,6 @@ def fit_pmf_to_cdf_1D(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``cdf`` from an array-semantic ``pmf`` via a pre-computed cumsum table.
-
-    At fit-time the entire support is materialised and ``pmf`` is evaluated on
-    it in a single vectorised call.  ``np.cumsum`` then produces the CDF table
-    in one pass.  At call-time a single ``np.searchsorted`` maps any query
-    array to CDF values — no Python loops at either stage.
-
     Parameters
     ----------
     distribution : Distribution
@@ -580,15 +516,13 @@ def fit_pmf_to_cdf_1D(
         max_k = float(support.max_k)
 
         def _cdf_tail(x: NumericArray, **options: Any) -> NumericArray:
-            x_arr = np.asarray(x, dtype=float)
-            scalar_input = x_arr.ndim == 0
-            x_arr = np.atleast_1d(x_arr)
+            x_array = np.atleast_1d(np.asarray(x, dtype=float))
 
-            idx = np.searchsorted(xs, x_arr, side="right")
+            idx = np.searchsorted(xs, x_array, side="right")
             result = np.clip(1.0 - tail_from[idx], 0.0, 1.0)
-            result[x_arr >= max_k] = 1.0
+            result[x_array >= max_k] = 1.0
 
-            return float(result[0]) if scalar_input else cast(NumericArray, result)
+            return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
         return FittedComputationMethod[NumericArray, NumericArray](
             target=CharacteristicName.CDF,
@@ -616,14 +550,12 @@ def fit_pmf_to_cdf_1D(
     cdf_vals = np.clip(np.maximum.accumulate(np.cumsum(pmf_vals)), 0.0, 1.0)
 
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_arr = np.asarray(x, dtype=float)
-        scalar_input = x_arr.ndim == 0
-        x_arr = np.atleast_1d(x_arr)
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
 
-        idx = np.searchsorted(xs, x_arr, side="right") - 1
+        idx = np.searchsorted(xs, x_array, side="right") - 1
         result = np.where(idx < 0, 0.0, cdf_vals[np.clip(idx, 0, cdf_vals.size - 1)])
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
@@ -636,15 +568,6 @@ def fit_cdf_to_pmf_1D(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit ``pmf`` from an array-semantic ``cdf`` as CDF jump sizes at support points.
-
-    ``pmf(x) = cdf(x) - cdf(prev(x))``
-
-    At fit-time ``cdf`` is evaluated on the full support in a single vectorised
-    call; ``np.diff`` then yields all jump sizes in one pass.  At call-time
-    ``np.searchsorted`` locates each query point and a boolean mask filters out
-    points that lie off the support (returning ``0.0`` for them).
-
     Parameters
     ----------
     distribution : Distribution
@@ -688,19 +611,16 @@ def fit_cdf_to_pmf_1D(
     pmf_vals = np.clip(pmf_vals, 0.0, 1.0)
 
     def _pmf(x: NumericArray, **options: Any) -> NumericArray:
-        x_arr = np.asarray(x, dtype=float)
-        scalar_input = x_arr.ndim == 0
-        x_arr = np.atleast_1d(x_arr)
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
+        result = np.zeros_like(x_array)
 
-        result = np.zeros_like(x_arr)
-
-        idx = np.searchsorted(xs, x_arr, side="left")
+        idx = np.searchsorted(xs, x_array, side="left")
         in_bounds = (idx >= 0) & (idx < xs.size)
 
-        on_support = in_bounds & (xs[np.clip(idx, 0, xs.size - 1)] == x_arr)
+        on_support = in_bounds & (xs[np.clip(idx, 0, xs.size - 1)] == x_array)
         result[on_support] = pmf_vals[idx[on_support]]
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     pmf_cast = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _pmf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -714,14 +634,6 @@ def fit_cdf_to_ppf_1D(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit discrete ``ppf`` from an array-semantic ``cdf``.
-
-    Semantics: ``ppf(q) = min { x ∈ support : cdf(x) >= q }``
-
-    At fit-time ``cdf`` is evaluated on the full support in a single
-    vectorised call.  At call-time ``np.searchsorted(cdf_vals, q, side="left")``
-    maps any query array to quantile values in one operation — no Python loops.
-
     Parameters
     ----------
     distribution : Distribution
@@ -758,15 +670,13 @@ def fit_cdf_to_ppf_1D(
     x_last = float(xs[-1])
 
     def _ppf(q: NumericArray, **options: Any) -> NumericArray:
-        q_arr = np.asarray(q, dtype=float)
-        scalar_input = q_arr.ndim == 0
-        q_arr = np.atleast_1d(q_arr)
+        q_array = np.atleast_1d(np.asarray(q, dtype=float))
 
-        result = np.empty_like(q_arr)
+        result = np.empty_like(q_array)
 
-        nan_mask = ~np.isfinite(q_arr)
-        low_mask = (~nan_mask) & (q_arr <= 0.0)
-        high_mask = (~nan_mask) & (q_arr >= 1.0)
+        nan_mask = ~np.isfinite(q_array)
+        low_mask = (~nan_mask) & (q_array <= 0.0)
+        high_mask = (~nan_mask) & (q_array >= 1.0)
         interior = ~nan_mask & ~low_mask & ~high_mask
 
         result[nan_mask] = np.nan
@@ -774,12 +684,12 @@ def fit_cdf_to_ppf_1D(
         result[high_mask] = x_last
 
         if np.any(interior):
-            q_in = q_arr[interior]
+            q_in = q_array[interior]
             idx = np.searchsorted(cdf_vals, q_in, side="left")
             idx = np.clip(idx, 0, xs.size - 1)
             result[interior] = xs[idx]
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     ppf_cast = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _ppf)
     return FittedComputationMethod[NumericArray, NumericArray](
@@ -793,16 +703,6 @@ def fit_ppf_to_cdf_1D(
     distribution: Distribution, /, **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
-    Fit discrete ``cdf`` from an array-semantic ``ppf`` without requiring the support.
-
-    ``cdf(x) = sup { q ∈ [0, 1] : ppf(q) ≤ x }``
-
-    At fit-time the PPF is probed on a dense q-grid in a single vectorised
-    call.  Consecutive equal values (PPF plateaus) are collapsed to recover the
-    unique ``(x, cdf)`` pairs that define the step function, stored as a
-    lookup table.  At call-time ``np.searchsorted`` maps any query array to
-    CDF values in one operation — no Python loops.
-
     Parameters
     ----------
     distribution : Distribution
@@ -818,12 +718,6 @@ def fit_ppf_to_cdf_1D(
     FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``ppf → cdf`` conversion with full array semantics.
 
-    Notes
-    -----
-    Accuracy depends on ``n_q_grid``: a grid that is too coarse may miss
-    CDF steps for distributions with dense supports.  In such cases prefer
-    ``fit_pmf_to_cdf_1D_array`` or ``fit_cdf_to_ppf_1D_array``, which work
-    directly from the support.
     """
     n_q_grid = int(kwargs.get("n_q_grid", 4096))
 
@@ -847,26 +741,24 @@ def fit_ppf_to_cdf_1D(
     x_max = float(xs_table[-1])
 
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_arr = np.asarray(x, dtype=float)
-        scalar_input = x_arr.ndim == 0
-        x_arr = np.atleast_1d(x_arr)
+        x_array = np.atleast_1d(np.asarray(x, dtype=float))
 
-        result = np.empty_like(x_arr)
+        result = np.empty_like(x_array)
 
-        left_mask = x_arr < x_min
-        right_mask = x_arr >= x_max
+        left_mask = x_array < x_min
+        right_mask = x_array >= x_max
         interior = ~left_mask & ~right_mask
 
         result[left_mask] = 0.0
         result[right_mask] = 1.0
 
         if np.any(interior):
-            xi = x_arr[interior]
+            xi = x_array[interior]
             idx = np.searchsorted(xs_table, xi, side="right") - 1
             idx = np.clip(idx, 0, cdf_table.size - 1)
             result[interior] = cdf_table[idx]
 
-        return float(result[0]) if scalar_input else cast(NumericArray, result)
+        return cast(NumericArray, result[0] if result.shape == (1,) else result)
 
     cdf_cast = cast(Callable[[NumericArray, KwArg(Any)], NumericArray], _cdf)
     return FittedComputationMethod[NumericArray, NumericArray](
