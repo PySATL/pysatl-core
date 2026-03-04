@@ -31,7 +31,7 @@ from pysatl_core.types import (
 )
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 
 def configure_uniform_family() -> None:
@@ -191,22 +191,22 @@ def configure_uniform_family() -> None:
 
         return cast(ComplexArray, sinc_val * np.exp(1j * center * t_arr))
 
-    def mean_func(parameters: Parametrization, _: Any) -> float:
+    def mean_func(parameters: Parametrization) -> float:
         """Mean of uniform distribution."""
         parameters = cast(_Standard, parameters)
         return (parameters.lower_bound + parameters.upper_bound) / 2
 
-    def var_func(parameters: Parametrization, _: Any) -> float:
+    def var_func(parameters: Parametrization) -> float:
         """Variance of uniform distribution."""
         parameters = cast(_Standard, parameters)
         width = parameters.upper_bound - parameters.lower_bound
         return width**2 / 12
 
-    def skew_func(_1: Parametrization, _2: Any) -> int:
+    def skew_func(_1: Parametrization) -> int:
         """Skewness of uniform distribution (always 0)."""
         return 0
 
-    def kurt_func(_1: Parametrization, _2: Any, excess: bool = False) -> float:
+    def kurt_func(_1: Parametrization, *, excess: bool = False) -> float:
         """Raw or excess kurtosis of uniform distribution.
 
         Parameters

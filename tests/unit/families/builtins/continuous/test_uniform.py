@@ -93,27 +93,27 @@ class TestUniformFamily(BaseDistributionTest):
         """Test moment calculations."""
         # Mean
         mean_func = self.uniform_dist_example.query_method(CharacteristicName.MEAN)
-        assert abs(mean_func(None) - 3.5) < self.CALCULATION_PRECISION
+        assert abs(mean_func() - 3.5) < self.CALCULATION_PRECISION
 
         # Variance
         var_func = self.uniform_dist_example.query_method(CharacteristicName.VAR)
-        assert abs(var_func(None) - 0.75) < self.CALCULATION_PRECISION
+        assert abs(var_func() - 0.75) < self.CALCULATION_PRECISION
 
         # Skewness
         skew_func = self.uniform_dist_example.query_method(CharacteristicName.SKEW)
-        assert abs(skew_func(None) - 0.0) < self.CALCULATION_PRECISION
+        assert abs(skew_func() - 0.0) < self.CALCULATION_PRECISION
 
     def test_kurtosis_calculation(self):
         """Test kurtosis calculation with excess parameter."""
         kurt_func = self.uniform_dist_example.query_method(CharacteristicName.KURT)
 
-        raw_kurt = kurt_func(None)
+        raw_kurt = kurt_func()
         assert abs(raw_kurt - 1.8) < self.CALCULATION_PRECISION
 
-        excess_kurt = kurt_func(None, excess=True)
+        excess_kurt = kurt_func(excess=True)
         assert abs(excess_kurt + 1.2) < self.CALCULATION_PRECISION
 
-        raw_kurt_explicit = kurt_func(None, excess=False)
+        raw_kurt_explicit = kurt_func(excess=False)
         assert abs(raw_kurt_explicit - 1.8) < self.CALCULATION_PRECISION
 
     @pytest.mark.parametrize(

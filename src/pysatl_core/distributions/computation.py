@@ -11,11 +11,13 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, overload, runtime_checkable
+
+from pysatl_core.types import ComputationFunc
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
     from typing import Any
 
     from mypy_extensions import KwArg
@@ -37,42 +39,14 @@ class Computation[In, Out](Protocol):
 
     @property
     def target(self) -> GenericCharacteristicName: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
 
+    @overload
+    def __call__(self, **kwargs: Any) -> Out: ...
 
-@runtime_checkable
-class FittedComputationMethodProtocol[In, Out](Protocol):
-    """
-    Protocol for fitted computation methods ready for evaluation.
+    @overload
+    def __call__(self, x: In, **kwargs: Any) -> Out: ...
 
-    Attributes
-    ----------
-    target : str
-        Destination characteristic name.
-    sources : Sequence[str]
-        Source characteristic names this method depends on.
-    """
-
-    @property
-    def target(self) -> GenericCharacteristicName: ...
-    @property
-    def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
-
-
-@runtime_checkable
-class ComputationMethodProtocol[In, Out](Protocol):
-    """
-    Protocol for computation method factories that can be fitted to distributions.
-    """
-
-    @property
-    def target(self) -> GenericCharacteristicName: ...
-    @property
-    def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def fit(
-        self, distribution: Distribution, **options: Any
-    ) -> FittedComputationMethodProtocol[In, Out]: ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Out: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,16 +58,22 @@ class AnalyticalComputation[In, Out]:
     ----------
     target : str
         Characteristic name (e.g., "pdf", "cdf").
-    func : Callable[[In, KwArg(Any)], Out]
+    func : Callable[..., Out]
         Analytical function that computes the characteristic.
     """
 
     target: GenericCharacteristicName
-    func: Callable[[In, KwArg(Any)], Out]
+    func: ComputationFunc[In, Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the analytical function at the given data."""
-        return self.func(data, **options)
+    @overload
+    def __call__(self, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **options: Any) -> Out:
+        """Evaluate the analytical function."""
+        return self.func(*args, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,17 +87,23 @@ class FittedComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (typically length 1 for unary conversions).
-    func : Callable[[In, KwArg(Any)], Out]
+    func : Callable[..., Out]
         Callable implementing the fitted conversion.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    func: Callable[[In, KwArg(Any)], Out]
+    func: ComputationFunc[In, Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the fitted conversion at the given data."""
-        return self.func(data, **options)
+    @overload
+    def __call__(self, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **options: Any) -> Out:
+        """Evaluate the fitted conversion."""
+        return self.func(*args, **options)
 
 
 @dataclass(frozen=True, slots=True)
