@@ -21,14 +21,12 @@ from pysatl_core.types import CharacteristicName, NumericArray
 if TYPE_CHECKING:
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+    from pysatl_core.distributions.computation import FittedComputationMethod, Method
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName
 
-type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 
-
-class ComputationStrategy[In, Out](Protocol):
+class ComputationStrategy(Protocol):
     """
     Protocol for strategies that resolve computation methods for characteristics.
 
@@ -42,10 +40,10 @@ class ComputationStrategy[In, Out](Protocol):
 
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
-    ) -> Method[In, Out]: ...
+    ) -> Method[Any, Any]: ...
 
 
-class DefaultComputationStrategy[In, Out]:
+class DefaultComputationStrategy:
     """
     Default strategy for resolving characteristic computation methods.
 
@@ -71,7 +69,7 @@ class DefaultComputationStrategy[In, Out]:
 
     def __init__(self, enable_caching: bool = False) -> None:
         self.enable_caching = enable_caching
-        self._cache: dict[GenericCharacteristicName, FittedComputationMethod[In, Out]] = {}
+        self._cache: dict[GenericCharacteristicName, FittedComputationMethod[Any, Any]] = {}
         self._resolving: dict[int, set[GenericCharacteristicName]] = {}
 
     def _push_guard(self, distr: Distribution, state: GenericCharacteristicName) -> None:
@@ -103,7 +101,7 @@ class DefaultComputationStrategy[In, Out]:
 
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
-    ) -> Method[In, Out]:
+    ) -> Method[Any, Any]:
         """
         Resolve a computation method for the target characteristic.
 
@@ -164,7 +162,7 @@ class DefaultComputationStrategy[In, Out]:
                     continue
 
                 # Fit each edge along the path
-                last_fitted: FittedComputationMethod[In, Out] | None = None
+                last_fitted: FittedComputationMethod[Any, Any] | None = None
                 for edge in path:
                     fitted = edge.fit(distr, **options)
                     if self.enable_caching:

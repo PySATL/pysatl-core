@@ -44,7 +44,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert view.find_path(CharacteristicName.PPF, CharacteristicName.CDF) is not None
 
         # Strategy resolves and roundtrips: CDF(PPF(q)) ~ q
-        strategy = DefaultComputationStrategy[float, float](enable_caching=False)
+        strategy = DefaultComputationStrategy(enable_caching=False)
         ppf = strategy.query_method(CharacteristicName.PPF, distr)
         cdf = strategy.query_method(CharacteristicName.CDF, distr)
         qs = np.linspace(1e-6, 1.0 - 1e-6, 7)
@@ -76,7 +76,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert view.find_path(CharacteristicName.CDF, CharacteristicName.PPF) is not None
         assert view.find_path(CharacteristicName.PPF, CharacteristicName.CDF) is not None
 
-        strategy = DefaultComputationStrategy[float, float](enable_caching=False)
+        strategy = DefaultComputationStrategy(enable_caching=False)
         cdf = strategy.query_method(CharacteristicName.CDF, distr)
         assert cdf(0.0) == pytest.approx(0.2, abs=1e-10)
         assert cdf(1.0) == pytest.approx(0.7, abs=1e-10)
