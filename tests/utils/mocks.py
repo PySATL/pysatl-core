@@ -81,7 +81,7 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         return DefaultSamplingUnivariateStrategy()
 
     @property
-    def computation_strategy(self) -> ComputationStrategy[Any, Any]:
+    def computation_strategy(self) -> ComputationStrategy:
         """Computation strategy instance."""
         return DefaultComputationStrategy()
 

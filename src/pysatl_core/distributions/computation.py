@@ -145,3 +145,6 @@ class ComputationMethod[In, Out]:
             Fitted method ready for evaluation.
         """
         return self.fitter(distribution, **options)
+
+
+type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]

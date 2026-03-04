@@ -89,24 +89,24 @@ class EuclideanDistributionType(DistributionType):
 
 
 UnivariateContinuous = EuclideanDistributionType(kind=Kind.CONTINUOUS, dimension=1)
-"""Type for univariate continuous distributions."""
+"""Predefined DistributionType object for univariate continuous distributions."""
 
 UnivariateDiscrete = EuclideanDistributionType(kind=Kind.DISCRETE, dimension=1)
-"""Type for univariate discrete distributions."""
+"""Predefined DistributionType object for univariate discrete distributions."""
 
-NumPyNumber = np.floating[Any] | np.integer[Any]
+type NumPyNumber = np.floating[Any] | np.integer[Any]
 """Type alias for NumPy numeric types."""
 
-Number = NumPyNumber | int | float
+type Number = NumPyNumber | int | float
 """Type alias for all numeric types."""
 
-NumericArray = NDArray[NumPyNumber]
+type NumericArray = NDArray[NumPyNumber]
 """Type alias for numeric arrays."""
 
-ComplexArray = NDArray[np.complexfloating[Any]]
+type ComplexArray = NDArray[np.complexfloating[Any]]
 """Type alias for complex arrays."""
 
-BoolArray = NDArray[np.bool_]
+type BoolArray = NDArray[np.bool_]
 """Type alias for boolean arrays."""
 
 
@@ -253,9 +253,6 @@ implementations may or may not accept them, and wrappers typically forward
 ``**options`` dynamically.
 """
 
-ScalarFunc = Callable[[float], float]
-"""Type alias for scalar functions (float -> float)."""
-
 
 class CharacteristicName(StrEnum):
     """
@@ -301,7 +298,6 @@ __all__ = [
     "ParametrizationName",
     "ComputationFunc",
     "DistributionType",
-    "ScalarFunc",
     "Interval1D",
     "ContinuousSupportShape1D",
     "BoolArray",

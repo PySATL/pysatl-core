@@ -158,7 +158,7 @@ class ParametricFamilyDistribution(Distribution):
         return self.family.sampling_strategy
 
     @property
-    def computation_strategy(self) -> ComputationStrategy[Any, Any]:
+    def computation_strategy(self) -> ComputationStrategy:
         """Get the computation strategy for this distribution."""
         return self.family.computation_strategy
 

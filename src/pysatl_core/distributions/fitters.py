@@ -27,7 +27,9 @@ if TYPE_CHECKING:
     from typing import Any
 
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.types import GenericCharacteristicName, ScalarFunc
+    from pysatl_core.types import GenericCharacteristicName
+
+    type ScalarFunc = Callable[[float], float]
 
 
 def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> ScalarFunc:

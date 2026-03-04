@@ -19,10 +19,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.computation import AnalyticalComputation, Method
     from pysatl_core.distributions.strategies import (
         ComputationStrategy,
-        Method,
         SamplingStrategy,
     )
     from pysatl_core.distributions.support import Support
@@ -67,7 +66,7 @@ class Distribution(Protocol):
     def sampling_strategy(self) -> SamplingStrategy: ...
 
     @property
-    def computation_strategy(self) -> ComputationStrategy[Any, Any]: ...
+    def computation_strategy(self) -> ComputationStrategy: ...
 
     @property
     def support(self) -> Support | None: ...

@@ -41,15 +41,19 @@ if TYPE_CHECKING:
     type SupportArg = Callable[[Parametrization], Support | None] | None
     type SupportResolver = Callable[[Parametrization], Support | None]
     type CharacteristicProvider = (
-        Mapping[ParametrizationName, CharacteristicFunction] | CharacteristicFunction
+        Mapping[ParametrizationName, CharacteristicFunction[Any, Any]]
+        | CharacteristicFunction[Any, Any]
     )
     type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
+    type NonParametrizedCharacteristic[In, Out] = Callable[[], Out]
+    type CharacteristicFunction[In, Out] = (
+        NonParametrizedCharacteristic[In, Out] | ParametrizedCharacteristic[In, Out]
+    )
 
-type NonParametrizedCharacteristic = Callable[[], Any]
-type ParametrizedCharacteristic = (
-    Callable[[Parametrization, Any], Any] | Callable[[Parametrization], Any]
+
+type ParametrizedCharacteristic[In, Out] = (
+    Callable[[Parametrization, In], Out] | Callable[[Parametrization], Out]
 )
-type CharacteristicFunction = NonParametrizedCharacteristic | ParametrizedCharacteristic
 
 
 class ParametricFamily:
@@ -94,7 +98,7 @@ class ParametricFamily:
         distr_parametrizations: list[ParametrizationName],
         distr_characteristics: CharacteristicsMap,
         sampling_strategy: SamplingStrategy | None = None,
-        computation_strategy: ComputationStrategy[Any, Any] | None = None,
+        computation_strategy: ComputationStrategy | None = None,
         support_by_parametrization: SupportArg = None,
     ):
         self._name = name
@@ -124,8 +128,9 @@ class ParametricFamily:
         )
 
         def _process_char_val(
-            value: Mapping[ParametrizationName, CharacteristicFunction] | CharacteristicFunction,
-        ) -> dict[ParametrizationName, CharacteristicFunction]:
+            value: Mapping[ParametrizationName, CharacteristicFunction[Any, Any]]
+            | CharacteristicFunction[Any, Any],
+        ) -> dict[ParametrizationName, CharacteristicFunction[Any, Any]]:
             return (
                 dict(value)
                 if isinstance(value, Mapping)
@@ -133,7 +138,7 @@ class ParametricFamily:
             )
 
         self.distr_characteristics: dict[
-            GenericCharacteristicName, dict[ParametrizationName, CharacteristicFunction]
+            GenericCharacteristicName, dict[ParametrizationName, CharacteristicFunction[Any, Any]]
         ] = {key: _process_char_val(val) for key, val in distr_characteristics.items()}
 
         # Precompute analytical plan
@@ -236,9 +241,9 @@ class ParametricFamily:
         return parameters.transform_to_base_parametrization()
 
     @staticmethod
-    def _bind_parametrization(
-        func: CharacteristicFunction, params_obj: Parametrization
-    ) -> ComputationFunc[Any, Any]:
+    def _bind_parametrization[In, Out](
+        func: CharacteristicFunction[In, Out], params_obj: Parametrization
+    ) -> ComputationFunc[In, Out]:
         """Bind ``params_obj`` to ``func`` only when ``func`` can accept positional arguments.
 
         This allows parametrization-independent analytical providers to be written without
@@ -258,8 +263,8 @@ class ParametricFamily:
         )
 
         return cast(
-            ComputationFunc[Any, Any],
-            partial(cast(ParametrizedCharacteristic, func), params_obj)
+            ComputationFunc[In, Out],
+            partial(cast(ParametrizedCharacteristic[In, Out], func), params_obj)
             if accepts_first_positional
             else func,
         )
