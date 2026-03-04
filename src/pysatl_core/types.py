@@ -15,6 +15,7 @@ from math import inf
 from typing import Any, cast, overload
 
 import numpy as np
+from mypy_extensions import KwArg
 from numpy.typing import NDArray
 
 
@@ -239,6 +240,19 @@ type GenericCharacteristicName = str
 type ParametrizationName = str
 """Type alias for parametrization names."""
 
+
+type ComputationFunc[In, Out] = Callable[[KwArg(Any)], Out] | Callable[[In, KwArg(Any)], Out]
+"""Callable for a characteristic computation.
+
+Used for functions that are called either without positional arguments
+(nullary characteristics like mean/var) or with exactly one positional
+argument (pointwise characteristics like pdf/cdf/ppf).
+
+Keyword-only options (e.g. ``excess=...``) are intentionally not modeled here:
+implementations may or may not accept them, and wrappers typically forward
+``**options`` dynamically.
+"""
+
 ScalarFunc = Callable[[float], float]
 """Type alias for scalar functions (float -> float)."""
 
@@ -285,6 +299,7 @@ __all__ = [
     "UnivariateDiscrete",
     "GenericCharacteristicName",
     "ParametrizationName",
+    "ComputationFunc",
     "DistributionType",
     "ScalarFunc",
     "Interval1D",

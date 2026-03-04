@@ -12,9 +12,10 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-
+import inspect
+from collections.abc import Mapping
 from functools import partial
-from typing import TYPE_CHECKING, dataclass_transform
+from typing import TYPE_CHECKING, Any, cast, dataclass_transform
 
 from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.distributions.strategies import (
@@ -22,11 +23,10 @@ from pysatl_core.distributions.strategies import (
     DefaultSamplingUnivariateStrategy,
 )
 from pysatl_core.families.distribution import ParametricFamilyDistribution
-from pysatl_core.types import DistributionType
+from pysatl_core.types import ComputationFunc, DistributionType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from typing import Any
 
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
@@ -38,9 +38,18 @@ if TYPE_CHECKING:
         ParametrizationName,
     )
 
-    type ParametrizedFunction = Callable[[Parametrization, Any], Any]
     type SupportArg = Callable[[Parametrization], Support | None] | None
     type SupportResolver = Callable[[Parametrization], Support | None]
+    type CharacteristicProvider = (
+        Mapping[ParametrizationName, CharacteristicFunction] | CharacteristicFunction
+    )
+    type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
+
+type NonParametrizedCharacteristic = Callable[[], Any]
+type ParametrizedCharacteristic = (
+    Callable[[Parametrization, Any], Any] | Callable[[Parametrization], Any]
+)
+type CharacteristicFunction = NonParametrizedCharacteristic | ParametrizedCharacteristic
 
 
 class ParametricFamily:
@@ -60,9 +69,16 @@ class ParametricFamily:
         Distribution type or function that infers type from base parametrization.
     distr_parametrizations : list[ParametrizationName]
         List of parametrization names (first is base parametrization).
-    distr_characteristics : dict[str, dict[str, Callable] or Callable]
-        Mapping from characteristic names to computation functions.
-        Single functions are treated as defined for the base parametrization.
+    distr_characteristics : CharacteristicsMap
+        Mapping from characteristic names to analytical provider callables.
+
+        Each provider callable may accept a parametrization instance as the first argument.
+        The remaining signature is characteristic-specific:
+
+        - nullary characteristics (e.g., mean, var): provider(params, **kwargs) -> Any
+        - pointwise characteristics (e.g., pdf, cdf, ppf): provider(params, x, **kwargs) -> Any
+
+        If a single callable is provided, it is treated as defined for the base parametrization.
     sampling_strategy : SamplingStrategy, optional
         Strategy for sampling from distributions.
     computation_strategy : ComputationStrategy, optional
@@ -76,10 +92,7 @@ class ParametricFamily:
         name: str,
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
-        distr_characteristics: dict[
-            GenericCharacteristicName,
-            dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
-        ],
+        distr_characteristics: CharacteristicsMap,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy[Any, Any] | None = None,
         support_by_parametrization: SupportArg = None,
@@ -111,12 +124,16 @@ class ParametricFamily:
         )
 
         def _process_char_val(
-            value: dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
-        ) -> dict[ParametrizationName, ParametrizedFunction]:
-            return value if isinstance(value, dict) else {self.parametrization_names[0]: value}
+            value: Mapping[ParametrizationName, CharacteristicFunction] | CharacteristicFunction,
+        ) -> dict[ParametrizationName, CharacteristicFunction]:
+            return (
+                dict(value)
+                if isinstance(value, Mapping)
+                else {self.base_parametrization_name: value}
+            )
 
         self.distr_characteristics: dict[
-            GenericCharacteristicName, dict[ParametrizationName, ParametrizedFunction]
+            GenericCharacteristicName, dict[ParametrizationName, CharacteristicFunction]
         ] = {key: _process_char_val(val) for key, val in distr_characteristics.items()}
 
         # Precompute analytical plan
@@ -218,6 +235,35 @@ class ParametricFamily:
             return parameters
         return parameters.transform_to_base_parametrization()
 
+    @staticmethod
+    def _bind_parametrization(
+        func: CharacteristicFunction, params_obj: Parametrization
+    ) -> ComputationFunc[Any, Any]:
+        """Bind ``params_obj`` to ``func`` only when ``func`` can accept positional arguments.
+
+        This allows parametrization-independent analytical providers to be written without
+        a dummy first argument (e.g. ``def skew_func()`` or ``def kurt_func(*, excess=False)``),
+        while still supporting the usual ``def f(parameters, ...)`` style.
+
+        It means that we will always make any other analytical_computation params like
+        ``excess`` as keyword-only
+        """
+
+        sig = inspect.signature(func)
+
+        params = list(sig.parameters.values())
+        accepts_first_positional = bool(params) and params[0].kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+
+        return cast(
+            ComputationFunc[Any, Any],
+            partial(cast(ParametrizedCharacteristic, func), params_obj)
+            if accepts_first_positional
+            else func,
+        )
+
     def _build_analytical_computations(
         self, parameters: Parametrization
     ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
@@ -241,7 +287,7 @@ class ParametricFamily:
             func_factory = self.distr_characteristics[characteristic][provider_name]
             result[characteristic] = AnalyticalComputation(
                 target=characteristic,
-                func=partial(func_factory, params_obj),
+                func=self._bind_parametrization(func_factory, params_obj),
             )
 
         return result

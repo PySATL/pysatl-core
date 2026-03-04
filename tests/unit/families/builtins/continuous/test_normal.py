@@ -97,9 +97,9 @@ class TestNormalFamily(BaseDistributionTest):
     @pytest.mark.parametrize(
         "char_func_getter, expected",
         [
-            (lambda distr: distr.query_method(CharacteristicName.MEAN)(None), 2.0),
-            (lambda distr: distr.query_method(CharacteristicName.VAR)(None), 2.25),
-            (lambda distr: distr.query_method(CharacteristicName.SKEW)(None), 0.0),
+            (lambda distr: distr.query_method(CharacteristicName.MEAN)(), 2.0),
+            (lambda distr: distr.query_method(CharacteristicName.VAR)(), 2.25),
+            (lambda distr: distr.query_method(CharacteristicName.SKEW)(), 0.0),
         ],
     )
     def test_moments(self, char_func_getter, expected):
@@ -111,13 +111,13 @@ class TestNormalFamily(BaseDistributionTest):
         """Test kurtosis calculation with excess parameter."""
         kurt_func = self.normal_dist_example.query_method(CharacteristicName.KURT)
 
-        raw_kurt = kurt_func(None)
+        raw_kurt = kurt_func()
         assert abs(raw_kurt - 3.0) < self.CALCULATION_PRECISION
 
-        excess_kurt = kurt_func(None, excess=True)
+        excess_kurt = kurt_func(excess=True)
         assert abs(excess_kurt - 0.0) < self.CALCULATION_PRECISION
 
-        raw_kurt_explicit = kurt_func(None, excess=False)
+        raw_kurt_explicit = kurt_func(excess=False)
         assert abs(raw_kurt_explicit - 3.0) < self.CALCULATION_PRECISION
 
     @pytest.mark.parametrize(

@@ -31,7 +31,7 @@ from pysatl_core.types import (
 )
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 
 def configure_exponential_family() -> None:
@@ -165,21 +165,21 @@ def configure_exponential_family() -> None:
         )
         return cast(ComplexArray, result)
 
-    def mean_func(parameters: Parametrization, _: Any) -> float:
+    def mean_func(parameters: Parametrization) -> float:
         """Mean of exponential distribution."""
         parameters = cast(_Rate, parameters)
         return 1.0 / parameters.lambda_
 
-    def var_func(parameters: Parametrization, _: Any) -> float:
+    def var_func(parameters: Parametrization) -> float:
         """Variance of exponential distribution."""
         parameters = cast(_Rate, parameters)
         return 1.0 / (parameters.lambda_**2)
 
-    def skew_func(_1: Parametrization, _2: Any) -> float:
+    def skew_func() -> float:
         """Skewness of exponential distribution (always 2)."""
         return 2.0
 
-    def kurt_func(_1: Parametrization, _2: Any, excess: bool = False) -> float:
+    def kurt_func(*, excess: bool = False) -> float:
         """Raw or excess kurtosis of exponential distribution.
 
         Parameters
