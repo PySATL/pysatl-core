@@ -164,8 +164,8 @@ class DefaultComputationStrategy:
                 # Fit each edge along the path
                 last_fitted: FittedComputationMethod[Any, Any] | None = None
                 for edge in path:
-                    fitted = edge.fit(distr, **options)
-                    if self.enable_caching:
+                    fitted = edge.prepare(distr, **options)
+                    if self.enable_caching and edge.cacheable:
                         self._cache[edge.target] = fitted
                     last_fitted = fitted
 
