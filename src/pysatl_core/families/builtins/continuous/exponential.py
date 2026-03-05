@@ -10,7 +10,7 @@ __author__ = "Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import numpy as np
 
@@ -29,9 +29,6 @@ from pysatl_core.types import (
     NumericArray,
     UnivariateContinuous,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 def configure_exponential_family() -> None:

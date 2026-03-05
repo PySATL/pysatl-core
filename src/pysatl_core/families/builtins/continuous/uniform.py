@@ -10,7 +10,7 @@ __author__ = "Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import numpy as np
 
@@ -29,9 +29,6 @@ from pysatl_core.types import (
     NumericArray,
     UnivariateContinuous,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 def configure_uniform_family() -> None:
@@ -202,11 +199,11 @@ def configure_uniform_family() -> None:
         width = parameters.upper_bound - parameters.lower_bound
         return width**2 / 12
 
-    def skew_func(_1: Parametrization) -> int:
+    def skew_func() -> int:
         """Skewness of uniform distribution (always 0)."""
         return 0
 
-    def kurt_func(_1: Parametrization, *, excess: bool = False) -> float:
+    def kurt_func(*, excess: bool = False) -> float:
         """Raw or excess kurtosis of uniform distribution.
 
         Parameters

@@ -11,7 +11,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import numpy as np
 from scipy.special import erf, erfinv
@@ -31,9 +31,6 @@ from pysatl_core.types import (
     NumericArray,
     UnivariateContinuous,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 def configure_normal_family() -> None:
