@@ -197,25 +197,13 @@ class ParametricFamilyDistribution(Distribution):
         computation_strategy: ComputationStrategy | None | object = _KEEP,
     ) -> ParametricFamilyDistribution:
         """Return a copy of this distribution with updated strategies."""
-        new_sampling: SamplingStrategy | None = (
-            self._sampling_strategy
-            if sampling_strategy is _KEEP
-            else cast(SamplingStrategy | None, sampling_strategy)
-        )
-
-        new_computation: ComputationStrategy | None = (
-            self._computation_strategy
-            if computation_strategy is _KEEP
-            else cast(ComputationStrategy | None, computation_strategy)
-        )
-
         return ParametricFamilyDistribution(
             family_name=self._family_name,
             distribution_type=self._distribution_type,
             parametrization=self._parametrization,
             support=self._support,
-            sampling_strategy=new_sampling,
-            computation_strategy=new_computation,
+            sampling_strategy=self._new_sampling_strategy(sampling_strategy),
+            computation_strategy=self._new_computation_strategy(computation_strategy),
         )
 
     @property
