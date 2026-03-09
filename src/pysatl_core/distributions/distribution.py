@@ -74,6 +74,24 @@ class Distribution(Protocol):
     @property
     def support(self) -> Support | None: ...
 
+    def _new_computation_strategy(
+        self, computation_strategy: ComputationStrategy | None | object = _KEEP
+    ) -> ComputationStrategy | None:
+        return (
+            self.computation_strategy
+            if computation_strategy is _KEEP
+            else cast(ComputationStrategy | None, computation_strategy)
+        )
+
+    def _new_sampling_strategy(
+        self, sampling_strategy: SamplingStrategy | None | object = _KEEP
+    ) -> SamplingStrategy | None:
+        return (
+            self.sampling_strategy
+            if sampling_strategy is _KEEP
+            else cast(SamplingStrategy | None, sampling_strategy)
+        )
+
     def _clone_with_strategies(
         self,
         *,
