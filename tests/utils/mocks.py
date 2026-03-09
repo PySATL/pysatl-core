@@ -18,6 +18,7 @@ from pysatl_core.distributions import (
     Distribution,
     SamplingStrategy,
 )
+from pysatl_core.distributions.distribution import _KEEP
 from pysatl_core.distributions.support import Support
 from pysatl_core.types import (
     EuclideanDistributionType,
@@ -88,3 +89,12 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
     @property
     def support(self):
         return self._support
+
+    def _clone_with_strategies(
+        self,
+        *,
+        sampling_strategy: SamplingStrategy | None | object = _KEEP,
+        computation_strategy: ComputationStrategy | None | object = _KEEP,
+    ) -> StandaloneEuclideanUnivariateDistribution:
+        # Actually a stub
+        return StandaloneEuclideanUnivariateDistribution(Kind.CONTINUOUS)

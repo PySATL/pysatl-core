@@ -10,7 +10,6 @@ from pysatl_core.types import (
     GenericCharacteristicName,
     UnivariateContinuous,
 )
-from tests.utils.mocks import MockSamplingStrategy
 
 
 class TestBaseFamily:
@@ -29,7 +28,6 @@ class TestBaseFamily:
             distr_type=UnivariateContinuous,
             distr_parametrizations=["base", "alt"],
             distr_characteristics=distr_characteristics,  # type: ignore[arg-type]
-            sampling_strategy=MockSamplingStrategy(),
         )
 
         @fam.parametrization(name="base")

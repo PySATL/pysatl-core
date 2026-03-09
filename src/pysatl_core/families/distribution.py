@@ -11,11 +11,13 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
-from pysatl_core.distributions.distribution import Distribution
+from pysatl_core.distributions.distribution import _KEEP, Distribution
+from pysatl_core.distributions.strategies import (
+    DefaultComputationStrategy,
+    DefaultSamplingUnivariateStrategy,
+)
 from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import NumericArray
 
@@ -41,7 +43,6 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass(slots=True)
 class ParametricFamilyDistribution(Distribution):
     """
     A specific distribution instance from a parametric family.
@@ -53,18 +54,46 @@ class ParametricFamilyDistribution(Distribution):
     ----------
     family_name : str
         Name of the distribution family.
-    _distribution_type : DistributionType
+    distribution_type : DistributionType
         Type of this distribution.
-    _parametrization : Parametrization
+    parametrization : Parametrization
         Parameter values for this distribution.
-    _support : Support or None
+    support : Support or None
         Support of this distribution.
+    sampling_strategy : SamplingStrategy
+        Strategy for generating random samples.
+        Such an object is unique for each distribution.
+    computation_strategy : ComputationStrategy
+        Strategy for computing characteristics and conversions.
+        Such an object is unique for each distribution.
     """
 
-    family_name: str
-    _distribution_type: DistributionType
-    _parametrization: Parametrization
-    _support: Support | None
+    def __init__(
+        self,
+        family_name: str,
+        distribution_type: DistributionType,
+        parametrization: Parametrization,
+        support: Support | None,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+    ):
+        self._distribution_type = distribution_type
+        self._family_name = family_name
+        self._parametrization = parametrization
+        self._support = support
+
+        self._computation_strategy = computation_strategy or DefaultComputationStrategy()
+        self._sampling_strategy = sampling_strategy or DefaultSamplingUnivariateStrategy()
+
+        self._analytical_cache_key: tuple[int, GenericCharacteristicName] | None = None
+        self._analytical_cache_val: (
+            Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]] | None
+        ) = None
+
+    @property
+    def family_name(self) -> str:
+        "Get the name of the family this distribution belongs to."
+        return self._family_name
 
     @property
     def distribution_type(self) -> DistributionType:
@@ -142,25 +171,52 @@ class ParametricFamilyDistribution(Distribution):
         parametrization object or name changes.
         """
         key = (id(self.parametrization), self.parametrization_name)
-        cache_key = getattr(self, "_analytical_cache_key", None)
-        cache_val = getattr(self, "_analytical_cache_val", None)
 
-        if cache_key != key or cache_val is None:
-            cache_val = self.family._build_analytical_computations(self.parametrization)
+        if self._analytical_cache_key != key or self._analytical_cache_val is None:
+            self._analytical_cache_val = self.family.build_analytical_computations(
+                self.parametrization
+            )
             self._analytical_cache_key = key
-            self._analytical_cache_val = cache_val
 
-        return cache_val
+        return self._analytical_cache_val
 
     @property
     def sampling_strategy(self) -> SamplingStrategy:
         """Get the sampling strategy for this distribution."""
-        return self.family.sampling_strategy
+        return self._sampling_strategy
 
     @property
     def computation_strategy(self) -> ComputationStrategy:
         """Get the computation strategy for this distribution."""
-        return self.family.computation_strategy
+        return self._computation_strategy
+
+    def _clone_with_strategies(
+        self,
+        *,
+        sampling_strategy: SamplingStrategy | None | object = _KEEP,
+        computation_strategy: ComputationStrategy | None | object = _KEEP,
+    ) -> ParametricFamilyDistribution:
+        """Return a copy of this distribution with updated strategies."""
+        new_sampling: SamplingStrategy | None = (
+            self._sampling_strategy
+            if sampling_strategy is _KEEP
+            else cast(SamplingStrategy | None, sampling_strategy)
+        )
+
+        new_computation: ComputationStrategy | None = (
+            self._computation_strategy
+            if computation_strategy is _KEEP
+            else cast(ComputationStrategy | None, computation_strategy)
+        )
+
+        return ParametricFamilyDistribution(
+            family_name=self._family_name,
+            distribution_type=self._distribution_type,
+            parametrization=self._parametrization,
+            support=self._support,
+            sampling_strategy=new_sampling,
+            computation_strategy=new_computation,
+        )
 
     @property
     def support(self) -> Support | None:

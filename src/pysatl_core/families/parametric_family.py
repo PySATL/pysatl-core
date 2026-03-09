@@ -18,10 +18,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, cast, dataclass_transform
 
 from pysatl_core.distributions.computation import AnalyticalComputation
-from pysatl_core.distributions.strategies import (
-    DefaultComputationStrategy,
-    DefaultSamplingUnivariateStrategy,
-)
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.types import ComputationFunc, DistributionType
 
@@ -83,10 +79,6 @@ class ParametricFamily:
         - pointwise characteristics (e.g., pdf, cdf, ppf): provider(params, x, **kwargs) -> Any
 
         If a single callable is provided, it is treated as defined for the base parametrization.
-    sampling_strategy : SamplingStrategy, optional
-        Strategy for sampling from distributions.
-    computation_strategy : ComputationStrategy, optional
-        Strategy for computing distribution characteristics.
     support_by_parametrization : Callable or None, optional
         Function that returns support for given parameters.
     """
@@ -97,37 +89,27 @@ class ParametricFamily:
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
         distr_characteristics: CharacteristicsMap,
-        sampling_strategy: SamplingStrategy | None = None,
-        computation_strategy: ComputationStrategy | None = None,
         support_by_parametrization: SupportArg = None,
     ):
+        if not distr_parametrizations:
+            raise ValueError(
+                "distr_parametrizations must be non-empty (base parametrization is required)."
+            )
+
         self._name = name
+        # Ordered names; the first one is the base parametrization name
+        self.parametrization_names = distr_parametrizations
+        self.base_parametrization_name = self.parametrization_names[0]
         self._distr_type: Callable[[Parametrization], DistributionType] = (
             (lambda params: distr_type) if isinstance(distr_type, DistributionType) else distr_type
         )
 
-        self.computation_strategy = (
-            DefaultComputationStrategy() if computation_strategy is None else computation_strategy
-        )
-
-        if support_by_parametrization is None:
-            self._support_resolver: SupportResolver
-            self._support_resolver = lambda _params: None
-        else:
-            self._support_resolver = support_by_parametrization
-
-        # Ordered names; the first one is the base parametrization name
-        self.parametrization_names: list[ParametrizationName] = distr_parametrizations
-        self.base_parametrization_name: ParametrizationName = self.parametrization_names[0]
+        self._support_resolver: SupportResolver = support_by_parametrization or (lambda _p: None)
 
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
 
-        self.sampling_strategy = (
-            DefaultSamplingUnivariateStrategy() if sampling_strategy is None else sampling_strategy
-        )
-
-        def _process_char_val(
+        def _normalize_characteristic(
             value: Mapping[ParametrizationName, CharacteristicFunction[Any, Any]]
             | CharacteristicFunction[Any, Any],
         ) -> dict[ParametrizationName, CharacteristicFunction[Any, Any]]:
@@ -139,21 +121,33 @@ class ParametricFamily:
 
         self.distr_characteristics: dict[
             GenericCharacteristicName, dict[ParametrizationName, CharacteristicFunction[Any, Any]]
-        ] = {key: _process_char_val(val) for key, val in distr_characteristics.items()}
+        ] = {k: _normalize_characteristic(v) for k, v in distr_characteristics.items()}
 
-        # Precompute analytical plan
+        # Validate characteristic providers
+        valid_names = set(self.parametrization_names)
+        for char_name, forms in self.distr_characteristics.items():
+            unknown = set(forms) - valid_names
+            if unknown:
+                raise ValueError(
+                    f"Characteristic '{char_name}' has providers for unknown parametrizations: "
+                    f"{sorted(unknown)}."
+                )
+            if self.base_parametrization_name not in forms and len(forms) == 0:
+                raise ValueError(f"Characteristic '{char_name}' has no providers.")
+
+        # Precompute analytical plan: for each parametrization pick provider (self or base)
         self._analytical_plan: dict[
             ParametrizationName, dict[GenericCharacteristicName, ParametrizationName]
         ] = {}
-        base_name = self.base_parametrization_name
+        base = self.base_parametrization_name
         for pname in self.parametrization_names:
-            plan_for_p: dict[GenericCharacteristicName, ParametrizationName] = {}
+            plan: dict[GenericCharacteristicName, ParametrizationName] = {}
             for characteristic, forms in self.distr_characteristics.items():
                 if pname in forms:
-                    plan_for_p[characteristic] = pname
-                elif base_name in forms:
-                    plan_for_p[characteristic] = base_name
-            self._analytical_plan[pname] = plan_for_p
+                    plan[characteristic] = pname
+                elif base in forms:
+                    plan[characteristic] = base
+            self._analytical_plan[pname] = plan
 
     @property
     def name(self) -> str:
@@ -184,7 +178,7 @@ class ParametricFamily:
 
     @property
     def support_resolver(self) -> SupportResolver:
-        """Get the support resolver function."""
+        """Support resolver callable."""
         return self._support_resolver
 
     def register_parametrization(
@@ -269,7 +263,7 @@ class ParametricFamily:
             else func,
         )
 
-    def _build_analytical_computations(
+    def build_analytical_computations(
         self, parameters: Parametrization
     ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
         """
@@ -285,8 +279,7 @@ class ParametricFamily:
             if provider_name == parameters.name:
                 params_obj = parameters
             else:
-                if base_params is None:
-                    base_params = self.to_base(parameters)
+                base_params = base_params or self.to_base(parameters)
                 params_obj = base_params
 
             func_factory = self.distr_characteristics[characteristic][provider_name]
@@ -299,7 +292,9 @@ class ParametricFamily:
 
     def distribution(
         self,
-        parametrization_name: str | None = None,
+        parametrization_name: ParametrizationName | None = None,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
         **parameters_values: Any,
     ) -> ParametricFamilyDistribution:
         """
@@ -307,8 +302,13 @@ class ParametricFamily:
 
         Parameters
         ----------
-        parametrization_name : str, optional
+        parametrization_name : ParametrizationName | None, optional
             Name of parametrization to use (defaults to base).
+        sampling_strategy : SamplingStrategy
+            Strategy for generating random samples. Such an object is unique for each distribution.
+        computation_strategy : ComputationStrategy
+            Strategy for computing characteristics and conversions.
+            Such an object is unique for each distribution.
         **parameters_values
             Parameter values for the distribution.
 
@@ -324,22 +324,28 @@ class ParametricFamily:
         ValueError
             If parameters don't satisfy constraints.
         """
-        if parametrization_name is None:
-            parametrization_class = self.base
-        else:
-            parametrization_class = self._parametrizations[parametrization_name]
+        parametrization_class = (
+            self.base
+            if parametrization_name is None
+            else self._parametrizations[parametrization_name]
+        )
 
         parameters = parametrization_class(**parameters_values)
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
         return ParametricFamilyDistribution(
-            self.name, distribution_type, parameters, self.support_resolver(parameters)
+            family_name=self.name,
+            distribution_type=distribution_type,
+            parametrization=parameters,
+            support=self.support_resolver(parameters),
+            sampling_strategy=sampling_strategy,
+            computation_strategy=computation_strategy,
         )
 
     @dataclass_transform()
     def parametrization(
-        self, *, name: str
+        self, *, name: ParametrizationName
     ) -> Callable[[type[Parametrization]], type[Parametrization]]:
         """
         Create a class decorator that registers a parametrization.
