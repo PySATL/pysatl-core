@@ -14,7 +14,6 @@ from pysatl_core.families import (
 )
 from pysatl_core.types import UnivariateContinuous
 from tests.unit.families.test_basic import TestBaseFamily
-from tests.utils.mocks import MockSamplingStrategy
 
 
 class TestParametrizationAPI(TestBaseFamily):
@@ -46,7 +45,6 @@ class TestParametrizationAPI(TestBaseFamily):
             distr_type=UnivariateContinuous,
             distr_parametrizations=["base"],
             distr_characteristics={},
-            sampling_strategy=MockSamplingStrategy(),
         )
 
         @family.parametrization(name="kind")

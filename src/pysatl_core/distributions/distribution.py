@@ -11,9 +11,12 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, Self, cast, runtime_checkable
 
 from pysatl_core.types import NumericArray
+
+_KEEP: object = object()
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -70,6 +73,39 @@ class Distribution(Protocol):
 
     @property
     def support(self) -> Support | None: ...
+
+    def _clone_with_strategies(
+        self,
+        *,
+        sampling_strategy: SamplingStrategy | None | object = _KEEP,
+        computation_strategy: ComputationStrategy | None | object = _KEEP,
+    ) -> Distribution: ...
+
+    def with_sampling_strategy(self, sampling_strategy: SamplingStrategy | None) -> Self:
+        """Return a copy of this distribution with an updated sampling strategy."""
+        return cast(Self, self._clone_with_strategies(sampling_strategy=sampling_strategy))
+
+    def with_computation_strategy(self, computation_strategy: ComputationStrategy | None) -> Self:
+        """Return a copy of this distribution with an updated computation strategy."""
+        return cast(
+            Self,
+            self._clone_with_strategies(computation_strategy=computation_strategy),
+        )
+
+    def with_strategies(
+        self,
+        *,
+        sampling_strategy: SamplingStrategy | None | object = _KEEP,
+        computation_strategy: ComputationStrategy | None | object = _KEEP,
+    ) -> Self:
+        """Return a copy of this distribution with updated strategies."""
+        return cast(
+            Self,
+            self._clone_with_strategies(
+                sampling_strategy=sampling_strategy,
+                computation_strategy=computation_strategy,
+            ),
+        )
 
     def query_method(
         self, characteristic_name: GenericCharacteristicName, **options: Any
