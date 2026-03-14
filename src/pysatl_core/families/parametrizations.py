@@ -14,9 +14,8 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC
 from dataclasses import dataclass, is_dataclass
-from functools import wraps
 from inspect import isfunction
-from typing import TYPE_CHECKING, ParamSpec, dataclass_transform
+from typing import TYPE_CHECKING, dataclass_transform
 
 from pysatl_core.types import ParametrizationName
 
@@ -107,10 +106,7 @@ class Parametrization(ABC):
         return self
 
 
-P = ParamSpec("P")
-
-
-def constraint(description: str) -> Callable[[Callable[P, bool]], Callable[P, bool]]:
+def constraint[**P](description: str) -> Callable[[Callable[P, bool]], Callable[P, bool]]:
     """
     Decorator to mark an instance method as a parameter constraint.
 
@@ -133,13 +129,9 @@ def constraint(description: str) -> Callable[[Callable[P, bool]], Callable[P, bo
     """
 
     def decorator(func: Callable[P, bool]) -> Callable[P, bool]:
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> bool:
-            return func(*args, **kwargs)
-
-        setattr(wrapper, "__is_constraint", True)
-        setattr(wrapper, "__constraint_description", description)
-        return wrapper
+        setattr(func, "__is_constraint", True)
+        setattr(func, "__constraint_description", description)
+        return func
 
     return decorator
 

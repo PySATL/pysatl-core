@@ -36,8 +36,6 @@ class ComputationStrategy(Protocol):
         Whether to cache fitted computation methods.
     """
 
-    enable_caching: bool
-
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
     ) -> Method[Any, Any]: ...
@@ -59,7 +57,7 @@ class DefaultComputationStrategy:
 
     Attributes
     ----------
-    enable_caching : bool
+    _enable_caching : bool
         Whether caching is enabled.
     _cache : dict[str, FittedComputationMethod]
         Cache of fitted computation methods.
@@ -68,9 +66,13 @@ class DefaultComputationStrategy:
     """
 
     def __init__(self, enable_caching: bool = False) -> None:
-        self.enable_caching = enable_caching
+        self._enable_caching = enable_caching
         self._cache: dict[GenericCharacteristicName, FittedComputationMethod[Any, Any]] = {}
         self._resolving: dict[int, set[GenericCharacteristicName]] = {}
+
+    @property
+    def is_caching_enabled(self) -> bool:
+        return self._enable_caching
 
     def _push_guard(self, distr: Distribution, state: GenericCharacteristicName) -> None:
         """
@@ -135,7 +137,7 @@ class DefaultComputationStrategy:
             return distr.analytical_computations[state]
 
         # 2. Check cache if enabled
-        if self.enable_caching:
+        if self._enable_caching:
             cached = self._cache.get(state)
             if cached is not None:
                 return cached
@@ -165,7 +167,7 @@ class DefaultComputationStrategy:
                 last_fitted: FittedComputationMethod[Any, Any] | None = None
                 for edge in path:
                     fitted = edge.prepare(distr, **options)
-                    if self.enable_caching and edge.cacheable:
+                    if self._enable_caching and edge.cacheable:
                         self._cache[edge.target] = fitted
                     last_fitted = fitted
 

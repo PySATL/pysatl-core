@@ -175,12 +175,12 @@ class ComputationMethod[In, Out]:
         )
 
     @overload
-    def __call__(self, distribution: Distribution, **options: Any) -> Out: ...
+    def evaluate(self, distribution: Distribution, **options: Any) -> Out: ...
 
     @overload
-    def __call__(self, distribution: Distribution, data: In, **options: Any) -> Out: ...
+    def evaluate(self, distribution: Distribution, data: In, **options: Any) -> Out: ...
 
-    def __call__(self, distribution: Distribution, *args: Any, **options: Any) -> Out:
+    def evaluate(self, distribution: Distribution, *args: Any, **options: Any) -> Out:
         """Evaluate *direct* computation methods.
 
         This is only available for methods defined via ``evaluator``.
@@ -214,6 +214,16 @@ class ComputationMethod[In, Out]:
                 "Use .prepare(...) or call the method directly."
             )
         return self.fitter(distribution, **options)
+
+    @overload
+    def __call__(self, distribution: Distribution, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, distribution: Distribution, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, distribution: Distribution, *args: Any, **options: Any) -> Out:
+        """Fit if possible and then evaluate"""
+        return self.prepare(distribution, **options)(*args)
 
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]

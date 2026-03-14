@@ -11,7 +11,8 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol, Self, cast, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Self, cast
 
 from pysatl_core.types import NumericArray
 
@@ -34,8 +35,7 @@ if TYPE_CHECKING:
     )
 
 
-@runtime_checkable
-class Distribution(Protocol):
+class Distribution(ABC):
     """
     Protocol defining the interface for probability distributions.
 
@@ -58,22 +58,28 @@ class Distribution(Protocol):
     """
 
     @property
+    @abstractmethod
     def distribution_type(self) -> DistributionType: ...
 
     @property
+    @abstractmethod
     def analytical_computations(
         self,
     ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]: ...
 
     @property
+    @abstractmethod
     def sampling_strategy(self) -> SamplingStrategy: ...
 
     @property
+    @abstractmethod
     def computation_strategy(self) -> ComputationStrategy: ...
 
     @property
+    @abstractmethod
     def support(self) -> Support | None: ...
 
+    @abstractmethod
     def _clone_with_strategies(
         self,
         *,
