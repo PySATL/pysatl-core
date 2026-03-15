@@ -18,7 +18,7 @@ class TestAnalyticalComputationCache(TestBaseFamily):
             CharacteristicName.CDF: {"base": lambda params, x: params.value},
         }
 
-    def test_cache_auto_invalidation(self) -> None:
+    def test_analytical_computations_are_built_at_distribution_creation(self) -> None:
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
         ParametricFamilyRegister.register(family)
 
@@ -27,17 +27,18 @@ class TestAnalyticalComputationCache(TestBaseFamily):
 
         computations1 = distribution.analytical_computations
         computations1_again = distribution.analytical_computations
-        assert computations1 is computations1_again  # cache hit
+        assert computations1 is computations1_again
 
-        # Replacing with a *new* object of the same parametrization should rebuild the cache
+        # Replacing with a *new* object of the same parametrization does not
+        # rebuild computations because they are now materialized at creation time.
         distribution._parametrization = family.parametrizations["alt"](value=5.0)  # type: ignore[call-arg]
         computations2 = distribution.analytical_computations
-        assert computations2 is not computations1
+        assert computations2 is computations1
 
-        # Switching to the base parametrization should also rebuild the cache
+        # Switching to the base parametrization also does not rebuild computations.
         distribution._parametrization = family.parametrizations["base"](value=7.0)  # type: ignore[call-arg]
         computations3 = distribution.analytical_computations
-        assert computations3 is not computations2
+        assert computations3 is computations2
 
         # Both mappings must contain PDF and CDF and be callable
         for mapping in (computations2, computations3):
@@ -46,13 +47,12 @@ class TestAnalyticalComputationCache(TestBaseFamily):
                 mapping[CharacteristicName.CDF]
             )
 
-        # For alt(value=5.0) → fallback to base(value=5.0)
-        assert computations2[CharacteristicName.PDF](1.23) == pytest.approx(5.0)
-        assert computations2[CharacteristicName.CDF](0.5) == pytest.approx(5.0)
+        # Computations remain bound to initial alt(value=2.0) -> base(value=2.0)
+        assert computations2[CharacteristicName.PDF](1.23) == pytest.approx(2.0)
+        assert computations2[CharacteristicName.CDF](0.5) == pytest.approx(2.0)
 
-        # For base(value=7.0)
-        assert computations3[CharacteristicName.PDF](42.0) == pytest.approx(7.0)
-        assert computations3[CharacteristicName.CDF](0.0) == pytest.approx(7.0)
+        assert computations3[CharacteristicName.PDF](42.0) == pytest.approx(2.0)
+        assert computations3[CharacteristicName.CDF](0.0) == pytest.approx(2.0)
 
     def test_fallback_to_base_for_missing_form(self) -> None:
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
@@ -67,3 +67,12 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         # For alt(value=2.0) → base(value=2.0)
         assert computations[CharacteristicName.PDF](1.23) == pytest.approx(2.0)
         assert computations[CharacteristicName.CDF](0.5) == pytest.approx(2.0)
+
+    def test_distribution_creation_requires_analytical_computations(self) -> None:
+        family = self.make_default_family(distr_characteristics={})
+        ParametricFamilyRegister.register(family)
+
+        with pytest.raises(
+            ValueError, match="Distribution requires at least one analytical computation."
+        ):
+            family.distribution("alt", value=2.0)

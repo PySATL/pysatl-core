@@ -263,7 +263,7 @@ class ParametricFamily:
             else func,
         )
 
-    def build_analytical_computations(
+    def _build_analytical_computations(
         self, parameters: Parametrization
     ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
         """
@@ -334,9 +334,11 @@ class ParametricFamily:
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
+        analytical_computations = self._build_analytical_computations(parameters)
         return ParametricFamilyDistribution(
             family_name=self.name,
             distribution_type=distribution_type,
+            analytical_computations=analytical_computations,
             parametrization=parameters,
             support=self.support_resolver(parameters),
             sampling_strategy=sampling_strategy,

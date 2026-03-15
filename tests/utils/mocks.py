@@ -13,8 +13,6 @@ import numpy as np
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
-    DefaultComputationStrategy,
-    DefaultSamplingUnivariateStrategy,
     Distribution,
     SamplingStrategy,
 )
@@ -45,7 +43,7 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
     """
 
     _distribution_type: EuclideanDistributionType
-    _analytical: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
+    _analytical_computations: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
     _support: Support | None
 
     def __init__(
@@ -57,38 +55,11 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         ) = (),
         support: Support | None = None,
     ) -> None:
-        self._distribution_type = EuclideanDistributionType(kind, 1)
-        self._support = support
-        if isinstance(analytical_computations, Mapping):
-            self._analytical = dict(analytical_computations)
-        else:
-            self._analytical = {ac.target: ac for ac in analytical_computations}
-
-    @property
-    def distribution_type(self) -> EuclideanDistributionType:
-        """Distribution type descriptor (kind and dimension)."""
-        return self._distribution_type
-
-    @property
-    def analytical_computations(
-        self,
-    ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
-        """Mapping from characteristic name to analytical callable."""
-        return self._analytical
-
-    @property
-    def sampling_strategy(self) -> SamplingStrategy:
-        """Sampling strategy instance."""
-        return DefaultSamplingUnivariateStrategy()
-
-    @property
-    def computation_strategy(self) -> ComputationStrategy:
-        """Computation strategy instance."""
-        return DefaultComputationStrategy()
-
-    @property
-    def support(self):
-        return self._support
+        super(StandaloneEuclideanUnivariateDistribution, self).__init__(
+            distribution_type=EuclideanDistributionType(kind, 1),
+            analytical_computations=analytical_computations,
+            support=support,
+        )
 
     def _clone_with_strategies(
         self,
@@ -97,4 +68,7 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         computation_strategy: ComputationStrategy | None | object = _KEEP,
     ) -> StandaloneEuclideanUnivariateDistribution:
         # Actually a stub
-        return StandaloneEuclideanUnivariateDistribution(Kind.CONTINUOUS)
+        return StandaloneEuclideanUnivariateDistribution(
+            Kind.CONTINUOUS,
+            analytical_computations=self.analytical_computations,
+        )

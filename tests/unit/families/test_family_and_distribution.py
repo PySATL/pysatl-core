@@ -46,3 +46,13 @@ class TestFamilyRegistrationAndSampling(TestBaseFamily):
         }
         assert computations[CharacteristicName.CDF](0.25) == pytest.approx(0.25)
         assert computations[CharacteristicName.PPF](0.75) == pytest.approx(0.75)
+
+    def test_distribution_clone_with_keep_strategies_copies_strategies(self) -> None:
+        fam = self.make_default_family()
+        ParametricFamilyRegister.register(fam)
+
+        distr = fam.distribution("base", value=0.0)
+        cloned = distr.with_strategies()
+
+        assert cloned.sampling_strategy is not distr.sampling_strategy
+        assert cloned.computation_strategy is not distr.computation_strategy
