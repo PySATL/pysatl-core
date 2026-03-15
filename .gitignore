@@ -128,6 +128,7 @@ poetry.lock
 .cursorindexingignore
 
 # Docs
+
 docs/build/*
 docs/source/api/*
 docs/source/examples/*
@@ -137,3 +138,9 @@ docs/source/examples/*
 
 # Unuran build artifacts
 src/pysatl_core/sampling/unuran/bindings/_unuran_cffi.c
+
+# ai
+
+.ai/*
+AGENTS.md
+CLAUDE.md
