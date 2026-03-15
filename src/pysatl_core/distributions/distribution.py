@@ -12,22 +12,23 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from typing import TYPE_CHECKING, Self, cast
 
+from pysatl_core.distributions.strategies import (
+    ComputationStrategy,
+    SamplingStrategy,
+)
 from pysatl_core.types import NumericArray
 
 _KEEP: object = object()
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation
-    from pysatl_core.distributions.strategies import (
-        ComputationStrategy,
-        SamplingStrategy,
-    )
+    from pysatl_core.distributions.computation import AnalyticalComputation, Method
     from pysatl_core.distributions.support import Support
     from pysatl_core.types import (
         DistributionType,
@@ -58,27 +59,79 @@ class Distribution(ABC):
         Support of the distribution, if defined.
     """
 
-    @property
-    @abstractmethod
-    def distribution_type(self) -> DistributionType: ...
+    def __init__(
+        self,
+        distribution_type: DistributionType,
+        analytical_computations: (
+            Iterable[AnalyticalComputation[Any, Any]]
+            | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
+        ),
+        support: Support | None = None,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+    ) -> None:
+        """
+        Initialize common distribution state.
+
+        Parameters
+        ----------
+        distribution_type : DistributionType
+            Type information about the distribution (kind, dimension, etc.).
+        analytical_computations :
+            Iterable[AnalyticalComputation] | Mapping[str, AnalyticalComputation]
+            Analytical computations provided by the distribution.
+        support : Support or None, default=None
+            Support of the distribution.
+        sampling_strategy : SamplingStrategy or None, default=None
+            Sampling strategy instance. If omitted, univariate default is used.
+        computation_strategy : ComputationStrategy or None, default=None
+            Computation strategy instance. If omitted, default strategy is used.
+        """
+        from pysatl_core.distributions.strategies import (
+            DefaultComputationStrategy,
+            DefaultSamplingUnivariateStrategy,
+        )
+
+        self._distribution_type = distribution_type
+        if isinstance(analytical_computations, Mapping):
+            normalized_analytical = dict(analytical_computations)
+        else:
+            normalized_analytical = {ac.target: ac for ac in analytical_computations}
+
+        if not normalized_analytical:
+            raise ValueError("Distribution requires at least one analytical computation.")
+
+        self._analytical_computations = normalized_analytical
+        self._support = support
+        self._sampling_strategy = sampling_strategy or DefaultSamplingUnivariateStrategy()
+        self._computation_strategy = computation_strategy or DefaultComputationStrategy()
 
     @property
-    @abstractmethod
+    def distribution_type(self) -> DistributionType:
+        """Return type metadata of the distribution (kind, dimension, etc.)."""
+        return self._distribution_type
+
+    @property
     def analytical_computations(
         self,
-    ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]: ...
+    ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
+        """Return analytical computations provided directly by this distribution."""
+        return self._analytical_computations
 
     @property
-    @abstractmethod
-    def sampling_strategy(self) -> SamplingStrategy: ...
+    def sampling_strategy(self) -> SamplingStrategy:
+        """Return the currently attached sampling strategy."""
+        return self._sampling_strategy
 
     @property
-    @abstractmethod
-    def computation_strategy(self) -> ComputationStrategy: ...
+    def computation_strategy(self) -> ComputationStrategy:
+        """Return the currently attached computation strategy."""
+        return self._computation_strategy
 
     @property
-    @abstractmethod
-    def support(self) -> Support | None: ...
+    def support(self) -> Support | None:
+        """Return the support of the distribution, if it is defined."""
+        return self._support
 
     @abstractmethod
     def _clone_with_strategies(
@@ -86,7 +139,46 @@ class Distribution(ABC):
         *,
         sampling_strategy: SamplingStrategy | None | object = _KEEP,
         computation_strategy: ComputationStrategy | None | object = _KEEP,
-    ) -> Distribution: ...
+    ) -> Distribution:
+        """
+        Return a cloned distribution with updated strategies.
+
+        The ``_KEEP`` sentinel means the existing strategy should be preserved
+        for that side.
+        """
+        ...
+
+    def _new_sampling_strategy(
+        self,
+        sampling_strategy: SamplingStrategy | None | object = _KEEP,
+    ) -> SamplingStrategy | None:
+        """
+        Resolve sampling strategy for cloning.
+
+        When ``sampling_strategy`` is ``_KEEP``, returns a deep copy of the
+        current sampling strategy.
+        """
+        return cast(
+            SamplingStrategy | None,
+            deepcopy(self._sampling_strategy) if sampling_strategy is _KEEP else sampling_strategy,
+        )
+
+    def _new_computation_strategy(
+        self,
+        computation_strategy: ComputationStrategy | None | object = _KEEP,
+    ) -> ComputationStrategy | None:
+        """
+        Resolve computation strategy for cloning.
+
+        When ``computation_strategy`` is ``_KEEP``, returns a deep copy of the
+        current computation strategy.
+        """
+        return cast(
+            ComputationStrategy | None,
+            deepcopy(self._computation_strategy)
+            if computation_strategy is _KEEP
+            else computation_strategy,
+        )
 
     def with_sampling_strategy(self, sampling_strategy: SamplingStrategy | None) -> Self:
         """Return a copy of this distribution with an updated sampling strategy."""
