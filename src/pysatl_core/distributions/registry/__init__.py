@@ -25,6 +25,8 @@ from .graph import (
 )
 from .graph_primitives import (
     DEFAULT_COMPUTATION_KEY,
+    AnalyticalLoopEdgeMeta,
+    ComputationEdgeMeta,
     EdgeMeta,
     GraphInvariantError,
 )
@@ -33,6 +35,8 @@ __all__ = [
     # Graph primitives and constants
     "DEFAULT_COMPUTATION_KEY",
     "EdgeMeta",
+    "ComputationEdgeMeta",
+    "AnalyticalLoopEdgeMeta",
     "GraphInvariantError",
     # Constraint types
     "Constraint",
