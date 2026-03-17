@@ -243,6 +243,12 @@ type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[
 type GenericCharacteristicName = str
 """Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
 
+type LabelName = str
+"""Type alias for labels that distinguish computation variants."""
+
+DEFAULT_ANALYTICAL_COMPUTATION_LABEL: LabelName = "PySATL_default_analytical_computation"
+"""Default label for analytical methods when a label is not explicitly provided."""
+
 type ParametrizationName = str
 """Type alias for parametrization names."""
 
@@ -302,6 +308,8 @@ __all__ = [
     "UnivariateContinuous",
     "UnivariateDiscrete",
     "GenericCharacteristicName",
+    "LabelName",
+    "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
     "ComputationFunc",
     "DistributionType",

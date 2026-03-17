@@ -16,11 +16,15 @@ class TestFamilyRegistrationAndSampling(TestBaseFamily):
     def test_family_registration_and_distribution_sampling(self) -> None:
         fam = self.make_default_family(
             distr_characteristics={
-                CharacteristicName.PDF: {"base": lambda p, x: 1.0 if 0.0 <= x <= 1.0 else 0.0},
-                CharacteristicName.CDF: {
-                    "base": lambda p, x: x if 0.0 <= x <= 1.0 else (0.0 if x < 0.0 else 1.0)
+                CharacteristicName.PDF: {
+                    "base": {"default": lambda p, x: 1.0 if 0.0 <= x <= 1.0 else 0.0}
                 },
-                CharacteristicName.PPF: {"base": lambda p, q: q},
+                CharacteristicName.CDF: {
+                    "base": {
+                        "default": lambda p, x: x if 0.0 <= x <= 1.0 else (0.0 if x < 0.0 else 1.0)
+                    }
+                },
+                CharacteristicName.PPF: {"base": {"default": lambda p, q: q}},
             },
         )
 
@@ -44,5 +48,15 @@ class TestFamilyRegistrationAndSampling(TestBaseFamily):
             CharacteristicName.CDF,
             CharacteristicName.PPF,
         }
-        assert computations[CharacteristicName.CDF](0.25) == pytest.approx(0.25)
-        assert computations[CharacteristicName.PPF](0.75) == pytest.approx(0.75)
+        assert computations[CharacteristicName.CDF]["default"](0.25) == pytest.approx(0.25)
+        assert computations[CharacteristicName.PPF]["default"](0.75) == pytest.approx(0.75)
+
+    def test_distribution_clone_with_keep_strategies_copies_strategies(self) -> None:
+        fam = self.make_default_family()
+        ParametricFamilyRegister.register(fam)
+
+        distr = fam.distribution("base", value=0.0)
+        cloned = distr.with_strategies()
+
+        assert cloned.sampling_strategy is not distr.sampling_strategy
+        assert cloned.computation_strategy is not distr.computation_strategy

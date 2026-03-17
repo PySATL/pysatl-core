@@ -19,7 +19,11 @@ from typing import TYPE_CHECKING, Any, cast, dataclass_transform
 
 from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
-from pysatl_core.types import ComputationFunc, DistributionType
+from pysatl_core.types import (
+    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    ComputationFunc,
+    DistributionType,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -31,13 +35,17 @@ if TYPE_CHECKING:
     )
     from pysatl_core.types import (
         GenericCharacteristicName,
+        LabelName,
         ParametrizationName,
     )
 
     type SupportArg = Callable[[Parametrization], Support | None] | None
     type SupportResolver = Callable[[Parametrization], Support | None]
+    type LabeledCharacteristicProvider = (
+        Mapping[LabelName, CharacteristicFunction[Any, Any]] | CharacteristicFunction[Any, Any]
+    )
     type CharacteristicProvider = (
-        Mapping[ParametrizationName, CharacteristicFunction[Any, Any]]
+        Mapping[ParametrizationName, LabeledCharacteristicProvider]
         | CharacteristicFunction[Any, Any]
     )
     type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
@@ -78,7 +86,9 @@ class ParametricFamily:
         - nullary characteristics (e.g., mean, var): provider(params, **kwargs) -> Any
         - pointwise characteristics (e.g., pdf, cdf, ppf): provider(params, x, **kwargs) -> Any
 
-        If a single callable is provided, it is treated as defined for the base parametrization.
+        Providers are grouped by parametrization and may define multiple labeled methods.
+        If a single callable is provided, it is treated as the base-parametrization method
+        under ``DEFAULT_ANALYTICAL_COMPUTATION_LABEL``.
     support_by_parametrization : Callable or None, optional
         Function that returns support for given parameters.
     """
@@ -109,31 +119,63 @@ class ParametricFamily:
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
 
-        def _normalize_characteristic(
-            value: Mapping[ParametrizationName, CharacteristicFunction[Any, Any]]
-            | CharacteristicFunction[Any, Any],
-        ) -> dict[ParametrizationName, CharacteristicFunction[Any, Any]]:
-            return (
-                dict(value)
-                if isinstance(value, Mapping)
-                else {self.base_parametrization_name: value}
+        def _normalize_labeled_provider(
+            characteristic_name: GenericCharacteristicName,
+            parametrization_name: ParametrizationName,
+            provider: LabeledCharacteristicProvider,
+        ) -> dict[LabelName, CharacteristicFunction[Any, Any]]:
+            normalized = (
+                dict(provider)
+                if isinstance(provider, Mapping)
+                else {DEFAULT_ANALYTICAL_COMPUTATION_LABEL: provider}
             )
+            if not normalized:
+                raise ValueError(
+                    f"Characteristic '{characteristic_name}' has no labeled providers for "
+                    f"parametrization '{parametrization_name}'."
+                )
+            return normalized
+
+        def _normalize_characteristic(
+            characteristic_name: GenericCharacteristicName,
+            value: CharacteristicProvider,
+        ) -> dict[ParametrizationName, dict[LabelName, CharacteristicFunction[Any, Any]]]:
+            if not isinstance(value, Mapping):
+                base_name = self.base_parametrization_name
+                return {
+                    base_name: _normalize_labeled_provider(characteristic_name, base_name, value)
+                }
+
+            normalized_by_parametrization: dict[
+                ParametrizationName, dict[LabelName, CharacteristicFunction[Any, Any]]
+            ] = {}
+            for parametrization_name, provider in value.items():
+                normalized_by_parametrization[parametrization_name] = _normalize_labeled_provider(
+                    characteristic_name,
+                    parametrization_name,
+                    provider,
+                )
+            return normalized_by_parametrization
 
         self.distr_characteristics: dict[
-            GenericCharacteristicName, dict[ParametrizationName, CharacteristicFunction[Any, Any]]
-        ] = {k: _normalize_characteristic(v) for k, v in distr_characteristics.items()}
+            GenericCharacteristicName,
+            dict[ParametrizationName, dict[LabelName, CharacteristicFunction[Any, Any]]],
+        ] = {
+            characteristic_name: _normalize_characteristic(characteristic_name, provider)
+            for characteristic_name, provider in distr_characteristics.items()
+        }
 
         # Validate characteristic providers
         valid_names = set(self.parametrization_names)
         for char_name, forms in self.distr_characteristics.items():
+            if not forms:
+                raise ValueError(f"Characteristic '{char_name}' has no providers.")
             unknown = set(forms) - valid_names
             if unknown:
                 raise ValueError(
                     f"Characteristic '{char_name}' has providers for unknown parametrizations: "
                     f"{sorted(unknown)}."
                 )
-            if self.base_parametrization_name not in forms and len(forms) == 0:
-                raise ValueError(f"Characteristic '{char_name}' has no providers.")
 
         # Precompute analytical plan: for each parametrization pick provider (self or base)
         self._analytical_plan: dict[
@@ -263,16 +305,18 @@ class ParametricFamily:
             else func,
         )
 
-    def build_analytical_computations(
+    def _build_analytical_computations(
         self, parameters: Parametrization
-    ) -> dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
+    ) -> dict[GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]]:
         """
         Build analytical computations for given parameters.
 
         Uses precomputed provider plan for efficient computation.
         """
         plan = self._analytical_plan.get(parameters.name, {})
-        result: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = {}
+        result: dict[
+            GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
+        ] = {}
         base_params: Parametrization | None = None
 
         for characteristic, provider_name in plan.items():
@@ -282,11 +326,14 @@ class ParametricFamily:
                 base_params = base_params or self.to_base(parameters)
                 params_obj = base_params
 
-            func_factory = self.distr_characteristics[characteristic][provider_name]
-            result[characteristic] = AnalyticalComputation(
-                target=characteristic,
-                func=self._bind_parametrization(func_factory, params_obj),
-            )
+            labeled_providers = self.distr_characteristics[characteristic][provider_name]
+            result[characteristic] = {
+                label_name: AnalyticalComputation(
+                    target=characteristic,
+                    func=self._bind_parametrization(func_factory, params_obj),
+                )
+                for label_name, func_factory in labeled_providers.items()
+            }
 
         return result
 
@@ -334,9 +381,11 @@ class ParametricFamily:
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
+        analytical_computations = self._build_analytical_computations(parameters)
         return ParametricFamilyDistribution(
             family_name=self.name,
             distribution_type=distribution_type,
+            analytical_computations=analytical_computations,
             parametrization=parameters,
             support=self.support_resolver(parameters),
             sampling_strategy=sampling_strategy,

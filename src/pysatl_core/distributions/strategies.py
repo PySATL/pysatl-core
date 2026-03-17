@@ -11,7 +11,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
 
@@ -19,11 +19,15 @@ from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.types import CharacteristicName, Method, NumericArray
 
 if TYPE_CHECKING:
-    from typing import Any
+    from collections.abc import Mapping
 
-    from pysatl_core.distributions.computation import FittedComputationMethod
+    from pysatl_core.distributions.computation import (
+        AnalyticalComputation,
+        FittedComputationMethod,
+    )
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.types import GenericCharacteristicName
+    from pysatl_core.distributions.registry.graph import RegistryView
+    from pysatl_core.types import GenericCharacteristicName, LabelName
 
 
 class ComputationStrategy(Protocol):
@@ -101,6 +105,39 @@ class DefaultComputationStrategy:
             if not seen:
                 self._resolving.pop(key, None)
 
+    @staticmethod
+    def _pick_analytical_method(
+        state: GenericCharacteristicName,
+        methods: Mapping[LabelName, AnalyticalComputation[Any, Any]],
+    ) -> AnalyticalComputation[Any, Any]:
+        """
+        Pick the first available analytical method for a characteristic.
+
+        Raises
+        ------
+        RuntimeError
+            If no labeled analytical methods are available for the characteristic.
+        """
+        try:
+            return next(iter(methods.values()))
+        except StopIteration as exc:
+            raise RuntimeError(
+                f"Characteristic '{state}' provides no labeled analytical computations."
+            ) from exc
+
+    @staticmethod
+    def _pick_analytical_loop_method(
+        state: GenericCharacteristicName,
+        view: RegistryView,
+    ) -> Method[Any, Any] | None:
+        """
+        Pick the first analytical self-loop method for a characteristic in a view.
+        """
+        loops = view.analytical_variants(state)
+        if not loops:
+            return None
+        return cast(Method[Any, Any], next(iter(loops.values())).method)
+
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
     ) -> Method[Any, Any]:
@@ -108,9 +145,10 @@ class DefaultComputationStrategy:
         Resolve a computation method for the target characteristic.
 
         Resolution order:
-        1. Analytical implementation from the distribution
-        2. Cached fitted method (if caching enabled)
-        3. Conversion path from an analytical characteristic via the graph
+        1. Cached fitted method (if caching enabled)
+        2. Analytical implementation for non-registry characteristics
+        3. Analytical self-loop from the registry view
+        4. Conversion path from analytical-loop characteristics via the graph
 
         Parameters
         ----------
@@ -132,34 +170,46 @@ class DefaultComputationStrategy:
             If no analytical base exists, no conversion path is found,
             or a cycle is detected.
         """
-        # 1. Check for analytical implementation
-        if state in distr.analytical_computations:
-            return distr.analytical_computations[state]
-
-        # 2. Check cache if enabled
+        # 1. Check cache if enabled
         if self._enable_caching:
             cached = self._cache.get(state)
             if cached is not None:
                 return cached
 
-        # 3. Require at least one analytical characteristic
+        # 2. Require at least one analytical characteristic
         if not distr.analytical_computations:
             raise RuntimeError(
                 "Distribution provides no analytical computations to ground conversions."
             )
 
-        # 4. Get filtered graph view for this distribution
-        reg = characteristic_registry().view(distr)
+        # 3. Non-registry characteristics are resolved directly.
+        # It covers the situation where user is providing their analytical computation which isn't
+        # in the graph
+        registry = characteristic_registry()
+        if state not in registry.declared_characteristics:
+            if state in distr.analytical_computations:
+                return self._pick_analytical_method(state, distr.analytical_computations[state])
+            raise RuntimeError(
+                f"Characteristic '{state}' is not declared in the registry and has no "
+                "analytical implementation in the distribution."
+            )
+
+        # 4. Get filtered graph view for this distribution.
+        view = registry.view(distr)
 
         self._push_guard(distr, state)
         try:
-            # 5. Try each analytical characteristic as a source
+            loop_method = self._pick_analytical_loop_method(state, view)
+            if loop_method is not None:
+                return loop_method
+
+            # 5. Try each analytical-loop characteristic as a source
             for src in distr.analytical_computations:
-                if src == state:
-                    return distr.analytical_computations[src]
+                if not view.analytical_variants(src):
+                    continue
 
                 # Find conversion path in the graph
-                path = reg.find_path(src, state)
+                path = view.find_path(src, state)
                 if not path:
                     continue
 

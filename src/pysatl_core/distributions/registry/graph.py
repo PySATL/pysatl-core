@@ -10,7 +10,7 @@ features (kind, dimension, etc.).
 
 Core concepts:
  - **Nodes**: Characteristics (PDF, CDF, etc.) with presence and definitiveness rules
- - **Edges**: Unary computation methods between characteristics
+ - **Edges**: Computation methods from one-or-many sources to one target
  - **Constraints**: Rules that determine when nodes/edges are applicable
  - **View**: A filtered subgraph for a specific distribution
  - **Definitive characteristics**: Starting points for computations
@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
 from pysatl_core.distributions.registry.graph_primitives import (
     DEFAULT_COMPUTATION_KEY,
+    AnalyticalLoopEdgeMeta,
+    ComputationEdgeMeta,
     EdgeMeta,
     GraphInvariantError,
 )
@@ -36,7 +38,7 @@ from pysatl_core.distributions.registry.graph_primitives import (
 if TYPE_CHECKING:
     from pysatl_core.distributions.computation import ComputationMethod
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.types import GenericCharacteristicName
+    from pysatl_core.types import GenericCharacteristicName, LabelName
 
 
 # --------------------------------------------------------------------------- #
@@ -62,14 +64,14 @@ class CharacteristicRegistry:
     add_characteristic(name, is_definitive, presence_constraint=None, definitive_constraint=None)
         Declare a characteristic with presence and optional definitiveness rules.
     add_computation(method, label=DEFAULT_COMPUTATION_KEY, constraint=None)
-        Add a unary computation edge between declared nodes.
+        Add a computation edge between declared nodes.
     view(distr)
         Create a filtered view for the given distribution.
 
     Notes
     -----
     - Nodes must be declared before adding computations
-    - Only unary computations (1 source → 1 target) are supported
+    - Only many-to-one computations (n sources → 1 target) are supported
     - No invariant validation happens during mutation; validation occurs when
       creating a view with view()
     """
@@ -86,10 +88,12 @@ class CharacteristicRegistry:
         if getattr(self, "_initialized", False):
             return
 
-        # Adjacency: src → dst → label → [EdgeMeta]
+        # Adjacency projection: src → dst → label → [ComputationEdgeMeta]
+        # For hyperedges (many sources -> one target), the same edge metadata object
+        # is projected under each source to preserve graph reachability semantics.
         self._adj: dict[
             GenericCharacteristicName,
-            dict[GenericCharacteristicName, dict[str, list[EdgeMeta]]],
+            dict[GenericCharacteristicName, dict[LabelName, list[ComputationEdgeMeta]]],
         ] = {}
         self._all_nodes: set[GenericCharacteristicName] = set()
 
@@ -98,7 +102,7 @@ class CharacteristicRegistry:
         self._def_rules: dict[GenericCharacteristicName, GraphPrimitiveConstraint] = {}
 
         # Label preference for path finding
-        self.label_preference: tuple[str, ...] = (DEFAULT_COMPUTATION_KEY,)
+        self.label_preference: tuple[LabelName, ...] = (DEFAULT_COMPUTATION_KEY,)
 
         self._initialized = True
 
@@ -127,6 +131,11 @@ class CharacteristicRegistry:
     def _ensure_node(self, node: GenericCharacteristicName) -> bool:
         """Check if a node has been declared via add_characteristic()."""
         return node in self._all_nodes
+
+    @property
+    def declared_characteristics(self) -> set[GenericCharacteristicName]:
+        """Return declared registry characteristics."""
+        return set(self._all_nodes)
 
     def _add_presence_rule(
         self, name: GenericCharacteristicName, constraint: GraphPrimitiveConstraint | None
@@ -168,17 +177,17 @@ class CharacteristicRegistry:
         self,
         method: ComputationMethod[Any, Any],
         *,
-        label: str = DEFAULT_COMPUTATION_KEY,
+        label: LabelName = DEFAULT_COMPUTATION_KEY,
         constraint: GraphPrimitiveConstraint | None = None,
     ) -> None:
         """
-        Add a labeled unary computation edge.
+        Add a labeled computation edge.
 
         Parameters
         ----------
         method : ComputationMethod
-            Computation object with exactly one source and one target.
-        label : str, default=DEFAULT_COMPUTATION_KEY
+            Computation object with one-or-many sources and one target.
+        label : LabelName, default=DEFAULT_COMPUTATION_KEY
             Variant label for the edge.
         constraint : GraphPrimitiveConstraint, optional
             Edge applicability constraint. If None, a pass-through constraint is used.
@@ -186,33 +195,36 @@ class CharacteristicRegistry:
         Raises
         ------
         ValueError
-            If method is not unary, or source/target nodes are not declared.
+            If method has no sources, or source/target nodes are not declared.
 
         Notes
         -----
         - Multiple edges with different labels can exist between the same nodes
         - The first matching edge for each label is kept when creating views
+        - Hyperedges are represented as projected edges from each source to target,
+          while preserving one shared underlying computation method.
         """
-        if len(method.sources) != 1:
-            raise ValueError("Only unary computations are supported (1 source → 1 target).")
+        if not method.sources:
+            raise ValueError("Computation must define at least one source characteristic.")
 
-        src = method.sources[0]
+        unique_sources = tuple(dict.fromkeys(method.sources))
         dst = method.target
 
-        if not self._ensure_node(src) or not self._ensure_node(dst):
+        if not self._ensure_node(dst) or any(not self._ensure_node(src) for src in unique_sources):
             raise ValueError("Source characteristic or destination characteristic is invalid.")
 
-        self._adj[src].setdefault(dst, {})
+        edge_meta = ComputationEdgeMeta(
+            method=method,
+            constraint=constraint or GraphPrimitiveConstraint(),
+        )
+
         # TODO: We need to be careful here if some constraint more general and with the same label
         #  than other it can consume it. Actually, the same label methods should not intersect their
         #  constraints
-        self._adj[src][dst].setdefault(label, [])
-        self._adj[src][dst][label].append(
-            EdgeMeta(
-                method=method,
-                constraint=constraint or GraphPrimitiveConstraint(),
-            )
-        )
+        for src in unique_sources:
+            self._adj[src].setdefault(dst, {})
+            self._adj[src][dst].setdefault(label, [])
+            self._adj[src][dst][label].append(edge_meta)
 
     def add_characteristic(
         self,
@@ -292,6 +304,33 @@ class CharacteristicRegistry:
                 definitive.add(name)
         return definitive
 
+    @staticmethod
+    def _attach_analytical_loops(
+        adj: dict[
+            GenericCharacteristicName,
+            dict[GenericCharacteristicName, dict[LabelName, EdgeMeta]],
+        ],
+        distr: Distribution,
+        present_nodes: set[GenericCharacteristicName],
+    ) -> None:
+        """
+        Attach analytical self-loops for distribution-provided computations.
+
+        Notes
+        -----
+        Analytical loops are only added for characteristics present in this view.
+        Each labeled analytical computation becomes one loop edge ``char -> char``.
+        """
+        for characteristic_name, labeled_methods in distr.analytical_computations.items():
+            if characteristic_name not in present_nodes:
+                continue
+
+            loop_variants = adj.setdefault(characteristic_name, {}).setdefault(
+                characteristic_name, {}
+            )
+            for label_name, analytical_method in labeled_methods.items():
+                loop_variants[label_name] = AnalyticalLoopEdgeMeta(method=analytical_method)
+
     def view(self, distr: Distribution) -> RegistryView:
         """
         Create a filtered view of the graph for the given distribution.
@@ -308,42 +347,41 @@ class CharacteristicRegistry:
 
         Notes
         -----
-        1. Filters edges by their constraints
-        2. Removes edges touching absent nodes
-        3. Computes definitive nodes from the remaining present nodes
-        4. Validates graph invariants
+        1. Computes present nodes for the distribution
+        2. Filters edges by node presence and edge constraints
+        3. Adds analytical self-loops from distribution analytical computations
+        4. Computes definitive nodes from the remaining present nodes
+        5. Validates graph invariants
         """
-        # 1) Filter edges by applicability
+        # 1) Compute present nodes once and pre-create adjacency.
+        present_nodes = self._compute_present_nodes(distr)
         adj: dict[
-            GenericCharacteristicName, dict[GenericCharacteristicName, dict[str, EdgeMeta]]
-        ] = {}
-        for src, d in self._adj.items():
-            for dst, variants in d.items():
-                kept: dict[str, EdgeMeta] = {}
+            GenericCharacteristicName, dict[GenericCharacteristicName, dict[LabelName, EdgeMeta]]
+        ] = {node: {} for node in present_nodes}
+
+        # 2) Filter edges by node presence and applicability.
+        for src in present_nodes:
+            for dst, variants in self._adj.get(src, {}).items():
+                if dst not in present_nodes:
+                    continue
+                kept: dict[LabelName, EdgeMeta] = {}
                 for label, metas in variants.items():
                     for edge in metas:
-                        if edge.constraint.allows(distr):
+                        if edge.constraint.allows(distr) and all(
+                            source in present_nodes for source in edge.method.sources
+                        ):
                             kept[label] = edge
                             # TODO: It is possible that there are two edges under the same label
                             #  that fit the same distribution, this should not be the case.
                             #  Taking the first one for now
                             break
                 if kept:
-                    adj.setdefault(src, {}).setdefault(dst, {}).update(kept)
+                    adj[src][dst] = kept
 
-        # 2) Filter by node presence
-        present_nodes = self._compute_present_nodes(distr)
-        if present_nodes:
-            adj = {
-                src: {dst: dict(variants) for dst, variants in d.items() if dst in present_nodes}
-                for src, d in adj.items()
-                if src in present_nodes
-            }
-        # Ensure isolated present nodes are preserved
-        for node in present_nodes:
-            adj.setdefault(node, {})
+        # 3) Attach analytical loops
+        self._attach_analytical_loops(adj, distr, present_nodes)
 
-        # 3) Compute definitive nodes (must be present)
+        # 4) Compute definitive nodes (must be present)
         definitive_nodes = self._compute_definitive_nodes(distr) & present_nodes
 
         return RegistryView(adj, definitive_nodes, present_nodes)
@@ -387,17 +425,26 @@ class RegistryView:
         self,
         adj: Mapping[
             GenericCharacteristicName,
-            Mapping[GenericCharacteristicName, Mapping[str, EdgeMeta]],
+            Mapping[GenericCharacteristicName, Mapping[LabelName, EdgeMeta]],
         ],
         definitive_nodes: set[GenericCharacteristicName],
         present_nodes: set[GenericCharacteristicName],
     ) -> None:
         # Deep copy adjacency to ensure immutability
         self._adj: dict[
-            GenericCharacteristicName, dict[GenericCharacteristicName, dict[str, EdgeMeta]]
+            GenericCharacteristicName,
+            dict[GenericCharacteristicName, dict[LabelName, EdgeMeta]],
         ] = {}
         for src, d in adj.items():
             self._adj[src] = {dst: dict(variants) for dst, variants in d.items()}
+
+        self._rev_adj: dict[GenericCharacteristicName, set[GenericCharacteristicName]] = {
+            node: set() for node in self._adj
+        }
+        for src, d in self._adj.items():
+            for dst, variants in d.items():
+                if variants:
+                    self._rev_adj.setdefault(dst, set()).add(src)
 
         self.definitive_characteristics: set[GenericCharacteristicName] = set(definitive_nodes)
         self.all_characteristics: set[GenericCharacteristicName] = set(present_nodes)
@@ -419,7 +466,7 @@ class RegistryView:
 
     def successors(
         self, v: GenericCharacteristicName
-    ) -> Mapping[GenericCharacteristicName, Mapping[str, EdgeMeta]]:
+    ) -> Mapping[GenericCharacteristicName, Mapping[LabelName, EdgeMeta]]:
         """
         Get outgoing edges from a characteristic.
 
@@ -430,7 +477,7 @@ class RegistryView:
 
         Returns
         -------
-        Mapping[str, Mapping[str, EdgeMeta]]
+        Mapping[str, Mapping[LabelName, EdgeMeta]]
             Destination → label → edge metadata.
         """
         return self._adj.get(v, {})
@@ -465,15 +512,11 @@ class RegistryView:
         set of str
             Characteristics that can reach v directly.
         """
-        res: set[GenericCharacteristicName] = set()
-        for src, d in self._adj.items():
-            if v in d and d[v]:
-                res.add(src)
-        return res
+        return set(self._rev_adj.get(v, set()))
 
     def variants(
         self, src: GenericCharacteristicName, dst: GenericCharacteristicName
-    ) -> Mapping[str, EdgeMeta]:
+    ) -> Mapping[LabelName, EdgeMeta]:
         """
         Get all labeled edges between two characteristics.
 
@@ -484,17 +527,35 @@ class RegistryView:
 
         Returns
         -------
-        Mapping[str, EdgeMeta]
+        Mapping[LabelName, EdgeMeta]
             Label → edge metadata mapping.
         """
         return self._adj.get(src, {}).get(dst, {})
+
+    def analytical_variants(self, state: GenericCharacteristicName) -> Mapping[LabelName, EdgeMeta]:
+        """
+        Get analytical self-loop variants for a characteristic.
+
+        Parameters
+        ----------
+        state : str
+            Characteristic name.
+
+        Returns
+        -------
+        Mapping[LabelName, EdgeMeta]
+            Label → analytical loop metadata for ``state -> state``.
+        """
+        return {
+            label: edge for label, edge in self.variants(state, state).items() if edge.is_analytical
+        }
 
     def find_path(
         self,
         src: GenericCharacteristicName,
         dst: GenericCharacteristicName,
         *,
-        prefer_label: str | None = None,
+        prefer_label: LabelName | None = None,
     ) -> list[Any] | None:
         """
         Find a computation path from src to dst using BFS.
@@ -503,12 +564,12 @@ class RegistryView:
         ----------
         src, dst : str
             Source and destination characteristics.
-        prefer_label : str, optional
+        prefer_label : LabelName, optional
             Preferred edge label to use when multiple options exist.
 
         Returns
         -------
-        list of ComputationMethod or None
+        list of Any or None
             List of computation methods forming the path, or None if no path exists.
 
         Notes
@@ -586,16 +647,8 @@ class RegistryView:
         if fwd != (defs - {start}):
             return False
 
-        # Check reverse reachability
-        seen: set[GenericCharacteristicName] = {start}
-        stack = [start]
-        while stack:
-            v = stack.pop()
-            for w in self.predecessors(v):
-                if w in defs and w not in seen:
-                    seen.add(w)
-                    stack.append(w)
-        return seen == defs
+        rev = self._reachable_from_many({start}, allowed=defs, reverse=True)
+        return rev == (defs - {start})
 
     def _all_indefinitives_reachable_from_definitives(self) -> bool:
         """
@@ -610,9 +663,7 @@ class RegistryView:
         if not indefs:
             return True
 
-        total: set[GenericCharacteristicName] = set()
-        for d in self.definitive_characteristics:
-            total |= self._reachable_from(d)
+        total = self._reachable_from_many(self.definitive_characteristics)
         return indefs.issubset(total)
 
     def _exists_path_from_indefinitive_to_definitive(self) -> bool:
@@ -625,7 +676,55 @@ class RegistryView:
             True if such a path exists (which would violate invariants).
         """
         defs = self.definitive_characteristics
-        return any(self._reachable_from(i) & defs for i in self.indefinitive_characteristics)
+        if not defs:
+            return False
+
+        can_reach_definitive = self._reachable_from_many(defs, reverse=True)
+        return bool(can_reach_definitive & self.indefinitive_characteristics)
+
+    def _reachable_from_many(
+        self,
+        sources: set[GenericCharacteristicName],
+        *,
+        allowed: set[GenericCharacteristicName] | None = None,
+        reverse: bool = False,
+    ) -> set[GenericCharacteristicName]:
+        """
+        Compute reachable nodes from multiple sources.
+
+        Parameters
+        ----------
+        sources : set of str
+            Starting nodes.
+        allowed : set of str, optional
+            Restrict traversal to this set of nodes.
+        reverse : bool, default=False
+            If True, traverse reverse edges.
+
+        Returns
+        -------
+        set of str
+            Nodes reachable from sources (excluding sources themselves).
+        """
+        starts = {s for s in sources if allowed is None or s in allowed}
+        if not starts:
+            return set()
+
+        visited: set[GenericCharacteristicName] = set()
+        stack = list(starts)
+        while stack:
+            v = stack.pop()
+            if v in visited:
+                continue
+            visited.add(v)
+            neighbors = self._rev_adj.get(v, set()) if reverse else self.successors_nodes(v)
+            for w in neighbors:
+                if allowed is not None and w not in allowed:
+                    continue
+                if w not in visited:
+                    stack.append(w)
+
+        return visited - starts
 
     def _reachable_from(
         self,
@@ -648,37 +747,21 @@ class RegistryView:
         set of str
             Nodes reachable from src (excluding src itself).
         """
-        if allowed is not None and src not in allowed:
-            return set()
-
-        visited: set[GenericCharacteristicName] = set()
-        stack = [src]
-        while stack:
-            v = stack.pop()
-            if v in visited:
-                continue
-            visited.add(v)
-            for w in self.successors_nodes(v):
-                if allowed is not None and w not in allowed:
-                    continue
-                if w not in visited:
-                    stack.append(w)
-        visited.discard(src)
-        return visited
+        return self._reachable_from_many({src}, allowed=allowed)
 
     @staticmethod
     def _pick_method(
-        variants: Mapping[str, EdgeMeta],
-        prefer_label: str | None,
+        variants: Mapping[LabelName, EdgeMeta],
+        prefer_label: LabelName | None,
     ) -> Any:
         """
         Select a method from label variants.
 
         Parameters
         ----------
-        variants : Mapping[str, EdgeMeta]
+        variants : Mapping[LabelName, EdgeMeta]
             Available edge variants.
-        prefer_label : str, optional
+        prefer_label : LabelName, optional
             Preferred label.
 
         Returns
@@ -690,5 +773,5 @@ class RegistryView:
             return variants[prefer_label].method
         if DEFAULT_COMPUTATION_KEY in variants:
             return variants[DEFAULT_COMPUTATION_KEY].method
-        label = sorted(variants.keys())[0]
+        label = min(variants)
         return variants[label].method

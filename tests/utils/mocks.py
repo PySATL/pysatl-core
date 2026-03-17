@@ -4,7 +4,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,19 +13,24 @@ import numpy as np
 from pysatl_core.distributions import (
     AnalyticalComputation,
     ComputationStrategy,
-    DefaultComputationStrategy,
-    DefaultSamplingUnivariateStrategy,
     Distribution,
     SamplingStrategy,
 )
 from pysatl_core.distributions.distribution import _KEEP
 from pysatl_core.distributions.support import Support
 from pysatl_core.types import (
+    CharacteristicName,
     EuclideanDistributionType,
     GenericCharacteristicName,
     Kind,
+    LabelName,
     NumericArray,
 )
+
+type MockAnalyticalComputations = Mapping[
+    GenericCharacteristicName,
+    AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]],
+]
 
 
 class MockSamplingStrategy(SamplingStrategy):
@@ -45,50 +50,40 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
     """
 
     _distribution_type: EuclideanDistributionType
-    _analytical: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
+    _analytical_computations: dict[
+        GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
+    ]
     _support: Support | None
 
     def __init__(
         self,
         kind: Kind,
-        analytical_computations: (
-            Iterable[AnalyticalComputation[Any, Any]]
-            | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
-        ) = (),
+        analytical_computations: MockAnalyticalComputations
+        | Sequence[AnalyticalComputation[Any, Any]],
         support: Support | None = None,
     ) -> None:
-        self._distribution_type = EuclideanDistributionType(kind, 1)
-        self._support = support
+        force_empty_analytical = False
         if isinstance(analytical_computations, Mapping):
-            self._analytical = dict(analytical_computations)
+            normalized_analytical: MockAnalyticalComputations = analytical_computations
         else:
-            self._analytical = {ac.target: ac for ac in analytical_computations}
+            normalized_analytical = {comp.target: comp for comp in analytical_computations}
+            if not normalized_analytical:
+                # Keep backward compatibility with legacy tests that passed an empty list.
+                normalized_analytical = {
+                    CharacteristicName.MEAN: AnalyticalComputation[Any, float](
+                        target=CharacteristicName.MEAN,
+                        func=lambda **_kwargs: 0.0,
+                    )
+                }
+                force_empty_analytical = True
 
-    @property
-    def distribution_type(self) -> EuclideanDistributionType:
-        """Distribution type descriptor (kind and dimension)."""
-        return self._distribution_type
-
-    @property
-    def analytical_computations(
-        self,
-    ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
-        """Mapping from characteristic name to analytical callable."""
-        return self._analytical
-
-    @property
-    def sampling_strategy(self) -> SamplingStrategy:
-        """Sampling strategy instance."""
-        return DefaultSamplingUnivariateStrategy()
-
-    @property
-    def computation_strategy(self) -> ComputationStrategy:
-        """Computation strategy instance."""
-        return DefaultComputationStrategy()
-
-    @property
-    def support(self):
-        return self._support
+        super(StandaloneEuclideanUnivariateDistribution, self).__init__(
+            distribution_type=EuclideanDistributionType(kind, 1),
+            analytical_computations=normalized_analytical,
+            support=support,
+        )
+        if force_empty_analytical:
+            self._analytical_computations = {}
 
     def _clone_with_strategies(
         self,
@@ -97,4 +92,7 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         computation_strategy: ComputationStrategy | None | object = _KEEP,
     ) -> StandaloneEuclideanUnivariateDistribution:
         # Actually a stub
-        return StandaloneEuclideanUnivariateDistribution(Kind.CONTINUOUS)
+        return StandaloneEuclideanUnivariateDistribution(
+            Kind.CONTINUOUS,
+            analytical_computations=self.analytical_computations,
+        )

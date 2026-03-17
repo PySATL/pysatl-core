@@ -15,13 +15,18 @@ from pysatl_core.types import (
 class TestBaseFamily:
     def make_default_family(
         self,
-        distr_characteristics: dict[GenericCharacteristicName, dict[str, object]] | None = None,
+        distr_characteristics: (
+            dict[GenericCharacteristicName, dict[str, dict[str, object]]] | None
+        ) = None,
     ) -> ParametricFamily:
         if distr_characteristics is None:
             distr_characteristics = {
-                CharacteristicName.PDF: {"base": lambda p, x: x},
-                CharacteristicName.CDF: {"alt": lambda p, x: x, "base": lambda p, x: x},
-                CharacteristicName.PPF: {"base": lambda p, x: x},
+                CharacteristicName.PDF: {"base": {"default": lambda p, x: x}},
+                CharacteristicName.CDF: {
+                    "alt": {"default": lambda p, x: x},
+                    "base": {"default": lambda p, x: x},
+                },
+                CharacteristicName.PPF: {"base": {"default": lambda p, x: x}},
             }
         fam = ParametricFamily(
             name="Default",
