@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from pysatl_core.types import (
         DistributionType,
         GenericCharacteristicName,
+        LabelName,
         ParametrizationName,
     )
 
@@ -69,7 +70,8 @@ class ParametricFamilyDistribution(Distribution):
         family_name: str,
         distribution_type: DistributionType,
         analytical_computations: Mapping[
-            GenericCharacteristicName, AnalyticalComputation[Any, Any]
+            GenericCharacteristicName,
+            Mapping[LabelName, AnalyticalComputation[Any, Any]],
         ],
         parametrization: Parametrization,
         support: Support | None,
