@@ -5,9 +5,14 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
+from collections.abc import Callable
+from typing import Any, cast
+
 import numpy as np
 import pytest
+from mypy_extensions import KwArg
 
+from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.distributions.registry import (
     DEFAULT_COMPUTATION_KEY,
     CharacteristicRegistry,
@@ -18,8 +23,10 @@ from pysatl_core.distributions.registry import (
     reset_characteristic_registry,
 )
 from pysatl_core.distributions.strategies import DefaultComputationStrategy
-from pysatl_core.types import CharacteristicName
+from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.types import CharacteristicName, Kind
 from tests.unit.distributions.test_basic import DistributionTestBase
+from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
 class TestCharacteristicRegistry(DistributionTestBase):
@@ -50,6 +57,68 @@ class TestCharacteristicRegistry(DistributionTestBase):
         qs = np.linspace(1e-6, 1.0 - 1e-6, 7)
         errs = [abs(float(cdf(float(ppf(float(q))))) - q) for q in qs]
         assert max(errs) < 5e-3
+
+    def test_view_adds_analytical_self_loops_with_labels(self) -> None:
+        def cdf_primary(x: float, **_kwargs: Any) -> float:
+            return 1.0 / (1.0 + np.exp(-x))
+
+        def cdf_secondary(x: float, **_kwargs: Any) -> float:
+            return 1.0 / (1.0 + np.exp(-x))
+
+        cdf_primary_func = cast(Callable[[float, KwArg(Any)], float], cdf_primary)
+        cdf_secondary_func = cast(Callable[[float, KwArg(Any)], float], cdf_secondary)
+
+        distr = StandaloneEuclideanUnivariateDistribution(
+            kind=Kind.CONTINUOUS,
+            analytical_computations={
+                CharacteristicName.CDF: {
+                    "primary": AnalyticalComputation[float, float](
+                        target=CharacteristicName.CDF, func=cdf_primary_func
+                    ),
+                    "secondary": AnalyticalComputation[float, float](
+                        target=CharacteristicName.CDF, func=cdf_secondary_func
+                    ),
+                }
+            },
+            support=ContinuousSupport(),
+        )
+
+        view = characteristic_registry().view(distr)
+        loops = view.variants(CharacteristicName.CDF, CharacteristicName.CDF)
+
+        assert set(loops.keys()) == {"primary", "secondary"}
+        assert all(edge.is_analytical for edge in loops.values())
+        assert view.analytical_variants(CharacteristicName.CDF) == loops
+
+    def test_strategy_prefers_first_analytical_loop(self) -> None:
+        def cdf_first(_x: float, **_kwargs: Any) -> float:
+            return 0.25
+
+        def cdf_second(_x: float, **_kwargs: Any) -> float:
+            return 0.75
+
+        cdf_first_func = cast(Callable[[float, KwArg(Any)], float], cdf_first)
+        cdf_second_func = cast(Callable[[float, KwArg(Any)], float], cdf_second)
+
+        distr = StandaloneEuclideanUnivariateDistribution(
+            kind=Kind.CONTINUOUS,
+            analytical_computations={
+                CharacteristicName.CDF: {
+                    "first": AnalyticalComputation[float, float](
+                        target=CharacteristicName.CDF, func=cdf_first_func
+                    ),
+                    "second": AnalyticalComputation[float, float](
+                        target=CharacteristicName.CDF, func=cdf_second_func
+                    ),
+                }
+            },
+            support=ContinuousSupport(),
+        )
+
+        strategy = DefaultComputationStrategy(enable_caching=False)
+        cdf = strategy.query_method(CharacteristicName.CDF, distr)
+
+        assert cdf(0.0) == pytest.approx(0.25)
 
     def test_configuration_discrete_requires_support_then_ok(self) -> None:
         reg = characteristic_registry()
@@ -185,6 +254,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
 
         variants = view.variants("src", "dst")
         assert set(variants.keys()) == {DEFAULT_COMPUTATION_KEY, "fast"}
+        assert all(not edge.is_analytical for edge in variants.values())
 
         path = view.find_path("src", "dst", prefer_label="fast")
         assert path == [alternative_method]
