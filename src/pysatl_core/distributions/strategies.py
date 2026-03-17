@@ -19,11 +19,16 @@ from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.types import CharacteristicName, Method, NumericArray
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from typing import Any
 
-    from pysatl_core.distributions.computation import FittedComputationMethod
+    from pysatl_core.distributions.computation import (
+        AnalyticalComputation,
+        FittedComputationMethod,
+        Method,
+    )
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.types import GenericCharacteristicName
+    from pysatl_core.types import GenericCharacteristicName, LabelName
 
 
 class ComputationStrategy(Protocol):
@@ -101,6 +106,26 @@ class DefaultComputationStrategy:
             if not seen:
                 self._resolving.pop(key, None)
 
+    @staticmethod
+    def _pick_analytical_method(
+        state: GenericCharacteristicName,
+        methods: Mapping[LabelName, AnalyticalComputation[Any, Any]],
+    ) -> AnalyticalComputation[Any, Any]:
+        """
+        Pick the first available analytical method for a characteristic.
+
+        Raises
+        ------
+        RuntimeError
+            If no labeled analytical methods are available for the characteristic.
+        """
+        try:
+            return next(iter(methods.values()))
+        except StopIteration as exc:
+            raise RuntimeError(
+                f"Characteristic '{state}' provides no labeled analytical computations."
+            ) from exc
+
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
     ) -> Method[Any, Any]:
@@ -134,7 +159,7 @@ class DefaultComputationStrategy:
         """
         # 1. Check for analytical implementation
         if state in distr.analytical_computations:
-            return distr.analytical_computations[state]
+            return self._pick_analytical_method(state, distr.analytical_computations[state])
 
         # 2. Check cache if enabled
         if self._enable_caching:
@@ -156,7 +181,7 @@ class DefaultComputationStrategy:
             # 5. Try each analytical characteristic as a source
             for src in distr.analytical_computations:
                 if src == state:
-                    return distr.analytical_computations[src]
+                    return self._pick_analytical_method(src, distr.analytical_computations[src])
 
                 # Find conversion path in the graph
                 path = reg.find_path(src, state)

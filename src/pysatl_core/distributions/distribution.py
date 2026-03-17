@@ -12,7 +12,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import TYPE_CHECKING, Self, cast
 
@@ -20,7 +20,7 @@ from pysatl_core.distributions.strategies import (
     ComputationStrategy,
     SamplingStrategy,
 )
-from pysatl_core.types import NumericArray
+from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
 
 _KEEP: object = object()
 
@@ -28,11 +28,12 @@ _KEEP: object = object()
 if TYPE_CHECKING:
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation, Method
+    from pysatl_core.distributions.computation import AnalyticalComputation
     from pysatl_core.distributions.support import Support
     from pysatl_core.types import (
         DistributionType,
         GenericCharacteristicName,
+        LabelName,
         Method,
     )
 
@@ -49,7 +50,13 @@ class Distribution(ABC):
     ----------
     distribution_type : DistributionType
         Type information about the distribution (kind, dimension, etc.).
-    analytical_computations : Mapping[str, AnalyticalComputation]
+    analytical_computations : Mapping[
+        GenericCharacteristicName,
+        (
+            AnalyticalComputation[Any, Any]
+            | Mapping[LabelName, AnalyticalComputation[Any, Any]]
+        ),
+    ]
         Direct analytical computations provided by the distribution.
     sampling_strategy : SamplingStrategy
         Strategy for generating random samples.
@@ -62,10 +69,10 @@ class Distribution(ABC):
     def __init__(
         self,
         distribution_type: DistributionType,
-        analytical_computations: (
-            Iterable[AnalyticalComputation[Any, Any]]
-            | Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]
-        ),
+        analytical_computations: Mapping[
+            GenericCharacteristicName,
+            (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
+        ],
         support: Support | None = None,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
@@ -78,7 +85,13 @@ class Distribution(ABC):
         distribution_type : DistributionType
             Type information about the distribution (kind, dimension, etc.).
         analytical_computations :
-            Iterable[AnalyticalComputation] | Mapping[str, AnalyticalComputation]
+            Mapping[
+                GenericCharacteristicName,
+                (
+                    AnalyticalComputation[Any, Any]
+                    | Mapping[LabelName, AnalyticalComputation[Any, Any]]
+                ),
+            ]
             Analytical computations provided by the distribution.
         support : Support or None, default=None
             Support of the distribution.
@@ -93,13 +106,26 @@ class Distribution(ABC):
         )
 
         self._distribution_type = distribution_type
-        if isinstance(analytical_computations, Mapping):
-            normalized_analytical = dict(analytical_computations)
-        else:
-            normalized_analytical = {ac.target: ac for ac in analytical_computations}
+        normalized_analytical: dict[
+            GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
+        ] = {}
+        for characteristic_name, methods in analytical_computations.items():
+            if isinstance(methods, Mapping):
+                normalized_analytical[characteristic_name] = dict(methods)
+            else:
+                normalized_analytical[characteristic_name] = {
+                    DEFAULT_ANALYTICAL_COMPUTATION_LABEL: methods
+                }
 
         if not normalized_analytical:
             raise ValueError("Distribution requires at least one analytical computation.")
+
+        for characteristic_name, labeled_methods in normalized_analytical.items():
+            if not labeled_methods:
+                raise ValueError(
+                    f"Characteristic '{characteristic_name}' must provide at least one "
+                    "analytical computation."
+                )
 
         self._analytical_computations = normalized_analytical
         self._support = support
@@ -114,7 +140,7 @@ class Distribution(ABC):
     @property
     def analytical_computations(
         self,
-    ) -> Mapping[GenericCharacteristicName, AnalyticalComputation[Any, Any]]:
+    ) -> Mapping[GenericCharacteristicName, Mapping[LabelName, AnalyticalComputation[Any, Any]]]:
         """Return analytical computations provided directly by this distribution."""
         return self._analytical_computations
 
