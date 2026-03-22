@@ -77,6 +77,23 @@ class AnalyticalLoopEdgeMeta(EdgeMeta):
         return "analytical_loop"
 
 
+@dataclass(frozen=True, slots=True)
+class TransformationLoopEdgeMeta(EdgeMeta):
+    """
+    Edge metadata for transformation-provided self-loops.
+
+    Such loops are attached from ``analytical_computations`` as regular
+    stopping points for the strategy, but they are not considered fully
+    analytical by the graph semantics.
+    """
+
+    method: AnalyticalComputation[Any, Any]
+    is_analytical: bool = field(default=False)
+
+    def edge_kind(self) -> str:
+        return "transformation_loop"
+
+
 class GraphInvariantError(RuntimeError):
     """
     Raised when characteristic graph invariants are violated.

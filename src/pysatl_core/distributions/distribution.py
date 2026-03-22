@@ -57,7 +57,10 @@ class Distribution(ABC):
             | Mapping[LabelName, AnalyticalComputation[Any, Any]]
         ),
     ]
-        Direct analytical computations provided by the distribution.
+        Distribution-provided characteristic methods.
+        For non-transformed distributions every method in this mapping is
+        fully analytical, so this mapping matches the set of loops with
+        ``is_analytical=True`` in the graph view.
     sampling_strategy : SamplingStrategy
         Strategy for generating random samples.
     computation_strategy : ComputationStrategy
@@ -92,7 +95,9 @@ class Distribution(ABC):
                     | Mapping[LabelName, AnalyticalComputation[Any, Any]]
                 ),
             ]
-            Analytical computations provided by the distribution.
+            Distribution-provided characteristic methods.
+            For non-transformed distributions these methods are fully
+            analytical.
         support : Support or None, default=None
             Support of the distribution.
         sampling_strategy : SamplingStrategy or None, default=None
@@ -141,8 +146,44 @@ class Distribution(ABC):
     def analytical_computations(
         self,
     ) -> Mapping[GenericCharacteristicName, Mapping[LabelName, AnalyticalComputation[Any, Any]]]:
-        """Return analytical computations provided directly by this distribution."""
+        """
+        Return distribution-provided characteristic methods.
+
+        For non-transformed distributions this mapping coincides with
+        graph loops marked as ``is_analytical=True``.
+        """
         return self._analytical_computations
+
+    def loop_is_analytical(
+        self,
+        characteristic_name: GenericCharacteristicName,
+        label_name: LabelName,
+    ) -> bool:
+        """
+        Tell whether a self-loop method is fully analytical in the graph.
+
+        Parameters
+        ----------
+        characteristic_name : GenericCharacteristicName
+            Characteristic name of the self-loop.
+        label_name : LabelName
+            Label of the analytical computation variant.
+
+        Returns
+        -------
+        bool
+            ``True`` when every required predecessor in the transformation
+            chain is analytical.
+
+        Notes
+        -----
+        Presence in ``analytical_computations`` means that a characteristic
+        has at least one analytical ancestor in its derivation chain.
+        For non-transformed distributions these notions coincide, therefore
+        this method always returns ``True``.
+        """
+        _ = characteristic_name, label_name
+        return True
 
     @property
     def sampling_strategy(self) -> SamplingStrategy:
