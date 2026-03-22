@@ -70,9 +70,9 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
             if not normalized_analytical:
                 # Keep backward compatibility with legacy tests that passed an empty list.
                 normalized_analytical = {
-                    CharacteristicName.MEAN: AnalyticalComputation[Any, float](
-                        target=CharacteristicName.MEAN,
-                        func=lambda **_kwargs: 0.0,
+                    CharacteristicName.CDF: AnalyticalComputation[Any, float](
+                        target=CharacteristicName.CDF,
+                        func=lambda *_args, **_kwargs: 0.0,
                     )
                 }
                 force_empty_analytical = True

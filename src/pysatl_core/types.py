@@ -172,6 +172,7 @@ class Interval1D:
 
     @overload
     def contains(self, x: Number) -> bool: ...
+
     @overload
     def contains(self, x: NumericArray) -> BoolArray: ...
 
@@ -264,6 +265,8 @@ Keyword-only options (e.g. ``excess=...``) are intentionally not modeled here:
 implementations may or may not accept them, and wrappers typically forward
 ``**options`` dynamically.
 """
+type ParentRole = str
+"""Type alias for logical roles of parent distributions in a transformation."""
 
 
 class CharacteristicName(StrEnum):
@@ -297,10 +300,93 @@ class CharacteristicName(StrEnum):
     STANDARD_MOMENT = "standardized_moment"  # unimplemented in graph yet
 
 
+class TransformationName(StrEnum):
+    """
+    Enumeration of built-in distribution transformations.
+
+    Attributes
+    ----------
+    AFFINE
+        Affine transformation ``aX + b``.
+    BINARY
+        Binary operation on two parent distributions.
+    FUNCTION
+        Functional transformation ``f(X)``.
+    FINITE_MIXTURE
+        Finite weighted mixture of component distributions.
+    APPROXIMATION
+        Materialized approximation of a transformed distribution.
+    """
+
+    AFFINE = "affine"
+    BINARY = "binary"
+    FUNCTION = "function"
+    FINITE_MIXTURE = "finite_mixture"
+    APPROXIMATION = "approximation"
+    ARRAY = "array"
+
+
+class BinaryOperationName(StrEnum):
+    """
+    Enumeration of supported binary operations for transformed distributions.
+
+    Attributes
+    ----------
+    ADD
+        Sum ``X + Y``.
+    SUB
+        Difference ``X - Y``.
+    MUL
+        Product ``X * Y``.
+    DIV
+        Ratio ``X / Y``.
+    """
+
+    ADD = "add"
+    SUB = "sub"
+    MUL = "mul"
+    DIV = "div"
+
+
 class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
     EXPONENTIAL = "Exponential"
+
+
+# ============================================================================
+# Transformations Module Specific Type Aliases
+# ============================================================================
+
+type SourceRequirements = dict[ParentRole, tuple[GenericCharacteristicName, ...]]
+"""Required parent characteristics grouped by logical parent role."""
+
+type ResolvedSourceMethods = dict[
+    ParentRole,
+    dict[GenericCharacteristicName, Method[Any, Any]],
+]
+"""Resolved parent methods grouped by logical parent role and characteristic."""
+
+type TransformationEvaluator[In, Out] = Callable[..., ComputationFunc[In, Out]]
+"""Factory producing a bound computation function from resolved parent methods."""
+
+type SourceRequirementsResolver = SourceRequirements | Callable[[object], SourceRequirements]
+"""Static or owner-bound source requirements resolver."""
+
+type TransformationMethodSpec[In, Out] = tuple[
+    SourceRequirementsResolver,
+    TransformationEvaluator[In, Out],
+]
+"""Specification of one transformation method variant."""
+
+type TransformationMethodSpecsMap = Mapping[
+    GenericCharacteristicName,
+    Mapping[LabelName, TransformationMethodSpec[Any, Any]],
+]
+"""Mapping of target characteristic and label to method specifications."""
+
+type ContinuousCdfEvaluator = Callable[..., ComputationFunc[NumericArray, NumericArray]]
+"""Evaluator that builds a continuous CDF computation for binary transformations."""
 
 
 __all__ = [
@@ -313,6 +399,16 @@ __all__ = [
     "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
     "ComputationFunc",
+    "ContinuousCdfEvaluator",
+    "TransformationName",
+    "BinaryOperationName",
+    "ParentRole",
+    "ResolvedSourceMethods",
+    "SourceRequirements",
+    "SourceRequirementsResolver",
+    "TransformationEvaluator",
+    "TransformationMethodSpec",
+    "TransformationMethodSpecsMap",
     "DistributionType",
     "Interval1D",
     "ContinuousSupportShape1D",

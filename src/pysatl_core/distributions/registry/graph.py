@@ -33,6 +33,7 @@ from pysatl_core.distributions.registry.graph_primitives import (
     ComputationEdgeMeta,
     EdgeMeta,
     GraphInvariantError,
+    TransformationLoopEdgeMeta,
 )
 
 if TYPE_CHECKING:
@@ -305,6 +306,15 @@ class CharacteristicRegistry:
         return definitive
 
     @staticmethod
+    def _loop_is_analytical(
+        distr: Distribution,
+        characteristic_name: GenericCharacteristicName,
+        label_name: LabelName,
+    ) -> bool:
+        """Resolve loop analytical flag for a distribution-provided method."""
+        return distr.loop_is_analytical(characteristic_name, label_name)
+
+    @staticmethod
     def _attach_analytical_loops(
         adj: dict[
             GenericCharacteristicName,
@@ -314,12 +324,14 @@ class CharacteristicRegistry:
         present_nodes: set[GenericCharacteristicName],
     ) -> None:
         """
-        Attach analytical self-loops for distribution-provided computations.
+        Attach distribution-provided self-loops to the view graph.
 
         Notes
         -----
-        Analytical loops are only added for characteristics present in this view.
-        Each labeled analytical computation becomes one loop edge ``char -> char``.
+        Loops are only added for characteristics present in this view.
+        Each labeled computation in ``analytical_computations`` becomes one
+        loop edge ``char -> char``. The loop class is selected via
+        ``distr.loop_is_analytical(...)``.
         """
         for characteristic_name, labeled_methods in distr.analytical_computations.items():
             if characteristic_name not in present_nodes:
@@ -329,7 +341,15 @@ class CharacteristicRegistry:
                 characteristic_name, {}
             )
             for label_name, analytical_method in labeled_methods.items():
-                loop_variants[label_name] = AnalyticalLoopEdgeMeta(method=analytical_method)
+                loop_variants[label_name] = (
+                    AnalyticalLoopEdgeMeta(method=analytical_method)
+                    if CharacteristicRegistry._loop_is_analytical(
+                        distr,
+                        characteristic_name,
+                        label_name,
+                    )
+                    else TransformationLoopEdgeMeta(method=analytical_method)
+                )
 
     def view(self, distr: Distribution) -> RegistryView:
         """

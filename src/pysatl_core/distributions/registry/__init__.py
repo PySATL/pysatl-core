@@ -29,6 +29,7 @@ from .graph_primitives import (
     ComputationEdgeMeta,
     EdgeMeta,
     GraphInvariantError,
+    TransformationLoopEdgeMeta,
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "EdgeMeta",
     "ComputationEdgeMeta",
     "AnalyticalLoopEdgeMeta",
+    "TransformationLoopEdgeMeta",
     "GraphInvariantError",
     # Constraint types
     "Constraint",
