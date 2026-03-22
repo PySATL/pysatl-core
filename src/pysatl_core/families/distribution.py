@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 from pysatl_core.distributions.distribution import _KEEP, Distribution
 from pysatl_core.families.registry import ParametricFamilyRegister
+from pysatl_core.transformations.operators_mixin import TransformationOperatorsMixin
 from pysatl_core.types import NumericArray
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
     )
 
 
-class ParametricFamilyDistribution(Distribution):
+class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
     """
     A specific distribution instance from a parametric family.
 

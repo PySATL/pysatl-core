@@ -144,3 +144,4 @@ src/pysatl_core/sampling/unuran/bindings/_unuran_cffi.c
 .ai/*
 AGENTS.md
 CLAUDE.md
+.codex
