@@ -14,6 +14,14 @@ from .builtins import *  # noqa: UP029
 from .builtins import __all__ as _builtins_all
 from .configuration import configure_families_register
 from .distribution import ParametricFamilyDistribution
+from .exponential_family import (
+    ExponentialConjugateHyperparameters,
+    ExponentialFamily,
+    ExponentialFamilyParametrization,
+    NaturalExponentialFamily,
+    SpacePredicate,
+    SpacePredicateArray,
+)
 from .parametric_family import ParametricFamily
 from .parametrizations import (
     Parametrization,
@@ -34,6 +42,12 @@ __all__ = [
     "configure_families_register",
     # builtins
     *_builtins_all,
+    "ExponentialFamily",
+    "ExponentialFamilyParametrization",
+    "ExponentialConjugateHyperparameters",
+    "SpacePredicate",
+    "SpacePredicateArray",
+    "NaturalExponentialFamily",
 ]
 
 del _builtins_all
