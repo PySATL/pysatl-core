@@ -188,6 +188,30 @@ def configure_uniform_family() -> None:
 
         return cast(ComplexArray, sinc_val * np.exp(1j * center * t_arr))
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for uniform distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - lower_bound: float (lower bound)
+            - upper_bound: float (upper bound)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x
+            For x outside [lower_bound, upper_bound] returns -np.inf
+        """
+        parameters = cast(_Standard, parameters)
+        a = parameters.lower_bound
+        b = parameters.upper_bound
+        return np.where((x >= a) & (x <= b), -np.log(b - a), -np.inf)
+
     def mean_func(parameters: Parametrization) -> float:
         """Mean of uniform distribution."""
         parameters = cast(_Standard, parameters)
@@ -245,6 +269,7 @@ def configure_uniform_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,

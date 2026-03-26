@@ -121,6 +121,7 @@ class TestExponentialFamily(BaseDistributionTest):
             CharacteristicName.CDF,
             CharacteristicName.PPF,
             CharacteristicName.CF,
+            CharacteristicName.LPDF,
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -131,12 +132,28 @@ class TestExponentialFamily(BaseDistributionTest):
     @pytest.mark.parametrize(
         "char_name, test_data, scipy_func, scipy_kwargs",
         [
-            (CharacteristicName.PDF, [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0], expon.pdf, {"scale": 2.0}),
-            (CharacteristicName.CDF, [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0], expon.cdf, {"scale": 2.0}),
+            (
+                CharacteristicName.PDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.pdf,
+                {"scale": 2.0},
+            ),
+            (
+                CharacteristicName.CDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.cdf,
+                {"scale": 2.0},
+            ),
             (
                 CharacteristicName.PPF,
                 [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999],
                 expon.ppf,
+                {"scale": 2.0},
+            ),
+            (
+                CharacteristicName.LPDF,
+                [-1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+                expon.logpdf,
                 {"scale": 2.0},
             ),
         ],

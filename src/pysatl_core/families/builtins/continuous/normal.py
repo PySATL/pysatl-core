@@ -165,6 +165,34 @@ def configure_normal_family() -> None:
         mu = parameters.mu
         return cast(ComplexArray, np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for normal distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Distribution parameters object with fields:
+            - mu: float (mean)
+            - sigma: float (standard deviation)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x
+        """
+        parameters = cast(_MeanStd, parameters)
+        sigma = parameters.sigma
+        mu = parameters.mu
+
+        # log pdf = -0.5*log(2π) - log(σ) - (x-μ)²/(2σ²)
+        return cast(
+            NumericArray,
+            -0.5 * np.log(2 * np.pi) - np.log(sigma) - ((x - mu) ** 2) / (2 * sigma**2),
+        )
+
     def mean_func(parameters: Parametrization) -> float:
         """Mean of normal distribution."""
         parameters = cast(_MeanStd, parameters)
@@ -213,6 +241,7 @@ def configure_normal_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
