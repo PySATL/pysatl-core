@@ -162,6 +162,28 @@ def configure_exponential_family() -> None:
         )
         return cast(ComplexArray, result)
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+        Distribution parameters object with field:
+            - lambda_: float (rate parameter)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x.
+            For x < 0 returns -np.inf.
+        """
+        parameters = cast(_Rate, parameters)
+        lambda_ = parameters.lambda_
+        return np.where(x >= 0, np.log(lambda_) - lambda_ * x, -np.inf)
+
     def mean_func(parameters: Parametrization) -> float:
         """Mean of exponential distribution."""
         parameters = cast(_Rate, parameters)
@@ -210,6 +232,7 @@ def configure_exponential_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
