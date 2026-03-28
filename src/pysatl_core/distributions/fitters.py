@@ -9,7 +9,6 @@ from math import isfinite
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from mypy_extensions import KwArg
 from scipy import (
     integrate as _sp_integrate,
     optimize as _sp_optimize,
@@ -21,20 +20,21 @@ from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
     IntegerLatticeDiscreteSupport,
 )
-from pysatl_core.types import CharacteristicName
+from pysatl_core.types import CharacteristicName, ComputationFunc, Number, NumericArray
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName
 
     type ScalarFunc = Callable[[float], float]
 
 
-def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> ScalarFunc:
+type PointwiseMethod = Callable[..., Any]
+
+
+def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> PointwiseMethod:
     """
-    Resolve a scalar characteristic from the distribution.
+    Resolve a pointwise characteristic method from the distribution.
 
     Parameters
     ----------
@@ -45,8 +45,8 @@ def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> Sca
 
     Returns
     -------
-    Callable[[float], float]
-        Scalar callable for the requested characteristic.
+    Callable[..., Any]
+        Pointwise callable for the requested characteristic.
 
     Raises
     ------
@@ -57,13 +57,54 @@ def _resolve(distribution: Distribution, name: GenericCharacteristicName) -> Sca
         fn = distribution.query_method(name)
     except AttributeError as e:
         raise RuntimeError(
-            "Distribution must provide computation_strategy.querry_method(name, distribution)."
+            "Distribution must provide computation_strategy.query_method(name, distribution)."
         ) from e
 
-    def _wrap(x: float, **kwargs: Any) -> float:
-        return float(fn(x, **kwargs))
+    return cast(PointwiseMethod, fn)
 
-    return _wrap
+
+def _eval_method_scalar(method: PointwiseMethod, x: float, **kwargs: Any) -> float:
+    """
+    Evaluate a pointwise method at a scalar and cast the result to ``float``.
+
+    Parameters
+    ----------
+    method : Callable[..., Any]
+        Method returned by ``distribution.query_method(...)``.
+    x : float
+        Evaluation point.
+    **kwargs : Any
+        Additional options forwarded to the method.
+
+    Returns
+    -------
+    float
+        Scalar numeric result.
+    """
+    value = method(np.asarray(x, dtype=float), **kwargs)
+    return float(np.asarray(value, dtype=float))
+
+
+def _map_scalar_real(data: Number | NumericArray, scalar_func: ScalarFunc) -> NumericArray:
+    """
+    Apply a scalar real function to scalar or array input with NumPy semantics.
+
+    Parameters
+    ----------
+    data : Number or NumericArray
+        Input values.
+    scalar_func : Callable[[float], float]
+        Scalar function to evaluate pointwise.
+
+    Returns
+    -------
+    NumericArray
+        Result with the same shape as ``data``.
+    """
+    array = np.asarray(data, dtype=float)
+    flat = array.reshape(-1)
+    mapped = np.fromiter((scalar_func(float(x)) for x in flat), dtype=float, count=flat.size)
+    return cast(NumericArray, mapped.reshape(array.shape))
 
 
 def _ppf_brentq_from_cdf(
@@ -224,7 +265,7 @@ def _num_derivative(f: ScalarFunc, x: float, h: float = 1e-5) -> float:
 
 def fit_pdf_to_cdf_1C(
     distribution: Distribution, /, **kwargs: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit ``cdf`` from an analytical or resolvable ``pdf`` via numerical integration.
 
@@ -234,26 +275,34 @@ def fit_pdf_to_cdf_1C(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``pdf -> cdf`` conversion.
     """
-    pdf_func = _resolve(distribution, CharacteristicName.PDF)
+    _ = kwargs
+    pdf_method = _resolve(distribution, CharacteristicName.PDF)
 
-    def _cdf(x: float, **options: Any) -> float:
+    def _cdf_scalar(x: float, **options: Any) -> float:
         val, _ = _sp_integrate.quad(
-            lambda t: float(pdf_func(t, **options)), float("-inf"), x, limit=200
+            lambda t: _eval_method_scalar(pdf_method, t, **options),
+            float("-inf"),
+            x,
+            limit=200,
         )
         return float(np.clip(val, 0.0, 1.0))
 
-    cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PDF], func=cdf_func
+    def _cdf(data: NumericArray, **options: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _cdf_scalar(x, **options))
+
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PDF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _cdf),
     )
 
 
 def fit_cdf_to_pdf_1C(
     distribution: Distribution, /, **kwargs: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit ``pdf`` as a clipped numerical derivative of ``cdf``.
 
@@ -263,27 +312,32 @@ def fit_cdf_to_pdf_1C(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``cdf -> pdf`` conversion.
     """
-    cdf_func = _resolve(distribution, CharacteristicName.CDF)
+    _ = kwargs
+    cdf_method = _resolve(distribution, CharacteristicName.CDF)
 
-    def _pdf(x: float, **options: Any) -> float:
+    def _pdf_scalar(x: float, **options: Any) -> float:
         def wrapped_cdf(t: float) -> float:
-            return cdf_func(t, **options)
+            return _eval_method_scalar(cdf_method, t, **options)
 
         d = _num_derivative(wrapped_cdf, x, h=1e-5)
         return float(max(d, 0.0))
 
-    pdf_func = cast(Callable[[float, KwArg(Any)], float], _pdf)
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.PDF, sources=[CharacteristicName.CDF], func=pdf_func
+    def _pdf(data: NumericArray, **options: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _pdf_scalar(x, **options))
+
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.PDF,
+        sources=[CharacteristicName.CDF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _pdf),
     )
 
 
 def fit_cdf_to_ppf_1C(
     distribution: Distribution, /, **options: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit ``ppf`` from a resolvable ``cdf`` using a robust bracketing procedure.
 
@@ -293,28 +347,52 @@ def fit_cdf_to_ppf_1C(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``cdf -> ppf`` conversion.
     """
-    cdf_func = _resolve(distribution, CharacteristicName.CDF)
+    cdf_method = _resolve(distribution, CharacteristicName.CDF)
 
-    def cdf_with_options(x: float) -> float:
-        return cdf_func(x, **options)
+    solver_option_names = {
+        "most_left",
+        "x0",
+        "init_step",
+        "expand_factor",
+        "max_expand",
+        "x_tol",
+        "y_tol",
+        "max_iter",
+    }
+    solver_options = {name: value for name, value in options.items() if name in solver_option_names}
+    cdf_options = {
+        name: value for name, value in options.items() if name not in solver_option_names
+    }
 
-    ppf_func = _ppf_brentq_from_cdf(cdf_with_options, **options)
+    def _cdf_scalar(x: float, **call_options: Any) -> float:
+        merged = dict(cdf_options)
+        merged.update(call_options)
+        return _eval_method_scalar(cdf_method, x, **merged)
 
-    def _ppf(q: float, **kwargs: Any) -> float:
-        return ppf_func(q)
+    base_ppf_func = _ppf_brentq_from_cdf(lambda x: _cdf_scalar(x), **solver_options)
 
-    ppf_cast = cast(Callable[[float, KwArg(Any)], float], _ppf)
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], func=ppf_cast
+    def _ppf(data: NumericArray, **kwargs: Any) -> NumericArray:
+        if kwargs:
+            dynamic_ppf = _ppf_brentq_from_cdf(
+                lambda x: _cdf_scalar(x, **kwargs),
+                **solver_options,
+            )
+            return _map_scalar_real(data, dynamic_ppf)
+        return _map_scalar_real(data, base_ppf_func)
+
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.PPF,
+        sources=[CharacteristicName.CDF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _ppf),
     )
 
 
 def fit_ppf_to_cdf_1C(
     distribution: Distribution, /, **_: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit ``cdf`` by numerically inverting a resolvable ``ppf`` with a root solver.
 
@@ -324,17 +402,17 @@ def fit_ppf_to_cdf_1C(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``ppf -> cdf`` conversion.
     """
-    ppf_func = _resolve(distribution, CharacteristicName.PPF)
+    ppf_method = _resolve(distribution, CharacteristicName.PPF)
 
-    def _cdf(x: float, **options: Any) -> float:
+    def _cdf_scalar(x: float, **options: Any) -> float:
         if not isfinite(x):
             return 0.0 if x == float("-inf") else 1.0
 
         def f(q: float) -> float:
-            return float(ppf_func(q, **options) - x)
+            return _eval_method_scalar(ppf_method, q, **options) - x
 
         lo, hi = 1e-12, 1.0 - 1e-12
         flo, fhi = f(lo), f(hi)
@@ -345,9 +423,13 @@ def fit_ppf_to_cdf_1C(
         q = float(_sp_optimize.brentq(f, lo, hi, maxiter=256))  # type: ignore[arg-type]
         return float(np.clip(q, 0.0, 1.0))
 
-    cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], func=cdf_func
+    def _cdf(data: NumericArray, **options: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _cdf_scalar(x, **options))
+
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PPF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _cdf),
     )
 
 
@@ -356,7 +438,7 @@ def fit_ppf_to_cdf_1C(
 
 def fit_pmf_to_cdf_1D(
     distribution: Distribution, /, **_: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Build Characteristic.CDF from Characteristic.PMF on a discrete support by partial summation.
 
@@ -378,7 +460,7 @@ def fit_pmf_to_cdf_1D(
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for pmf->cdf.")
 
-    pmf_func = _resolve(distribution, CharacteristicName.PMF)
+    pmf_method = _resolve(distribution, CharacteristicName.PMF)
 
     # Special case: right-bounded integer lattice
     if isinstance(support, IntegerLatticeDiscreteSupport):
@@ -395,7 +477,7 @@ def fit_pmf_to_cdf_1D(
         if not support.is_left_bounded and support.max_k is not None:
             max_k = support.max_k
 
-            def _cdf(x: float, **kwargs: Any) -> float:
+            def _cdf_scalar(x: float, **kwargs: Any) -> float:
                 # Everything to the right of the upper bound has Characteristic.CDF == 1.
                 if x >= max_k:
                     return 1.0
@@ -418,45 +500,50 @@ def fit_pmf_to_cdf_1D(
                 tail = 0.0
                 cur = k
                 while cur <= max_k:
-                    tail += float(pmf_func(float(cur), **kwargs))
+                    tail += _eval_method_scalar(pmf_method, float(cur), **kwargs)
                     cur += support.modulus
 
                 return float(np.clip(1.0 - tail, 0.0, 1.0))
 
-            _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
+            def _cdf_lattice(data: NumericArray, **kwargs: Any) -> NumericArray:
+                return _map_scalar_real(data, lambda x: _cdf_scalar(x, **kwargs))
 
-            return FittedComputationMethod[float, float](
-                target=CharacteristicName.CDF, sources=[CharacteristicName.PMF], func=_cdf_func
+            return FittedComputationMethod[NumericArray, NumericArray](
+                target=CharacteristicName.CDF,
+                sources=[CharacteristicName.PMF],
+                func=cast(ComputationFunc[NumericArray, NumericArray], _cdf_lattice),
             )
 
-    def _cdf_prefix(x: float, **kwargs: Any) -> float:
+    def _cdf_prefix_scalar(x: float, **kwargs: Any) -> float:
         s = 0.0
         for k in support.iter_leq(x):
-            s += float(pmf_func(float(k), **kwargs))
+            s += _eval_method_scalar(pmf_method, float(k), **kwargs)
         return float(np.clip(s, 0.0, 1.0))
 
-    _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf_prefix)
+    def _cdf(data: NumericArray, **kwargs: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _cdf_prefix_scalar(x, **kwargs))
 
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PMF], func=_cdf_func
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PMF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _cdf),
     )
 
 
 def fit_cdf_to_pmf_1D(
     distribution: Distribution, /, **_: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Extract Characteristic.PMF from Characteristic.CDF on a discrete support as jump sizes.
 
     Parameters
     ----------
     distribution : Distribution
-        Distribution exposing a discrete support on ``.support`` and a scalar
-        ``cdf`` via the computation strategy.
+        Distribution exposing a discrete support on ``.support``.
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``cdf -> pmf`` conversion.
 
     Raises
@@ -472,19 +559,22 @@ def fit_cdf_to_pmf_1D(
     support = distribution.support
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for cdf->pmf.")
-    cdf_func = _resolve(distribution, CharacteristicName.CDF)
+    cdf_method = _resolve(distribution, CharacteristicName.CDF)
 
-    def _pmf(x: float, **kwargs: Any) -> float:
+    def _pmf_scalar(x: float, **kwargs: Any) -> float:
         p = support.prev(x)
-        left = 0.0 if p is None else float(cdf_func(float(p), **kwargs))
-        right = float(cdf_func(x))
+        left = 0.0 if p is None else _eval_method_scalar(cdf_method, float(p), **kwargs)
+        right = _eval_method_scalar(cdf_method, x, **kwargs)
         mass = max(right - left, 0.0)
         return float(np.clip(mass, 0.0, 1.0))
 
-    _pmf_func = cast(Callable[[float, KwArg(Any)], float], _pmf)
+    def _pmf(data: NumericArray, **kwargs: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _pmf_scalar(x, **kwargs))
 
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.PMF, sources=[CharacteristicName.CDF], func=_pmf_func
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.PMF,
+        sources=[CharacteristicName.CDF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _pmf),
     )
 
 
@@ -577,7 +667,7 @@ def _collect_support_values(support: Any) -> np.ndarray:
 
 def fit_cdf_to_ppf_1D(
     distribution: Distribution, /, **options: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit **discrete** Characteristic.PPF from a resolvable Characteristic.CDF
     and explicit discrete support.
@@ -599,24 +689,27 @@ def fit_cdf_to_ppf_1D(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``cdf -> ppf`` conversion for discrete 1D distributions.
     """
     support = distribution.support
     if support is None or not isinstance(support, DiscreteSupport):
         raise RuntimeError("Discrete support is required for cdf->ppf.")
 
-    cdf_func = _resolve(distribution, CharacteristicName.CDF)
+    cdf_method = _resolve(distribution, CharacteristicName.CDF)
 
     xs = _collect_support_values(support)  # sorted float array
     if xs.size == 0:
         raise RuntimeError("Discrete support is empty.")
 
     # Pre-compute Characteristic.CDF on support and enforce monotonicity (safety against FP noise)
-    cdf_vals = np.asarray([float(cdf_func(float(x))) for x in xs], dtype=float)
+    cdf_vals = np.asarray(
+        [_eval_method_scalar(cdf_method, float(x), **options) for x in xs],
+        dtype=float,
+    )
     cdf_vals = np.clip(np.maximum.accumulate(cdf_vals), 0.0, 1.0)
 
-    def _ppf(q: float, **kwargs: Any) -> float:
+    def _ppf_scalar(q: float) -> float:
         if not isfinite(q):
             return float("nan")
         q = float(q)
@@ -629,16 +722,20 @@ def fit_cdf_to_ppf_1D(
             idx = xs.size - 1
         return float(xs[idx])
 
-    _ppf_func = cast(Callable[[float, KwArg(Any)], float], _ppf)
+    def _ppf(data: NumericArray, **kwargs: Any) -> NumericArray:
+        _ = kwargs
+        return _map_scalar_real(data, _ppf_scalar)
 
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], func=_ppf_func
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.PPF,
+        sources=[CharacteristicName.CDF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _ppf),
     )
 
 
 def fit_ppf_to_cdf_1D(
     distribution: Distribution, /, **options: Any
-) -> FittedComputationMethod[float, float]:
+) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit **discrete** Characteristic.CDF using only a resolvable Characteristic.PPF
     via bisection on ``q``.
@@ -660,24 +757,24 @@ def fit_ppf_to_cdf_1D(
 
     Returns
     -------
-    FittedComputationMethod[float, float]
+    FittedComputationMethod[NumericArray, NumericArray]
         Fitted ``ppf -> cdf`` conversion for discrete 1D distributions.
     """
-    ppf_func = _resolve(distribution, CharacteristicName.PPF)
+    ppf_method = _resolve(distribution, CharacteristicName.PPF)
     q_tol: float = float(options.get("q_tol", 1e-12))
     max_iter: int = int(options.get("max_iter", 100))
 
     # Quick edge probes (robust to weird Characteristic.PPF endpoints)
     try:
-        p0 = float(ppf_func(0.0))
+        p0 = _eval_method_scalar(ppf_method, 0.0)
     except Exception:
         p0 = float("-inf")
     try:
-        p1 = float(ppf_func(1.0 - 1e-15))
+        p1 = _eval_method_scalar(ppf_method, 1.0 - 1e-15)
     except Exception:
         p1 = float("inf")
 
-    def _cdf(x: float, **kwargs: Any) -> float:
+    def _cdf_scalar(x: float, **kwargs: Any) -> float:
         if not isfinite(x):
             return float("nan")
         # Hard clamps from endpoint probes
@@ -692,7 +789,7 @@ def fit_ppf_to_cdf_1D(
             it += 1
             mid = 0.5 * (lo + hi)
             try:
-                y = float(ppf_func(mid, **kwargs))
+                y = _eval_method_scalar(ppf_method, mid, **kwargs)
             except Exception:
                 # If Characteristic.PPF fails at mid, shrink conservatively towards lo
                 hi = mid
@@ -703,8 +800,11 @@ def fit_ppf_to_cdf_1D(
                 hi = mid  # crossed threshold
         return float(np.clip(lo, 0.0, 1.0))
 
-    _cdf_func = cast(Callable[[float, KwArg(Any)], float], _cdf)
+    def _cdf(data: NumericArray, **kwargs: Any) -> NumericArray:
+        return _map_scalar_real(data, lambda x: _cdf_scalar(x, **kwargs))
 
-    return FittedComputationMethod[float, float](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], func=_cdf_func
+    return FittedComputationMethod[NumericArray, NumericArray](
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PPF],
+        func=cast(ComputationFunc[NumericArray, NumericArray], _cdf),
     )

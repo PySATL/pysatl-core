@@ -82,8 +82,6 @@ class PDFLinearInterpolationApproximation:
         def _pdf(data: Any, /, **_kwargs: Any) -> Any:
             array = np.asarray(data, dtype=float)
             result = np.interp(array, grid, values, left=0.0, right=0.0)
-            if np.ndim(array) == 0:
-                return float(result)
             return cast(NumericArray, np.asarray(result, dtype=float))
 
         return AnalyticalComputation(
