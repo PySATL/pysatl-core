@@ -250,7 +250,6 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
     -----
     - Requires the distribution to provide a PPF computation method.
     - Assumes that the PPF follows NumPy semantics (vectorized evaluation).
-    - Graph-derived PPFs (scalar-only) are currently not supported.
     - Returns a NumPy array containing the generated samples.
     """
 
@@ -276,8 +275,9 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
         ppf = distr.query_method(CharacteristicName.PPF, **options)
         rng = np.random.default_rng()
         U = rng.random(n)
-        # TODO: Now it will be based on the fact that the characteristic
-        #  has NumPy semantics (It is much more faster), that is,
-        #  it will not work with the graph computed characteristics currently.
-        samples = ppf(U)
+        samples = np.asarray(ppf(U), dtype=float)
+        if samples.shape != U.shape:
+            raise RuntimeError(
+                "PPF must preserve NumPy input shape for inverse-transform sampling."
+            )
         return cast(NumericArray, samples)

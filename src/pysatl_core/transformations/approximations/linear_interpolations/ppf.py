@@ -84,8 +84,6 @@ class PPFMonotoneSplineApproximation:
             result = np.asarray(spline(clipped), dtype=float)
             result = np.where(array <= self._lower_limit, lower_value, result)
             result = np.where(array >= self._upper_limit, upper_value, result)
-            if np.ndim(array) == 0:
-                return float(result)
             return cast(NumericArray, result)
 
         return AnalyticalComputation(

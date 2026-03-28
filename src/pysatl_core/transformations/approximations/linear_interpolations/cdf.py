@@ -100,8 +100,6 @@ class CDFMonotoneSplineApproximation:
             result = np.where(array < lower_limit, 0.0, result)
             result = np.where(array > upper_limit, 1.0, result)
             result = np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
-            if np.ndim(array) == 0:
-                return float(result)
             return cast(NumericArray, result)
 
         return AnalyticalComputation(

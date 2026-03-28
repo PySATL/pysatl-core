@@ -61,8 +61,10 @@ class TestCharacteristicRegistry(DistributionTestBase):
         ppf = strategy.query_method(CharacteristicName.PPF, distr)
         cdf = strategy.query_method(CharacteristicName.CDF, distr)
         qs = np.linspace(1e-6, 1.0 - 1e-6, 7)
-        errs = [abs(float(cdf(float(ppf(float(q))))) - q) for q in qs]
-        assert max(errs) < 5e-3
+        quantiles = np.asarray(ppf(qs), dtype=float)
+        assert quantiles.shape == qs.shape
+        roundtrip = np.asarray([float(cdf(float(x))) for x in quantiles], dtype=float)
+        assert float(np.max(np.abs(roundtrip - qs))) < 5e-3
 
     def test_view_adds_analytical_self_loops_with_labels(self) -> None:
         def cdf_primary(x: float, **_kwargs: Any) -> float:
@@ -156,11 +158,21 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert cdf(0.0) == pytest.approx(0.2, abs=1e-10)
         assert cdf(1.0) == pytest.approx(0.7, abs=1e-10)
         assert cdf(2.0) == pytest.approx(1.0, abs=1e-10)
+        np.testing.assert_allclose(
+            np.asarray(cdf(np.asarray([0.0, 1.0, 2.0], dtype=float)), dtype=float),
+            np.asarray([0.2, 0.7, 1.0], dtype=float),
+            atol=1e-10,
+        )
 
         ppf = strategy.query_method(CharacteristicName.PPF, distr)
         assert ppf(0.10) == pytest.approx(0.0, abs=1e-12)
         assert ppf(0.70) == pytest.approx(1.0, abs=1e-12)
         assert ppf(0.95) == pytest.approx(2.0, abs=1e-12)
+        np.testing.assert_allclose(
+            np.asarray(ppf(np.asarray([0.10, 0.70, 0.95], dtype=float)), dtype=float),
+            np.asarray([0.0, 1.0, 2.0], dtype=float),
+            atol=1e-12,
+        )
 
     def test_edge_dims_constraint_filters_edges(self) -> None:
         reg = CharacteristicRegistry()

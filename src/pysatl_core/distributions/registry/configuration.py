@@ -32,38 +32,38 @@ from pysatl_core.distributions.registry.constraint import (
     SetConstraint,
 )
 from pysatl_core.distributions.registry.graph import CharacteristicRegistry
-from pysatl_core.types import CharacteristicName, Kind
+from pysatl_core.types import CharacteristicName, Kind, NumericArray
 
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
-    pdf_to_cdf_1C = ComputationMethod[float, float](
+    pdf_to_cdf_1C = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF, sources=[CharacteristicName.PDF], fitter=fit_pdf_to_cdf_1C
     )
-    cdf_to_pdf_1C = ComputationMethod[float, float](
+    cdf_to_pdf_1C = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PDF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_pdf_1C
     )
-    cdf_to_ppf_1C = ComputationMethod[float, float](
+    cdf_to_ppf_1C = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1C
     )
-    ppf_to_cdf_1C = ComputationMethod[float, float](
+    ppf_to_cdf_1C = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1C
     )
 
-    pmf_to_cdf_1D = ComputationMethod[float, float](
+    pmf_to_cdf_1D = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
         sources=[CharacteristicName.PMF],
         fitter=fit_pmf_to_cdf_1D,
     )
-    cdf_to_pmf_1D = ComputationMethod[float, float](
+    cdf_to_pmf_1D = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PMF,
         sources=[CharacteristicName.CDF],
         fitter=fit_cdf_to_pmf_1D,
     )
-    cdf_to_ppf_1D = ComputationMethod[float, float](
+    cdf_to_ppf_1D = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1D
     )
-    ppf_to_cdf_1D = ComputationMethod[float, float](
+    ppf_to_cdf_1D = ComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1D
     )
 
