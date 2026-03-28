@@ -126,14 +126,14 @@ class DefaultComputationStrategy:
             ) from exc
 
     @staticmethod
-    def _pick_analytical_loop_method(
+    def _pick_loop_method(
         state: GenericCharacteristicName,
         view: RegistryView,
     ) -> Method[Any, Any] | None:
         """
-        Pick the first analytical self-loop method for a characteristic in a view.
+        Pick the first available self-loop method for a characteristic in a view.
         """
-        loops = view.analytical_variants(state)
+        loops = view.variants(state, state)
         if not loops:
             return None
         return cast(Method[Any, Any], next(iter(loops.values())).method)
@@ -147,8 +147,8 @@ class DefaultComputationStrategy:
         Resolution order:
         1. Cached fitted method (if caching enabled)
         2. Analytical implementation for non-registry characteristics
-        3. Analytical self-loop from the registry view
-        4. Conversion path from analytical-loop characteristics via the graph
+        3. First self-loop from the registry view
+        4. Conversion path from loop characteristics via the graph
 
         Parameters
         ----------
@@ -199,13 +199,13 @@ class DefaultComputationStrategy:
 
         self._push_guard(distr, state)
         try:
-            loop_method = self._pick_analytical_loop_method(state, view)
+            loop_method = self._pick_loop_method(state, view)
             if loop_method is not None:
                 return loop_method
 
-            # 5. Try each analytical-loop characteristic as a source
+            # 5. Try each loop characteristic as a source
             for src in distr.analytical_computations:
-                if not view.analytical_variants(src):
+                if not view.variants(src, src):
                     continue
 
                 # Find conversion path in the graph
@@ -226,7 +226,8 @@ class DefaultComputationStrategy:
                 return last_fitted
 
             raise RuntimeError(
-                f"No conversion path from any analytical characteristic to '{state}'."
+                "No conversion path from any characteristic in "
+                f"analytical_computations to '{state}'."
             )
         finally:
             self._pop_guard(distr, state)
@@ -249,7 +250,6 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
     -----
     - Requires the distribution to provide a PPF computation method.
     - Assumes that the PPF follows NumPy semantics (vectorized evaluation).
-    - Graph-derived PPFs (scalar-only) are currently not supported.
     - Returns a NumPy array containing the generated samples.
     """
 
@@ -275,8 +275,9 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
         ppf = distr.query_method(CharacteristicName.PPF, **options)
         rng = np.random.default_rng()
         U = rng.random(n)
-        # TODO: Now it will be based on the fact that the characteristic
-        #  has NumPy semantics (It is much more faster), that is,
-        #  it will not work with the graph computed characteristics currently.
-        samples = ppf(U)
+        samples = np.asarray(ppf(U), dtype=float)
+        if samples.shape != U.shape:
+            raise RuntimeError(
+                "PPF must preserve NumPy input shape for inverse-transform sampling."
+            )
         return cast(NumericArray, samples)

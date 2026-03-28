@@ -16,6 +16,8 @@ from .families import *
 from .families import __all__ as _family_all
 from .sampling import *
 from .sampling import __all__ as _sampling_all
+from .transformations import *
+from .transformations import __all__ as _transformations_all
 from .types import *
 from .types import __all__ as _types_all
 
@@ -26,9 +28,11 @@ __all__ = [
     *_family_all,
     *_types_all,
     *_sampling_all,
+    *_transformations_all,
 ]
 
 del _distr_all
 del _family_all
 del _types_all
+del _transformations_all
 del _sampling_all

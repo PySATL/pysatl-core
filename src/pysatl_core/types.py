@@ -172,6 +172,7 @@ class Interval1D:
 
     @overload
     def contains(self, x: Number) -> bool: ...
+
     @overload
     def contains(self, x: NumericArray) -> BoolArray: ...
 
@@ -264,6 +265,8 @@ Keyword-only options (e.g. ``excess=...``) are intentionally not modeled here:
 implementations may or may not accept them, and wrappers typically forward
 ``**options`` dynamically.
 """
+type ParentRole = str
+"""Type alias for logical roles of parent distributions in a transformation."""
 
 
 class CharacteristicName(StrEnum):
@@ -296,6 +299,54 @@ class CharacteristicName(StrEnum):
     STANDARD_MOMENT = "standardized_moment"  # unimplemented in graph yet
 
 
+class TransformationName(StrEnum):
+    """
+    Enumeration of built-in distribution transformations.
+
+    Attributes
+    ----------
+    AFFINE
+        Affine transformation ``aX + b``.
+    BINARY
+        Binary operation on two parent distributions.
+    FUNCTION
+        Functional transformation ``f(X)``.
+    FINITE_MIXTURE
+        Finite weighted mixture of component distributions.
+    APPROXIMATION
+        Materialized approximation of a transformed distribution.
+    """
+
+    AFFINE = "affine"
+    BINARY = "binary"
+    FUNCTION = "function"
+    FINITE_MIXTURE = "finite_mixture"
+    APPROXIMATION = "approximation"
+    ARRAY = "array"
+
+
+class BinaryOperationName(StrEnum):
+    """
+    Enumeration of supported binary operations for transformed distributions.
+
+    Attributes
+    ----------
+    ADD
+        Sum ``X + Y``.
+    SUB
+        Difference ``X - Y``.
+    MUL
+        Product ``X * Y``.
+    DIV
+        Ratio ``X / Y``.
+    """
+
+    ADD = "add"
+    SUB = "sub"
+    MUL = "mul"
+    DIV = "div"
+
+
 class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
@@ -312,6 +363,9 @@ __all__ = [
     "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
     "ComputationFunc",
+    "TransformationName",
+    "BinaryOperationName",
+    "ParentRole",
     "DistributionType",
     "Interval1D",
     "ContinuousSupportShape1D",

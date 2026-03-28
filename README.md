@@ -8,7 +8,7 @@
 [![CI][status-shield]][status-url]
 [![MIT License][license-shield]][license-url]
 
-**PySATL Core** is the computational core of the PySATL project, providing abstractions and infrastructure for probability distributions, parametric families, characteristic-based computations, and sampling.
+**PySATL Core** is the computational core of the PySATL project, providing abstractions and infrastructure for probability distributions, parametric families, characteristic-based computations, transformations, and sampling.
 
 The library is designed as a **foundational kernel** rather than a ready-to-use end-user package. Its primary goals are explicit probabilistic structure, extensibility, and suitability as a basis for further stochastic and statistical tooling.
 
@@ -26,6 +26,9 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 - A global **family registry** for configuring, querying, and extending available distribution families.
 - **Characteristic computation graph** (`CharacteristicRegistry`) that allows computing
   arbitrary characteristics by specifying only a minimal analytical subset.
+- **Transformations module** for derived distributions:
+  affine transformations (`aX + b`), binary operations (`X ± Y`, `X * Y`, `X / Y`),
+  finite weighted mixtures, and characteristic-level approximations.
 - Distribution objects exposing common probabilistic operations
   (sampling, analytical and fitted computations).
 - Clear separation between *distribution definitions*, *parametrizations*,
@@ -110,6 +113,16 @@ This example uses a **predefined family** and **predefined parametrizations**.
 PySATL Core also supports defining custom families, parametrizations,
 and characteristic graphs.
 
+For transformation workflows, see `examples/transformations_overview.ipynb`.
+
+---
+
+## 📓 Notebooks
+
+- `examples/overview.ipynb` — base walkthrough for families, parametrizations, and characteristic queries.
+- `examples/transformations_overview.ipynb` — affine, binary, finite-mixture, and approximation workflows.
+- `examples/example_sampling_methods.ipynb` — sampling backends and UNURAN-oriented scenarios.
+
 ---
 
 ## 📖 Documentation
@@ -143,7 +156,7 @@ poetry run pre-commit run --all-files
 
 ## 🗺 Roadmap
 
-- **Transformations module** for mixtures and distribution transformations.
+- Extension of the transformations module (functional transforms, performance improvements).
 - Extension of characteristic graphs.
 - Stabilization of APIs and **publishing PySATL Core as an installable package**.
 
