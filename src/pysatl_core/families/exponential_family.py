@@ -9,9 +9,6 @@ from scipy.differentiate import jacobian
 from scipy.integrate import nquad
 from scipy.linalg import det
 
-from pysatl_core.distributions import (
-    SamplingStrategy,
-)
 from pysatl_core.distributions.support import (
     ContinuousSupport,
     SupportByPredicate,
@@ -73,7 +70,6 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         name: str = "ExponentialFamily",
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
-        sampling_strategy: SamplingStrategy,
         support_by_parametrization: SupportArg = None,
     ):
         self._sufficient = sufficient_statistics
@@ -99,7 +95,6 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             distr_type=distr_type,
             distr_parametrizations=distr_parametrizations,
             distr_characteristics=distr_characteristics,
-            sampling_strategy=sampling_strategy,
             support_by_parametrization=support_by_parametrization,
         )
         parametrization(family=self, name="theta")(ExponentialFamilyParametrization)
@@ -137,7 +132,6 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
             if theta not in self._parameter_space:
                 return np.full(len(theta) + 1, float("-inf"))
-            # print("Current sufficient:", theta, self._log_partition(theta))
             return np.append(theta, self._log_partition(theta))
 
         def conjugate_log_partition(
@@ -178,7 +172,6 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             sufficient_statistics_values=self._parameter_space,  # TODO: write convex hull for this
             parameter_space=SupportByPredicate(conjugate_sufficient_accepts),  # type: ignore[arg-type]
             name=self.name,
-            sampling_strategy=self.sampling_strategy,
             distr_type=self._distr_type,
             distr_parametrizations=self.parametrization_names,
             support_by_parametrization=self.support_resolver,
@@ -213,7 +206,6 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             name=f"Transformed{self._name}",
             distr_type=self._distr_type,
             distr_parametrizations=self.parametrization_names,
-            sampling_strategy=self.sampling_strategy,
             support_by_parametrization=self.support_resolver,
         )
 

@@ -239,6 +239,8 @@ class Interval1D:
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 """Type alias for a distribution computation method (analytical or fitted)."""
+
+
 @dataclass(frozen=True, slots=True)
 class IntervalND:
     intervals: list[Interval1D]

@@ -5,7 +5,6 @@ import pytest
 import scipy
 from numpy.testing import assert_allclose
 
-from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.distributions.support import ContinuousNDSupport, SupportByIntervals
 from pysatl_core.families import (
     ContinuousExponentialClassFamily,
@@ -36,7 +35,6 @@ def conjugate_for_exponential() -> ContinuousExponentialClassFamily:
         support=support_pos,
         distr_type=UnivariateContinuous,
         distr_parametrizations=["theta"],
-        sampling_strategy=DefaultSamplingUnivariateStrategy(),
     )
 
     conjugate_fam = fam.conjugate_prior_family.transform(transform_function)
