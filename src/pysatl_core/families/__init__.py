@@ -15,12 +15,10 @@ from .builtins import __all__ as _builtins_all
 from .configuration import configure_families_register
 from .distribution import ParametricFamilyDistribution
 from .exponential_family import (
+    # CanonicalContinuousExponentialClassFamily,
+    ContinuousExponentialClassFamily,
     ExponentialConjugateHyperparameters,
-    ExponentialFamily,
     ExponentialFamilyParametrization,
-    NaturalExponentialFamily,
-    SpacePredicate,
-    SpacePredicateArray,
 )
 from .parametric_family import ParametricFamily
 from .parametrizations import (
@@ -42,12 +40,10 @@ __all__ = [
     "configure_families_register",
     # builtins
     *_builtins_all,
-    "ExponentialFamily",
+    "ContinuousExponentialClassFamily",
     "ExponentialFamilyParametrization",
     "ExponentialConjugateHyperparameters",
-    "SpacePredicate",
-    "SpacePredicateArray",
-    "NaturalExponentialFamily",
+    # "CanonicalContinuousExponentialClassFamily",
 ]
 
 del _builtins_all

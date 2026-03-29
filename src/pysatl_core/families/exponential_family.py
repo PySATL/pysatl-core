@@ -12,9 +12,14 @@ from scipy.linalg import det
 from pysatl_core.distributions import (
     SamplingStrategy,
 )
+from pysatl_core.distributions.support import (
+    ContinuousSupport,
+    SupportByPredicate,
+)
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import Parametrization, parametrization
 from pysatl_core.types import (
+    CharacteristicName,
     DistributionType,
     GenericCharacteristicName,
     ParametrizationName,
@@ -22,19 +27,11 @@ from pysatl_core.types import (
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
+    from pysatl_core.types import Number, NumericArray
 
     type ParametrizedFunction = Callable[[Parametrization, Any], Any]
     type SupportArg = Callable[[Parametrization], Support | None] | None
-
-
-PDF = "pdf"
-CDF = "cdf"
-PPF = "ppf"
-CF = "char_func"
-MEAN = "mean"
-VAR = "var"
-SKEW = "skewness"
-KURT = "kurtosis"
+    type NumberParameter = Number | NumericArray
 
 
 @dataclass
@@ -43,58 +40,37 @@ class ExponentialFamilyParametrization(Parametrization):
     Standard parametrization of Exponential Family.
     """
 
-    theta: list[float]
+    theta: NumberParameter
+
+    def transform_to_base_parametrization(self) -> ExponentialFamilyParametrization:
+        return self
 
 
+@dataclass
 class ExponentialConjugateHyperparameters:
-    def __init__(self, alpha: Any, beta: int):
-        self.alpha = alpha
-        self.beta = beta
-
-    def __str__(self) -> str:
-        return f"alpha={self.alpha}, beta={self.beta}"
+    effective_suff_stat_value: NumberParameter
+    effective_sample_size: int
 
 
-def doesAccept(x: list[float] | float, support: list[tuple[float, float]]) -> bool:
-    if not hasattr(x, "__len__"):
-        x = [x]
+class ContinuousExponentialClassFamily(ParametricFamily):
+    """
+    Representation of exponential class with density = h(x) * exp(<n(t), T(x)> + A(t)),
+    where canonical parametrization is that, when n = t
 
-    x = cast(list[float], x)
+    Usage of this class:
+    - you can use method transform_to_another to replace x to smth else, for example, into
+    """
 
-    def accept_1D(x: float, borders: tuple[float, float]) -> bool:
-        left, right = borders
-        if abs(x) == 0 and (abs(left) == 0 or abs(right) == 0):
-            return False
-        return left <= x <= right
-
-    return all(accept_1D(x_i, border) for x_i, border in zip(x, support, strict=False))
-
-
-class SpacePredicate:
-    def __init__(self, predicate: Callable[[Any], bool]):
-        self._predicate = predicate
-
-    def accepts(self, x: Any) -> bool:
-        return self._predicate(x)
-
-
-class SpacePredicateArray(SpacePredicate):
-    def __init__(self, space: list[tuple[float, float]]):
-        SpacePredicate.__init__(self, lambda x: doesAccept(x, space))
-        self._space = space
-
-
-class NaturalExponentialFamily(ParametricFamily):
     def __init__(
         self,
         *,
-        log_partition: Callable[[ExponentialFamilyParametrization], float],
-        sufficient_statistics: Callable[[Any], Any],
-        normalization_constant: Callable[[Any], Any],
-        support: SpacePredicate,
-        parameter_space: SpacePredicate,
-        sufficient_statistics_values: SpacePredicate,
-        name: str = "NaturalExponentialFamily",
+        log_partition: Callable[[NumberParameter], NumberParameter],
+        sufficient_statistics: Callable[[NumberParameter], NumberParameter],
+        normalization_constant: Callable[[NumberParameter], NumberParameter],
+        support: SupportByPredicate,
+        parameter_space: SupportByPredicate,
+        sufficient_statistics_values: SupportByPredicate,
+        name: str = "ExponentialFamily",
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
         sampling_strategy: SamplingStrategy,
@@ -112,9 +88,9 @@ class NaturalExponentialFamily(ParametricFamily):
             GenericCharacteristicName,
             dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
         ] = {
-            PDF: self.density,
-            MEAN: self._mean,
-            VAR: self._var,
+            CharacteristicName.PDF: self.density,
+            CharacteristicName.MEAN: self._mean,
+            CharacteristicName.VAR: self._var,
         }
 
         ParametricFamily.__init__(
@@ -128,18 +104,13 @@ class NaturalExponentialFamily(ParametricFamily):
         )
         parametrization(family=self, name="theta")(ExponentialFamilyParametrization)
 
-    def _transform_to_natural_parametrization(
-        self, theta_parametrization: ExponentialFamilyParametrization
-    ) -> ExponentialFamilyParametrization:
-        return theta_parametrization
-
     @property
     def log_density(self) -> ParametrizedFunction:
-        def log_density_func(parametrization: Parametrization, x: Any) -> Any:
+        def log_density_func(parametrization: Parametrization, x: NumberParameter) -> Number:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            parametrization = self._transform_to_natural_parametrization(parametrization)
-            if not self._support.accepts(x):
-                return float("-inf")
+            parametrization = parametrization.transform_to_base_parametrization()
+            if x not in self._support:
+                return -np.inf
 
             theta = parametrization.theta
             sufficient = self._sufficient(x)
@@ -147,10 +118,8 @@ class NaturalExponentialFamily(ParametricFamily):
             if hasattr(dot, "__len__"):
                 dot = dot[0]
 
-            result = float(
-                np.log(self._normalization(x)) + dot + self._log_partition(parametrization)
-            )
-            return result
+            result = np.log(self._normalization(x)) + dot + self._log_partition(theta)
+            return cast(np.floating, result.item())
 
         return log_density_func
 
@@ -159,55 +128,55 @@ class NaturalExponentialFamily(ParametricFamily):
         return lambda parametrization, x: np.exp(self.log_density(parametrization, x))
 
     @property
-    def conjugate_prior_family(self) -> NaturalExponentialFamily:
+    def conjugate_prior_family(self) -> ContinuousExponentialClassFamily:
         def conjugate_sufficient(
-            theta: float,
-        ) -> list[Any]:
-            if not self._parameter_space.accepts(theta):
-                return [float("-inf"), float("-inf")]
+            theta: NumberParameter,
+        ) -> NumberParameter:
+            if not hasattr(theta, "__len__"):
+                theta = np.array([theta])
 
-            parametrization = ExponentialFamilyParametrization([theta])
-            return [
-                theta,
-                self._log_partition(parametrization),
-            ]
+            if theta not in self._parameter_space:
+                return np.full(len(theta) + 1, float("-inf"))
+            # print("Current sufficient:", theta, self._log_partition(theta))
+            return np.append(theta, self._log_partition(theta))
 
         def conjugate_log_partition(
-            parametrization: ExponentialFamilyParametrization,
-        ) -> Any:
-            alpha = parametrization.theta[0]
-            beta = parametrization.theta[1]
-
-            def pdf(theta: Any) -> Any:
+            parametrization: NumberParameter,
+        ) -> NumberParameter:
+            def pdf(theta: NumberParameter) -> NumberParameter:
                 if not hasattr(theta, "__len__"):
-                    theta = [theta]
-                parametrization = ExponentialFamilyParametrization(theta=theta)
-                return np.exp(np.dot(theta, alpha) + beta * self._log_partition(parametrization))[0]
+                    theta = np.array([theta])
+                return cast(
+                    np.floating,
+                    np.exp(
+                        np.dot(
+                            conjugate_sufficient(theta),
+                            parametrization,
+                        )
+                    ).item(),
+                )
 
             all_value = nquad(
-                lambda x: pdf(x) if self._parameter_space.accepts(x) else 0,  # type: ignore[arg-type]
+                lambda x: pdf(x) if x in self._parameter_space else 0,  # type: ignore[arg-type]
                 [(float("-inf"), float("+inf"))],
             )[0]
-            return -np.log(all_value)
+            return cast(np.float64, -np.log(all_value))
 
         def conjugate_sufficient_accepts(
-            parametrization: ExponentialFamilyParametrization,
+            theta: NumericArray,
         ) -> bool:
-            theta = parametrization.theta
             xi = theta[:-1]
             nu = theta[-1]
 
-            return self._sufficient_statistics_values.accepts(xi) and SpacePredicateArray(
-                [(0, float("+inf"))]
-            ).accepts(nu)
+            return xi in self._sufficient_statistics_values and nu in ContinuousSupport(0, np.inf)
 
-        return NaturalExponentialFamily(
+        return ContinuousExponentialClassFamily(
             log_partition=conjugate_log_partition,
             sufficient_statistics=conjugate_sufficient,
             normalization_constant=lambda _: 1,
             support=self._parameter_space,
             sufficient_statistics_values=self._parameter_space,  # TODO: write convex hull for this
-            parameter_space=SpacePredicate(conjugate_sufficient_accepts),
+            parameter_space=SupportByPredicate(conjugate_sufficient_accepts),  # type: ignore[arg-type]
             name=self.name,
             sampling_strategy=self.sampling_strategy,
             distr_type=self._distr_type,
@@ -218,7 +187,7 @@ class NaturalExponentialFamily(ParametricFamily):
     def transform(
         self,
         transform_function: Callable[[Any], Any],
-    ) -> NaturalExponentialFamily:
+    ) -> ContinuousExponentialClassFamily:
         def calculate_jacobian(x: Any) -> Any:
             if type(x) is not list:
                 x = np.array([x])
@@ -226,7 +195,7 @@ class NaturalExponentialFamily(ParametricFamily):
             return np.abs(det(jacobian(transform_function, x).df))
 
         def new_support(x: Any) -> bool:
-            return self._support.accepts(transform_function(x))
+            return transform_function(x) in self._support
 
         def new_sufficient(x: Any) -> Any:
             return self._sufficient(transform_function(x))
@@ -234,11 +203,11 @@ class NaturalExponentialFamily(ParametricFamily):
         def new_normalization(x: Any) -> Any:
             return self._normalization(x) * calculate_jacobian(x)
 
-        return NaturalExponentialFamily(
+        return ContinuousExponentialClassFamily(
             log_partition=self._log_partition,
             sufficient_statistics=new_sufficient,
             normalization_constant=new_normalization,
-            support=SpacePredicate(new_support),
+            support=SupportByPredicate(new_support),
             parameter_space=self._parameter_space,
             sufficient_statistics_values=self._sufficient_statistics_values,
             name=f"Transformed{self._name}",
@@ -257,7 +226,7 @@ class NaturalExponentialFamily(ParametricFamily):
                 dimension_size = len(x)
             return nquad(
                 lambda x: (  # type: ignore[arg-type]
-                    np.dot(x, self.density(parametrization, x)) if self._support.accepts(x) else 0
+                    np.dot(x, self.density(parametrization, x)) if x in self._support else 0
                 ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
@@ -273,7 +242,7 @@ class NaturalExponentialFamily(ParametricFamily):
                 dimension_size = len(x)
             return nquad(
                 lambda x: (  # type: ignore[arg-type]
-                    x**2 * self.density(parametrization, x) if self._support.accepts(x) else 0
+                    x**2 * self.density(parametrization, x) if x in self._support else 0
                 ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
@@ -291,73 +260,19 @@ class NaturalExponentialFamily(ParametricFamily):
     def posterior_hyperparameters(
         self, prior_hyper: ExponentialConjugateHyperparameters, sample: list[Any]
     ) -> ExponentialConjugateHyperparameters:
-        alpha = prior_hyper.alpha
-        beta = prior_hyper.beta
-
-        alpha_post = None
-        beta_post = None
+        posterior_effective_suff_stat_value = prior_hyper.effective_suff_stat_value
+        posterior_effective_sample_size = prior_hyper.effective_sample_size
         if hasattr(sample, "__iter__") and not isinstance(sample, str):
-            alpha_post = np.sum([self._sufficient(x) for x in sample], axis=0)
-            beta_post = len(sample)
+            posterior_effective_suff_stat_value += np.sum(
+                [self._sufficient(x) for x in sample],  # type: ignore[arg-type]
+                axis=0,
+            )
+            posterior_effective_sample_size += len(sample)
         else:
-            alpha_post = self._sufficient(sample)
-            beta_post = 1
+            posterior_effective_suff_stat_value += self._sufficient(sample)  # type: ignore[arg-type]
+            posterior_effective_sample_size += 1
 
-        return ExponentialConjugateHyperparameters(alpha=alpha + alpha_post, beta=beta + beta_post)
-
-
-class ExponentialFamily(NaturalExponentialFamily):
-    def __init__(
-        self,
-        *,
-        log_partition: Callable[[ExponentialFamilyParametrization], float],
-        sufficient_statistics: Callable[[Any], Any],
-        normalization_constant: Callable[[Any], Any],
-        parameter_from_natural_parameter: Callable[[Any], Any],
-        natural_parameter: Callable[
-            [ExponentialFamilyParametrization], ExponentialFamilyParametrization
-        ],
-        support: SpacePredicate,
-        parameter_space: SpacePredicate,
-        sufficient_statistics_values: SpacePredicate,
-        distr_type: DistributionType | Callable[[Parametrization], DistributionType],
-        distr_parametrizations: list[ParametrizationName],
-        sampling_strategy: SamplingStrategy,
-        name: str = "ExponentialFamily",
-        support_by_parametrization: SupportArg = None,
-    ):
-        def natural_log_partition(
-            eta_parametrizaion: ExponentialFamilyParametrization,
-        ) -> Any:
-            eta = eta_parametrizaion.theta
-            theta = parameter_from_natural_parameter(eta)
-            return log_partition(ExponentialFamilyParametrization(theta=[theta]))
-
-        natural_sufficient_statistics_values = SpacePredicate(
-            lambda eta: sufficient_statistics_values.accepts(parameter_from_natural_parameter(eta))
+        return ExponentialConjugateHyperparameters(
+            effective_suff_stat_value=posterior_effective_suff_stat_value,
+            effective_sample_size=posterior_effective_sample_size,
         )
-
-        self._natural_parameter = natural_parameter
-        natural_parameter_space = SpacePredicate(
-            lambda eta: parameter_space.accepts(parameter_from_natural_parameter(eta)),
-        )
-
-        NaturalExponentialFamily.__init__(
-            self,
-            log_partition=natural_log_partition,
-            sufficient_statistics=sufficient_statistics,
-            normalization_constant=normalization_constant,
-            support=support,
-            parameter_space=natural_parameter_space,
-            sufficient_statistics_values=natural_sufficient_statistics_values,
-            name=name,
-            distr_parametrizations=distr_parametrizations,
-            distr_type=distr_type,
-            sampling_strategy=sampling_strategy,
-            support_by_parametrization=support_by_parametrization,
-        )
-
-    def _transform_to_natural_parametrization(
-        self, theta_parametrization: ExponentialFamilyParametrization
-    ) -> ExponentialFamilyParametrization:
-        return self._natural_parameter(theta_parametrization)

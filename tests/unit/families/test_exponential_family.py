@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import pytest
@@ -6,13 +6,12 @@ import scipy
 from numpy.testing import assert_allclose
 
 from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
+from pysatl_core.distributions.support import ContinuousNDSupport, SupportByIntervals
 from pysatl_core.families import (
-    ExponentialFamily,
-    ExponentialFamilyParametrization,
-    SpacePredicateArray,
+    ContinuousExponentialClassFamily,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.types import UnivariateContinuous
+from pysatl_core.types import Interval1D, UnivariateContinuous
 
 
 def gamma_pdf(alpha: float, beta: float, x: float) -> float:
@@ -20,39 +19,21 @@ def gamma_pdf(alpha: float, beta: float, x: float) -> float:
 
 
 @pytest.fixture(scope="function")
-def conjugate_for_exponential() -> ExponentialFamily:
-    def get_parameter_from_natural_parameter(
-        eta_parametrization: Any,
-    ) -> Any:
-        if hasattr(eta_parametrization, "__len__"):
-            if len(eta_parametrization) > 1:
-                return list(-1 * np.array(eta_parametrization))
-            eta_parametrization = eta_parametrization[0]
-        return -eta_parametrization
-
-    def natural_parameter(
-        theta_parametrization: Any,
-    ) -> Any:
-        if type(theta_parametrization) is ExponentialFamilyParametrization:
-            eta = list(-np.array(theta_parametrization.theta))
-            return ExponentialFamilyParametrization(theta=eta)
-
-        return -1 * theta_parametrization
-
+def conjugate_for_exponential() -> ContinuousExponentialClassFamily:
     def transform_function(x: list[float] | float) -> list[float] | float:
         if type(x) is list:
             return [-x[0]]
         return -x  # type: ignore[operator]
 
-    fam = ExponentialFamily(
-        log_partition=lambda parametrization: np.log(parametrization.theta[0]),
+    support_neg = SupportByIntervals(ContinuousNDSupport(intervals=[Interval1D(-np.inf, 0)]))
+    support_pos = SupportByIntervals(ContinuousNDSupport(intervals=[Interval1D(0, np.inf)]))
+    fam = ContinuousExponentialClassFamily(
+        log_partition=lambda parametrization: np.log(-parametrization),
         sufficient_statistics=lambda x: x,
         normalization_constant=lambda _: 1,
-        parameter_from_natural_parameter=get_parameter_from_natural_parameter,
-        natural_parameter=natural_parameter,
-        parameter_space=SpacePredicateArray([(0, float("+inf"))]),
-        sufficient_statistics_values=SpacePredicateArray([(0, float("+inf"))]),
-        support=SpacePredicateArray([(0, float("+inf"))]),
+        parameter_space=support_neg,
+        sufficient_statistics_values=support_pos,
+        support=support_pos,
         distr_type=UnivariateContinuous,
         distr_parametrizations=["theta"],
         sampling_strategy=DefaultSamplingUnivariateStrategy(),
@@ -61,7 +42,7 @@ def conjugate_for_exponential() -> ExponentialFamily:
     conjugate_fam = fam.conjugate_prior_family.transform(transform_function)
     ParametricFamilyRegister().register(conjugate_fam)
     return cast(
-        ExponentialFamily,
+        ContinuousExponentialClassFamily,
         ParametricFamilyRegister().get("TransformedExponentialFamily"),
     )
 
@@ -69,7 +50,7 @@ def conjugate_for_exponential() -> ExponentialFamily:
 @pytest.mark.parametrize("theta1", range(2, 5))
 @pytest.mark.parametrize("theta2", range(2, 5))
 def test_exponential_pdf(theta1, theta2, conjugate_for_exponential):
-    gamma_family: ExponentialFamily = conjugate_for_exponential
+    gamma_family: ContinuousExponentialClassFamily = conjugate_for_exponential
 
     alpha = theta2 + 1
     beta = theta1
@@ -85,7 +66,7 @@ def test_exponential_pdf(theta1, theta2, conjugate_for_exponential):
 @pytest.mark.parametrize("theta1", range(2, 5))
 @pytest.mark.parametrize("theta2", range(2, 5))
 def test_exponential_mean(theta1, theta2, conjugate_for_exponential):
-    gamma_family: ExponentialFamily = conjugate_for_exponential
+    gamma_family: ContinuousExponentialClassFamily = conjugate_for_exponential
 
     alpha = theta2 + 1
     beta = theta1
@@ -98,7 +79,7 @@ def test_exponential_mean(theta1, theta2, conjugate_for_exponential):
 @pytest.mark.parametrize("theta1", range(2, 5))
 @pytest.mark.parametrize("theta2", range(2, 5))
 def test_exponential_var(theta1, theta2, conjugate_for_exponential):
-    gamma_family: ExponentialFamily = conjugate_for_exponential
+    gamma_family: ContinuousExponentialClassFamily = conjugate_for_exponential
 
     alpha = theta2 + 1
     beta = theta1

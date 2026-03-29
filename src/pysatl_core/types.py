@@ -239,6 +239,23 @@ class Interval1D:
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 """Type alias for a distribution computation method (analytical or fitted)."""
+@dataclass(frozen=True, slots=True)
+class IntervalND:
+    intervals: list[Interval1D]
+
+    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+        if not hasattr(x, "__iter__"):
+            x = np.array([x])
+
+        return all(
+            x_coordinate in interval
+            for interval, x_coordinate in zip(self.intervals, x, strict=True)
+        )
+
+    def __contains__(self, x: object) -> bool:
+        """Check if a single point is in the interval."""
+        return bool(self.contains(cast(Number, x)))
+
 
 type GenericCharacteristicName = str
 """Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
@@ -314,6 +331,7 @@ __all__ = [
     "ComputationFunc",
     "DistributionType",
     "Interval1D",
+    "IntervalND",
     "ContinuousSupportShape1D",
     "BoolArray",
     "NumPyNumber",
