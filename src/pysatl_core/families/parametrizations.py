@@ -17,7 +17,7 @@ from dataclasses import dataclass, is_dataclass
 from inspect import isfunction
 from typing import TYPE_CHECKING, dataclass_transform
 
-from pysatl_core.types import ParametrizationName
+from pysatl_core.types import NumericArray, ParametrizationName
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -104,6 +104,23 @@ class Parametrization(ABC):
         if conversion to a different parametrization is needed.
         """
         return self
+
+    def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+        """
+        Transform gradient from base parameter space to this parametrization.
+
+        Parameters
+        ----------
+        grad_base : NumericLike
+            Gradient with respect to base parameters, shape (..., d_base).
+
+        Returns
+        -------
+        NumericLike
+            Gradient with respect to parameters of this parametrization,
+            shape (..., d_this).
+        """
+        return grad_base
 
 
 def constraint[**P](description: str) -> Callable[[Callable[P, bool]], Callable[P, bool]]:

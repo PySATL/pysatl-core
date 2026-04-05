@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast, dataclass_transform
 
+import numpy as np
+
 from pysatl_core.distributions.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.types import (
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
+        NumericArray,
         ParametrizationName,
     )
 
@@ -101,6 +104,7 @@ class ParametricFamily:
         distr_parametrizations: list[ParametrizationName],
         distr_characteristics: CharacteristicsMap,
         support_by_parametrization: SupportArg = None,
+        base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
     ):
         if not distr_parametrizations:
             raise ValueError(
@@ -116,6 +120,7 @@ class ParametricFamily:
         )
 
         self._support_resolver: SupportResolver = support_by_parametrization or (lambda _p: None)
+        self._base_score = base_score
 
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
@@ -417,5 +422,33 @@ class ParametricFamily:
         from pysatl_core.families.parametrizations import parametrization as _param_deco
 
         return _param_deco(family=self, name=name)
+
+    def score(self, parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the given parametrization.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance of the family.
+        x : NumericArray
+            Points at which to evaluate the gradient.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape is (..., d), where d is the number of parameters of the parametrization.
+        """
+        if self._base_score is None:
+            raise ValueError(
+                f"Family '{self.name}' does not provide score (gradient) method. "
+                "Please pass '_base_score' to the constructor."
+            )
+        x_arr = np.atleast_1d(x)
+
+        base_params = parameters.transform_to_base_parametrization()
+        base_grad = self._base_score(base_params, x_arr)
+        return parameters.gradient_transform(base_grad)
 
     __call__ = distribution
