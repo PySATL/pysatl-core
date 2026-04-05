@@ -236,6 +236,122 @@ class TestNormalFamily(BaseDistributionTest):
 
         assert dist.support.shape == ContinuousSupportShape1D.REAL_LINE
 
+    def test_score_shape_and_type(self):
+        """Test that SCORE returns correct shape and type for all parametrizations."""
+        x = np.array([-1.0, 0.0, 1.0, 2.0, 3.0])
+
+        for param_name, params in [
+            ("meanStd", {"mu": 2.0, "sigma": 1.5}),
+            ("meanVar", {"mu": 2.0, "var": 2.25}),
+            ("meanPrec", {"mu": 2.0, "tau": 0.25}),
+            ("exponential", {"a": -0.222, "b": 0.888}),
+        ]:
+            dist = self.normal_family(parametrization_name=param_name, **params)  # type: ignore[arg-type]
+            grad = dist.family.score(dist.parametrization, x)
+
+            # Shape: (len(x), d_params) where d_params = 2 for all normal parametrizations
+            assert grad.shape == (len(x), 2)
+            assert grad.dtype == float
+            assert not np.any(np.isnan(grad))  # all gradients exist for normal
+
+    def test_score_base_parametrization(self):
+        """Test SCORE for meanStd parametrization against analytical formula."""
+        mu, sigma = 2.0, 1.5
+        dist = self.normal_family(mu=mu, sigma=sigma)
+
+        x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        # Analytical gradients: d/dmu = (x-mu)/sigma^2, d/dsigma = -1/sigma + (x-mu)^2/sigma^3
+        expected_mu = (x - mu) / sigma**2
+        expected_sigma = -1.0 / sigma + (x - mu) ** 2 / sigma**3
+        expected = np.stack([expected_mu, expected_sigma], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_meanVar_parametrization(self):
+        """Test SCORE for meanVar parametrization via chain rule."""
+        mu, var = 2.0, 2.25
+        dist = self.normal_family(parametrization_name="meanVar", mu=mu, var=var)
+
+        x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        # Compute base gradient then transform: var = sigma^2 -> dvar = dsigma / (2*sigma)
+        sigma = np.sqrt(var)
+        base_mu = (x - mu) / sigma**2
+        base_sigma = -1.0 / sigma + (x - mu) ** 2 / sigma**3
+        expected_mu = base_mu
+        expected_var = base_sigma / (2 * sigma)
+        expected = np.stack([expected_mu, expected_var], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_meanPrec_parametrization(self):
+        """Test SCORE for meanPrec parametrization via chain rule."""
+        mu, tau = 2.0, 0.25  # sigma = 2.0, var = 4.0
+        dist = self.normal_family(parametrization_name="meanPrec", mu=mu, tau=tau)
+
+        x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        sigma = 1.0 / np.sqrt(tau)  # = 2.0
+        base_mu = (x - mu) / sigma**2
+        base_sigma = -1.0 / sigma + (x - mu) ** 2 / sigma**3
+        expected_mu = base_mu
+        expected_tau = -base_sigma * sigma**3 / 2.0
+        expected = np.stack([expected_mu, expected_tau], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_exponential_parametrization(self):
+        """Test SCORE for exponential parametrization via chain rule."""
+        # Parameters for N(2, 1.5): a = -1/(2*1.5^2) = -0.222..., b = 2/1.5^2 = 0.888...
+        a = -1.0 / (2 * 1.5**2)
+        b = 2.0 / 1.5**2
+        dist = self.normal_family(parametrization_name="exponential", a=a, b=b)
+
+        x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        # Base gradient
+        mu = 2.0
+        sigma = 1.5
+        base_mu = (x - mu) / sigma**2
+        base_sigma = -1.0 / sigma + (x - mu) ** 2 / sigma**3
+
+        # Jacobian: mu = -b/(2a), sigma = sqrt(-1/(2a))
+        dmu_da = b / (2 * a * a)
+        dmu_db = -1.0 / (2 * a)
+        dsigma_da = 1.0 / (2 * np.sqrt(-2 * a**3))
+        dsigma_db = 0.0
+
+        expected_a = base_mu * dmu_da + base_sigma * dsigma_da
+        expected_b = base_mu * dmu_db + base_sigma * dsigma_db
+        expected = np.stack([expected_a, expected_b], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_numerical_derivative(self):
+        """Compare analytical SCORE with numerical gradient for one parametrization."""
+        mu, sigma = 2.0, 1.5
+        dist = self.normal_family(mu=mu, sigma=sigma)
+        x = 1.0
+
+        def logpdf_mu(mu_val: float) -> float:
+            return norm.logpdf(x, loc=mu_val, scale=sigma)
+
+        def logpdf_sigma(sigma_val: float) -> float:
+            return norm.logpdf(x, loc=mu, scale=sigma_val)
+
+        eps = 1e-6
+        grad_mu_num = (logpdf_mu(mu + eps) - logpdf_mu(mu - eps)) / (2 * eps)
+        grad_sigma_num = (logpdf_sigma(sigma + eps) - logpdf_sigma(sigma - eps)) / (2 * eps)
+
+        grad = dist.family.score(dist.parametrization, np.array([x]))
+        np.testing.assert_allclose(grad[0, 0], grad_mu_num, rtol=1e-5)
+        np.testing.assert_allclose(grad[0, 1], grad_sigma_num, rtol=1e-5)
+
 
 class TestNormalFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions."""

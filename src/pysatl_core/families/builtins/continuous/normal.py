@@ -232,6 +232,67 @@ def configure_normal_family() -> None:
         """Support of normal distribution"""
         return ContinuousSupport()
 
+    def _base_score(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the base parametrization.
+
+        The base parametrization uses parameters mu (mean) and sigma (standard deviation).
+        The returned gradient has shape (..., 2) with the last axis corresponding
+        to [d(log f)/d(mu), d(log f)/d(sigma)].
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Base parametrization instance (must be _MeanStd).
+        x : NumericArray
+            Points at which the gradient is evaluated.
+
+        Returns
+        -------
+        NumericArray
+            Gradient array of shape (..., 2).
+        """
+        params = cast(_MeanStd, parameters)
+        mu = params.mu
+        sigma = params.sigma
+
+        z = (x - mu) / sigma
+
+        grad_mu = z / sigma
+        grad_sigma = (z * z - 1) / sigma
+        return np.stack([grad_mu, grad_sigma], axis=-1)
+
+    def score(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score for any parametrization of the normal family.
+
+        For the base parametrization ("meanStd") the base score is returned directly.
+        For other parametrizations the parameters are transformed to the base
+        representation, the base gradient is computed, and then transformed back
+        using the parametrization's `gradient_transform` method.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance (any of the normal's parametrizations).
+        x : NumericArray
+            Points at which the gradient is evaluated.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape is (..., d) where d is the number of parameters of that class.
+        """
+        x_arr = np.atleast_1d(x)
+
+        if parameters.name == "meanStd":
+            return _base_score(parameters, x_arr)
+        base_params = parameters.transform_to_base_parametrization()
+        base_grad = _base_score(base_params, x_arr)
+        result = parameters.gradient_transform(base_grad)
+        return result
+
     Normal = ParametricFamily(
         name=FamilyName.NORMAL,
         distr_type=UnivariateContinuous,
@@ -248,6 +309,7 @@ def configure_normal_family() -> None:
             CharacteristicName.KURT: kurt_func,
         },
         support_by_parametrization=_support,
+        score=score,
     )
     Normal.__doc__ = NORMAL_DOC
 
@@ -305,6 +367,29 @@ def configure_normal_family() -> None:
             sigma = math.sqrt(self.var)
             return _MeanStd(mu=self.mu, sigma=sigma)
 
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameters (mu, sigma) to (mu, var).
+
+            The transformation is: var = sigma^2  →  d(var) = 2 sigma d(sigma).
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to (mu, sigma), shape (..., 2).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to (mu, var), shape (..., 2).
+            """
+            sigma = np.sqrt(self.var)
+
+            grad_mu = grad_base[..., 0]
+            grad_sigma = grad_base[..., 1]
+            grad_var = grad_sigma / (2 * sigma)
+            return np.stack([grad_mu, grad_var], axis=-1)
+
     @parametrization(family=Normal, name="meanPrec")
     class _MeanPrec(Parametrization):
         """
@@ -338,6 +423,30 @@ def configure_normal_family() -> None:
             sigma = math.sqrt(1 / self.tau)
             return _MeanStd(mu=self.mu, sigma=sigma)
 
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameters (mu, sigma) to (mu, tau).
+
+            The transformation is: tau = 1/sigma^2  →  d(tau) = -2 / sigma^3 d(sigma).
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to (mu, sigma), shape (..., 2).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to (mu, tau), shape (..., 2).
+            """
+
+            sigma = 1.0 / np.sqrt(self.tau)
+
+            grad_mu = grad_base[..., 0]
+            grad_sigma = grad_base[..., 1]
+            grad_tau = -grad_sigma * sigma**3 / 2.0
+            return np.stack([grad_mu, grad_tau], axis=-1)
+
     @parametrization(family=Normal, name="exponential")
     class _Exp(Parametrization):
         """
@@ -363,7 +472,7 @@ def configure_normal_family() -> None:
             Returns
             -------
             float
-                Normalization constant
+            Normalization constant
             """
             return (self.b**2) / (4 * self.a) - (1 / 2) * math.log(math.pi / (-self.a))
 
@@ -383,5 +492,37 @@ def configure_normal_family() -> None:
             mu = -self.b / (2 * self.a)
             sigma = math.sqrt(-1 / (2 * self.a))
             return _MeanStd(mu=mu, sigma=sigma)
+
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameters (mu, sigma) to (a, b).
+
+            The transformation is:
+                mu = -b/(2a),  sigma = sqrt(-1/(2a)).
+            The Jacobian is applied via the chain rule.
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to (mu, sigma), shape (..., 2).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to (a, b), shape (..., 2).
+            """
+            a = self.a
+            b = self.b
+
+            dmu_da = b / (2 * a * a)
+            dmu_db = -1 / (2 * a)
+            dsigma_da = 1 / (2 * np.sqrt(-2 * a**3))
+            dsigma_db = 0.0
+
+            grad_mu = grad_base[..., 0]
+            grad_sigma = grad_base[..., 1]
+            grad_a = grad_mu * dmu_da + grad_sigma * dsigma_da
+            grad_b = grad_mu * dmu_db + grad_sigma * dsigma_db
+            return np.stack([grad_a, grad_b], axis=-1)
 
     ParametricFamilyRegister.register(Normal)

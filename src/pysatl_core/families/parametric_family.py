@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
+        NumericArray,
         ParametrizationName,
     )
 
@@ -101,6 +102,7 @@ class ParametricFamily:
         distr_parametrizations: list[ParametrizationName],
         distr_characteristics: CharacteristicsMap,
         support_by_parametrization: SupportArg = None,
+        score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
     ):
         if not distr_parametrizations:
             raise ValueError(
@@ -116,6 +118,7 @@ class ParametricFamily:
         )
 
         self._support_resolver: SupportResolver = support_by_parametrization or (lambda _p: None)
+        self._score = score
 
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
@@ -417,5 +420,26 @@ class ParametricFamily:
         from pysatl_core.families.parametrizations import parametrization as _param_deco
 
         return _param_deco(family=self, name=name)
+
+    def score(self, parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the given parameters.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance (any parametrization of the family).
+        x : NumericArray
+            Points at which to evaluate the gradient.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape (..., d) where d is the number of parameters.
+        """
+        if self._score is None:
+            raise NotImplementedError(f"Family {self.name} does not implement score method")
+        return self._score(parameters, x)
 
     __call__ = distribution
