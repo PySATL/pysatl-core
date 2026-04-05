@@ -285,6 +285,8 @@ class CharacteristicName(StrEnum):
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
+    LPDF = "lpdf"  # unimplemented in graph yet
+    SCORE = "score"  # unimplemented in graph yet
     CF = "cf"  # unimplemented in graph yet
     SF = "sf"  # unimplemented in graph yet
     MEAN = "mean"  # unimplemented in graph yet
