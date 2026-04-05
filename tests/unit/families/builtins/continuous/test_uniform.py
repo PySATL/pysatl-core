@@ -244,6 +244,79 @@ class TestUniformFamily(BaseDistributionTest):
 
         assert dist.support.shape == ContinuousSupportShape1D.BOUNDED_INTERVAL
 
+    def test_score_standard_parametrization(self):
+        """Test SCORE for standard parametrization against analytical formula."""
+        a, b = 2.0, 5.0
+        dist = self.uniform_family(lower_bound=a, upper_bound=b)
+        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        width = b - a
+        inside = (x >= a) & (x <= b)
+        expected = np.stack(
+            [np.where(inside, 1.0 / width, 0.0), np.where(inside, -1.0 / width, 0.0)], axis=-1
+        )
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_meanWidth_parametrization(self):
+        """Test SCORE for meanWidth parametrization via chain rule."""
+        mean, width = 3.5, 3.0  # corresponds to a=2, b=5
+        dist = self.uniform_family(parametrization_name="meanWidth", mean=mean, width=width)
+        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        a, b = 2.0, 5.0
+        inside = (x >= a) & (x <= b)
+        base_grad_a = np.where(inside, 1.0 / 3.0, 0.0)
+        base_grad_b = np.where(inside, -1.0 / 3.0, 0.0)
+        # Transform to (mean, width)
+        expected_mean = 0.5 * (base_grad_a + base_grad_b)
+        expected_width = -base_grad_a + base_grad_b
+        expected = np.stack([expected_mean, expected_width], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_minRange_parametrization(self):
+        """Test SCORE for minRange parametrization via chain rule."""
+        minimum, range_val = 2.0, 3.0  # a=2, b=5
+        dist = self.uniform_family(
+            parametrization_name="minRange", minimum=minimum, range_val=range_val
+        )
+        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        a, b = 2.0, 5.0
+        inside = (x >= a) & (x <= b)
+        base_grad_a = np.where(inside, 1.0 / 3.0, 0.0)
+        base_grad_b = np.where(inside, -1.0 / 3.0, 0.0)
+        # Transform to (minimum, range_val)
+        expected_min = base_grad_a
+        expected_range = -base_grad_a + base_grad_b
+        expected = np.stack([expected_min, expected_range], axis=-1)
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_numerical_derivative(self):
+        """Compare analytical SCORE with numerical gradient for standard parametrization."""
+        a, b = 2.0, 5.0
+        dist = self.uniform_family(lower_bound=a, upper_bound=b)
+        x = 3.5
+
+        def logpdf_a(a_val: float) -> float:
+            return np.log(1.0 / (b - a_val)) if (a_val < b and x >= a_val and x <= b) else -np.inf
+
+        def logpdf_b(b_val: float) -> float:
+            return np.log(1.0 / (b_val - a)) if (a < b_val and x >= a and x <= b_val) else -np.inf
+
+        eps = 1e-6
+        grad_a_num = (logpdf_a(a + eps) - logpdf_a(a - eps)) / (2 * eps)
+        grad_b_num = (logpdf_b(b + eps) - logpdf_b(b - eps)) / (2 * eps)
+
+        grad = dist.family.score(dist.parametrization, x)  # shape (1, 2)
+        np.testing.assert_allclose(grad[0, 0], grad_a_num, rtol=1e-5)
+        np.testing.assert_allclose(grad[0, 1], grad_b_num, rtol=1e-5)
+
 
 class TestUniformFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions for uniform distribution."""

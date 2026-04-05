@@ -27,6 +27,7 @@ from pysatl_core.types import (
     ComplexArray,
     FamilyName,
     NumericArray,
+    NumericLike,
     UnivariateContinuous,
 )
 
@@ -333,6 +334,38 @@ def configure_uniform_family() -> None:
             half_width = self.width / 2
             return _Standard(lower_bound=self.mean - half_width, upper_bound=self.mean + half_width)
 
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameters (a, b) to (mean, width).
+
+            The transformation is:
+                mean = (a + b) / 2
+                width = b - a
+
+            The Jacobian matrix:
+                d(mean)/da = 0.5,   d(mean)/db = 0.5
+                d(width)/da = -1,    d(width)/db = 1
+
+            Hence:
+                grad_mean = 0.5 * (grad_a + grad_b)
+                grad_width = -grad_a + grad_b
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to (a, b), shape (..., 2).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to (mean, width), shape (..., 2).
+            """
+            grad_a = grad_base[..., 0]
+            grad_b = grad_base[..., 1]
+            grad_mean = 0.5 * (grad_a + grad_b)
+            grad_width = -grad_a + grad_b
+            return np.stack([grad_mean, grad_width], axis=-1)
+
     @parametrization(family=Uniform, name="minRange")
     class _MinRange(Parametrization):
         """
@@ -364,5 +397,102 @@ def configure_uniform_family() -> None:
                 Standard parametrization instance
             """
             return _Standard(lower_bound=self.minimum, upper_bound=self.minimum + self.range_val)
+
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameters (a, b) to (minimum, range_val).
+
+            The transformation is:
+                minimum = a
+                range_val = b - a
+
+            The Jacobian matrix:
+                d(minimum)/da = 1,    d(minimum)/db = 0
+                d(range_val)/da = -1,  d(range_val)/db = 1
+
+            Hence:
+                grad_minimum = grad_a
+                grad_range = -grad_a + grad_b
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to (a, b), shape (..., 2).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to (minimum, range_val), shape (..., 2).
+            """
+            grad_a = grad_base[..., 0]
+            grad_b = grad_base[..., 1]
+            grad_minimum = grad_a
+            grad_range = -grad_a + grad_b
+            return np.stack([grad_minimum, grad_range], axis=-1)
+
+    def _base_score(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the base
+        parametrization (lower_bound, upper_bound).
+
+        For uniform distribution on [a, b] with a < b, log‑PDF is:
+            log f(x) = -log(b - a)   for a ≤ x ≤ b, else -∞.
+
+        The gradient with respect to a and b (where defined, i.e., inside the support) is:
+            ∂/∂a log f =  1/(b - a)
+            ∂/∂b log f = -1/(b - a)
+
+        For points outside the support, the gradient is set to 0 (since density is zero,
+        but the score is typically considered undefined; we return 0 for numerical safety).
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Base parametrization instance (_Standard) with fields lower_bound, upper_bound.
+        x : NumericArray
+            Points at which to evaluate the gradient.
+
+        Returns
+        -------
+        NumericArray
+            Gradient array of shape (..., 2) where last axis corresponds to
+            [d(log f)/d(lower_bound), d(log f)/d(upper_bound)].
+        """
+        params = cast(_Standard, parameters)
+        a = params.lower_bound
+        b = params.upper_bound
+        width = b - a
+
+        inside = (x >= a) & (x <= b)
+        grad_a = np.where(inside, 1.0 / width, 0.0)
+        grad_b = np.where(inside, -1.0 / width, 0.0)
+        return np.stack([grad_a, grad_b], axis=-1)
+
+    def score(parameters: Parametrization, x: NumericLike) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for any parametrization of the uniform family.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance (standard, meanWidth, or minRange).
+        x : NumericLike
+            Points at which the gradient is evaluated.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape is (..., d), where d = 2 for all uniform parametrizations.
+        """
+        x_arr = np.atleast_1d(x)
+
+        if parameters.name == "standard":
+            return _base_score(parameters, x_arr)
+        base_params = parameters.transform_to_base_parametrization()
+        base_grad = _base_score(base_params, x_arr)
+        return parameters.gradient_transform(base_grad)
+
+    Uniform.score = score  # type: ignore[method-assign]
 
     ParametricFamilyRegister.register(Uniform)

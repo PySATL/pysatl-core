@@ -219,6 +219,45 @@ class TestExponentialFamily(BaseDistributionTest):
 
         assert dist.support.shape == ContinuousSupportShape1D.RAY_RIGHT
 
+    def test_score_rate_parametrization(self):
+        """Test SCORE for rate parametrization against analytical formula."""
+        lam = 0.5
+        dist = self.exponential_family(lambda_=lam)
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        expected = (1.0 / lam - x)[..., np.newaxis]  # shape (n,1)
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_scale_parametrization(self):
+        """Test SCORE for scale parametrization via chain rule."""
+        beta = 2.0  # lambda = 0.5
+        dist = self.exponential_family(parametrization_name="scale", beta=beta)
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        grad = dist.family.score(dist.parametrization, x)
+
+        lam = 1.0 / beta
+        base_grad = 1.0 / lam - x
+        expected = -base_grad / (lam * lam)
+        expected = expected[..., np.newaxis]
+
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
+    def test_score_numerical_derivative(self):
+        """Compare analytical SCORE with numerical gradient for rate parametrization."""
+        lam = 0.5
+        dist = self.exponential_family(lambda_=lam)
+        x = 1.0
+
+        def logpdf_lam(lam_val: float) -> float:
+            return np.log(lam_val) - lam_val * x if x >= 0 else -np.inf
+
+        eps = 1e-6
+        grad_num = (logpdf_lam(lam + eps) - logpdf_lam(lam - eps)) / (2 * eps)
+
+        grad = dist.family.score(dist.parametrization, x)  # shape (1, 1)
+        np.testing.assert_allclose(grad[0, 0], grad_num, rtol=1e-5)
+
 
 class TestExponentialFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions for exponential distribution."""

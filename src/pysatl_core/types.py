@@ -106,6 +106,9 @@ type Number = NumPyNumber | int | float
 type NumericArray = NDArray[NumPyNumber]
 """Type alias for numeric arrays."""
 
+type NumericLike = NumericArray | Number
+"""Type alias for numeric array or scalar number."""
+
 type ComplexArray = NDArray[np.complexfloating[Any]]
 """Type alias for complex arrays."""
 
