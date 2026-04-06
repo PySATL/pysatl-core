@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import numpy.typing as npt
 
-from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
 from pysatl_core.distributions.support import ExplicitTableDiscreteSupport
+from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 from pysatl_core.sampling.unuran.core._unuran_sampler import (
     UnuranSamplerInitializer,
     ensure_default_urng,

@@ -100,10 +100,8 @@ class Distribution(ABC):
         computation_strategy : ComputationStrategy or None, default=None
             Computation strategy instance. If omitted, default strategy is used.
         """
-        from pysatl_core.distributions.strategies import (
-            DefaultComputationStrategy,
-            DefaultSamplingUnivariateStrategy,
-        )
+        from pysatl_core.distributions.strategies import DefaultComputationStrategy
+        from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 
         self._distribution_type = distribution_type
         normalized_analytical: dict[
