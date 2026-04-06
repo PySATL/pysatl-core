@@ -16,7 +16,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from typing import TYPE_CHECKING, Any, Final
 
-from pysatl_core.distributions.strategies import DefaultSamplingUnivariateStrategy
+from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 from pysatl_core.sampling.unuran.core.unuran_sampler import DefaultUnuranSampler
 from pysatl_core.sampling.unuran.method_config import (
     UnuranMethodConfig,
