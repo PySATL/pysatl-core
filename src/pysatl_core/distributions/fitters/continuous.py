@@ -4,7 +4,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov, Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy import integrate as _sp_integrate, optimize as _sp_optimize
@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 
 
 def fit_pdf_to_cdf_1C(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``pdf -> cdf`` conversion via segment-wise numerical integration.
@@ -52,15 +54,16 @@ def fit_pdf_to_cdf_1C(
             return maybe_unwrap_scalar(x_arr.copy())
 
         def _pdf_scalar(t: float) -> float:
-            return float(
-                np.asarray(pdf_func(np.array([t]), **options), dtype=float).flat[0]
-            )
+            return float(np.asarray(pdf_func(np.array([t]), **options), dtype=float).flat[0])
 
         order = np.argsort(x_arr)
         x_sorted = x_arr[order]
 
         base_val, _ = _sp_integrate.quad(
-            _pdf_scalar, float("-inf"), float(x_sorted[0]), limit=limit,
+            _pdf_scalar,
+            float("-inf"),
+            float(x_sorted[0]),
+            limit=limit,
         )
 
         n = x_sorted.size
@@ -109,7 +112,9 @@ FITTER_PDF_TO_CDF_1C = FitterDescriptor(
 
 
 def fit_cdf_to_pdf_1C(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``cdf -> pdf`` conversion via five-point central finite difference.
@@ -174,7 +179,9 @@ FITTER_CDF_TO_PDF_1C = FitterDescriptor(
 
 
 def fit_cdf_to_ppf_1C(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``cdf -> ppf`` conversion via vectorised bisection.
@@ -241,17 +248,30 @@ FITTER_CDF_TO_PPF_1C = FitterDescriptor(
     sources=[CharacteristicName.CDF],
     fitter=fit_cdf_to_ppf_1C,
     options=(
-        FitterOption(name="max_iter", type=int, default=60,
-                     description="Maximum bisection iterations.",
-                     validate=lambda v: v > 0),
-        FitterOption(name="x_tol", type=float, default=1e-10,
-                     description="Early-stop tolerance on bracket width.",
-                     validate=lambda v: v > 0),
-        FitterOption(name="eps", type=float, default=1e-6,
-                     description="Tail probability threshold for bound estimation.",
-                     validate=lambda v: 0 < v < 0.5),
-        FitterOption(name="x0", type=float, default=0.0,
-                     description="Starting point for bound search."),
+        FitterOption(
+            name="max_iter",
+            type=int,
+            default=60,
+            description="Maximum bisection iterations.",
+            validate=lambda v: v > 0,
+        ),
+        FitterOption(
+            name="x_tol",
+            type=float,
+            default=1e-10,
+            description="Early-stop tolerance on bracket width.",
+            validate=lambda v: v > 0,
+        ),
+        FitterOption(
+            name="eps",
+            type=float,
+            default=1e-6,
+            description="Tail probability threshold for bound estimation.",
+            validate=lambda v: 0 < v < 0.5,
+        ),
+        FitterOption(
+            name="x0", type=float, default=0.0, description="Starting point for bound search."
+        ),
     ),
     tags=frozenset({"continuous", "univariate"}),
     priority=0,
@@ -260,7 +280,9 @@ FITTER_CDF_TO_PPF_1C = FitterDescriptor(
 
 
 def fit_ppf_to_cdf_1C(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``ppf -> cdf`` conversion via root inversion (``scipy.optimize.brentq``).
@@ -297,9 +319,10 @@ def fit_ppf_to_cdf_1C(
 
             def _single(xi: float) -> float:
                 def f(q: float) -> float:
-                    return float(
-                        np.asarray(ppf_func(np.array([q]), **options), dtype=float).flat[0]
-                    ) - xi
+                    return (
+                        float(np.asarray(ppf_func(np.array([q]), **options), dtype=float).flat[0])
+                        - xi
+                    )
 
                 try:
                     return float(
@@ -308,9 +331,7 @@ def fit_ppf_to_cdf_1C(
                 except ValueError:
                     return float("nan")
 
-            result[interior] = np.clip(
-                np.frompyfunc(_single, 1, 1)(x_in).astype(float), 0.0, 1.0
-            )
+            result[interior] = np.clip(np.frompyfunc(_single, 1, 1)(x_in).astype(float), 0.0, 1.0)
 
         return maybe_unwrap_scalar(result)
 
@@ -327,15 +348,27 @@ FITTER_PPF_TO_CDF_1C = FitterDescriptor(
     sources=[CharacteristicName.PPF],
     fitter=fit_ppf_to_cdf_1C,
     options=(
-        FitterOption(name="q_lowest", type=float, default=1e-12,
-                     description="Left bracket for root search.",
-                     validate=lambda v: 0 < v < 1),
-        FitterOption(name="q_highest", type=float, default=1.0 - 1e-12,
-                     description="Right bracket for root search.",
-                     validate=lambda v: 0 < v < 1),
-        FitterOption(name="max_iter", type=int, default=256,
-                     description="Maximum brentq iterations per point.",
-                     validate=lambda v: v > 0),
+        FitterOption(
+            name="q_lowest",
+            type=float,
+            default=1e-12,
+            description="Left bracket for root search.",
+            validate=lambda v: 0 < v < 1,
+        ),
+        FitterOption(
+            name="q_highest",
+            type=float,
+            default=1.0 - 1e-12,
+            description="Right bracket for root search.",
+            validate=lambda v: 0 < v < 1,
+        ),
+        FitterOption(
+            name="max_iter",
+            type=int,
+            default=256,
+            description="Maximum brentq iterations per point.",
+            validate=lambda v: v > 0,
+        ),
     ),
     tags=frozenset({"continuous", "univariate"}),
     priority=0,

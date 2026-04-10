@@ -51,7 +51,6 @@ class FitterOption:
     description: str = ""
     validate: Callable[[Any], bool] | None = None
 
-
     def resolve(self, kwargs: dict[str, Any]) -> Any:
         """
         Extract and validate the option from *kwargs*.
@@ -60,20 +59,19 @@ class FitterOption:
         ----------
         kwargs : dict[str, Any]
             Caller-supplied keyword arguments.  The key matching
-            :pyattr:`name` is consumed (popped) if present.
+            `name` is consumed (popped) if present.
 
         Returns
         -------
         Any
-            Resolved value (caller-supplied or default), cast to
-            :pyattr:`type`.
+            Resolved value (caller-supplied or default), cast to `type`.
 
         Raises
         ------
         ValueError
-            If the resolved value fails the :pyattr:`validate` predicate.
+            If the resolved value fails the `validate` predicate.
         TypeError
-            If the value cannot be cast to :pyattr:`type`.
+            If the value cannot be cast to `type`.
         """
         raw = kwargs.pop(self.name, self.default)
         try:
@@ -83,9 +81,7 @@ class FitterOption:
                 f"Option '{self.name}': cannot convert {raw!r} to {self.type.__name__}"
             ) from exc
         if self.validate is not None and not self.validate(value):
-            raise ValueError(
-                f"Option '{self.name}': value {value!r} failed validation."
-            )
+            raise ValueError(f"Option '{self.name}': value {value!r} failed validation.")
         return value
 
 
@@ -135,16 +131,15 @@ class FitterDescriptor:
     priority: int = 0
     description: str = ""
 
-
     def to_computation_method(self) -> ComputationMethod[NumericArray, NumericArray]:
         """
         Build a :class:`ComputationMethod` from this descriptor.
 
-        When :pyattr:`cacheable` is ``True``, the callable is placed in the
+        When `cacheable` is ``True``, the callable is placed in the
         ``fitter`` slot of :class:`ComputationMethod` — the strategy layer
         will call it once and cache the resulting ``FittedComputationMethod``.
 
-        When :pyattr:`cacheable` is ``False``, the callable is placed in the
+        When `cacheable` is ``False``, the callable is placed in the
         ``evaluator`` slot — the strategy layer calls it directly on every
         query without caching.
 

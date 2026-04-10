@@ -114,9 +114,7 @@ class FitterRegistry:
         key = (target, tuple(sources))
         candidates = self._by_key.get(key, [])
         filtered = [
-            d
-            for d in candidates
-            if required_tags is None or d.tags.issuperset(required_tags)
+            d for d in candidates if required_tags is None or d.tags.issuperset(required_tags)
         ]
         return sorted(filtered, key=lambda d: d.priority, reverse=True)
 

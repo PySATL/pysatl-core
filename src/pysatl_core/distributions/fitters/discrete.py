@@ -4,7 +4,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov, Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 
 def fit_pmf_to_cdf_1D(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``pmf -> cdf`` conversion for discrete distributions.
@@ -118,9 +120,10 @@ FITTER_PMF_TO_CDF_1D = FitterDescriptor(
 )
 
 
-
 def fit_cdf_to_pmf_1D(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``cdf -> pmf`` conversion for discrete distributions.
@@ -191,7 +194,9 @@ FITTER_CDF_TO_PMF_1D = FitterDescriptor(
 
 
 def fit_cdf_to_ppf_1D(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``cdf -> ppf`` conversion for discrete distributions.
@@ -272,7 +277,9 @@ FITTER_CDF_TO_PPF_1D = FitterDescriptor(
 
 
 def fit_ppf_to_cdf_1D(
-    distribution: Distribution, /, **kwargs: Any,
+    distribution: Distribution,
+    /,
+    **kwargs: Any,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``ppf -> cdf`` conversion for discrete distributions.
