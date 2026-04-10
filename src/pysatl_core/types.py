@@ -106,6 +106,9 @@ type Number = NumPyNumber | int | float
 type NumericArray = NDArray[NumPyNumber]
 """Type alias for numeric arrays."""
 
+type NumericLike = NumericArray | Number
+"""Type alias for numeric array or scalar number."""
+
 type ComplexArray = NDArray[np.complexfloating[Any]]
 """Type alias for complex arrays."""
 
@@ -285,6 +288,7 @@ class CharacteristicName(StrEnum):
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
+    LPDF = "lpdf"  # unimplemented in graph yet
     CF = "cf"  # unimplemented in graph yet
     SF = "sf"  # unimplemented in graph yet
     MEAN = "mean"  # unimplemented in graph yet

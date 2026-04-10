@@ -4,7 +4,10 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 from pysatl_core.families import (
     ParametricFamily,
@@ -12,7 +15,7 @@ from pysatl_core.families import (
     ParametrizationConstraint,
     constraint,
 )
-from pysatl_core.types import UnivariateContinuous
+from pysatl_core.types import NumericArray, UnivariateContinuous
 from tests.unit.families.test_basic import TestBaseFamily
 
 
@@ -73,3 +76,31 @@ class TestParametrizationAPI(TestBaseFamily):
         base_from_alt = family.to_base(alt_params)
         assert isinstance(base_from_alt, BaseCls)
         assert base_from_alt.value == 3.0  # type: ignore[attr-defined]
+
+    def test_gradient_transform_identity_for_base(self) -> None:
+        """Test that base parametrization returns grad_base unchanged."""
+
+        @dataclass
+        class DummyParam(Parametrization):
+            value: float
+
+        params = DummyParam(value=1.0)
+        grad_base: NumericArray = np.array([[1.0, 2.0], [3.0, 4.0]])
+        result = params.gradient_transform(grad_base)
+        np.testing.assert_array_equal(result, grad_base)
+
+    def test_gradient_transform_can_be_overridden(self) -> None:
+        """Test that a non-base parametrization can override gradient_transform."""
+
+        @dataclass
+        class ScalingParam(Parametrization):
+            scale: float
+
+            def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+                return grad_base * self.scale
+
+        params = ScalingParam(scale=2.0)
+        grad_base: NumericArray = np.array([1.0, 2.0, 3.0])
+        result = params.gradient_transform(grad_base)
+        expected: NumericArray = grad_base * 2.0
+        np.testing.assert_array_equal(result, expected)

@@ -27,6 +27,7 @@ from pysatl_core.types import (
     ComplexArray,
     FamilyName,
     NumericArray,
+    NumericLike,
     UnivariateContinuous,
 )
 
@@ -162,6 +163,28 @@ def configure_exponential_family() -> None:
         )
         return cast(ComplexArray, result)
 
+    def lpdf(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Logarithm of the probability density function for exponential distribution.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+        Distribution parameters object with field:
+            - lambda_: float (rate parameter)
+        x : NumericArray
+            Points at which to evaluate the log-probability density function
+
+        Returns
+        -------
+        NumericArray
+            Log-probability density values at points x.
+            For x < 0 returns -np.inf.
+        """
+        parameters = cast(_Rate, parameters)
+        lambda_ = parameters.lambda_
+        return np.where(x >= 0, np.log(lambda_) - lambda_ * x, -np.inf)
+
     def mean_func(parameters: Parametrization) -> float:
         """Mean of exponential distribution."""
         parameters = cast(_Rate, parameters)
@@ -210,6 +233,7 @@ def configure_exponential_family() -> None:
             CharacteristicName.CDF: cdf,
             CharacteristicName.PPF: ppf,
             CharacteristicName.CF: char_func,
+            CharacteristicName.LPDF: lpdf,
             CharacteristicName.MEAN: mean_func,
             CharacteristicName.VAR: var_func,
             CharacteristicName.SKEW: skew_func,
@@ -265,5 +289,87 @@ def configure_exponential_family() -> None:
                 Rate parametrization instance
             """
             return _Rate(lambda_=1.0 / self.beta)
+
+        def gradient_transform(self, grad_base: NumericArray) -> NumericArray:
+            """
+            Transform gradient from base parameter (rate λ) to scale β = 1/λ.
+
+            The transformation is: β = 1/λ.
+            Derivative: dβ/dλ = -1/λ².
+            Hence: grad_β = grad_λ * (-1/λ²) = -grad_λ / λ².
+
+            Parameters
+            ----------
+            grad_base : NumericArray
+                Gradient with respect to λ, shape (..., 1).
+
+            Returns
+            -------
+            NumericArray
+                Gradient with respect to β, shape (..., 1).
+            """
+            lam = 1.0 / self.beta  # λ = 1/β
+            grad_lam = grad_base[..., 0]
+            grad_beta = -grad_lam / (lam * lam)
+            return grad_beta[..., np.newaxis].astype(np.float64)
+
+    def _base_score(parameters: Parametrization, x: NumericArray) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the base parametrization (rate λ).
+
+        For exponential distribution with rate λ > 0, log‑PDF is:
+            log f(x) = log λ - λ x   for x ≥ 0, else -∞.
+
+        The derivative with respect to λ is:
+            ∂/∂λ log f = 1/λ - x   (for x ≥ 0).
+
+        For points x < 0 the density is zero; we return 0 for numerical stability
+        (though the score is technically undefined there).
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Base parametrization instance (_Rate) with field lambda_.
+        x : NumericArray
+            Points at which to evaluate the gradient.
+
+        Returns
+        -------
+        NumericArray
+            Gradient array of shape (..., 1) where the last axis corresponds to
+            d(log f)/d(lambda_).
+        """
+        params = cast(_Rate, parameters)
+        lam = params.lambda_
+        inside = x >= 0
+        grad = np.where(inside, 1.0 / lam - x, 0.0)
+        return grad[..., np.newaxis]  # shape (..., 1)
+
+    def score(parameters: Parametrization, x: NumericLike) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for any parametrization of the exponential family.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance (rate or scale).
+        x : NumericLike
+            Points at which the gradient is evaluated.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape is (..., 1) for both rate and scale.
+        """
+        x_arr = np.atleast_1d(x)
+
+        if parameters.name == "rate":
+            return _base_score(parameters, x_arr)
+        base_params = parameters.transform_to_base_parametrization()
+        base_grad = _base_score(base_params, x_arr)
+        return parameters.gradient_transform(base_grad)
+
+    Exponential.score = score  # type: ignore[method-assign]
 
     ParametricFamilyRegister.register(Exponential)

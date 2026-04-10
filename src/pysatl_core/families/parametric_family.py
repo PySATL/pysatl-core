@@ -36,6 +36,8 @@ if TYPE_CHECKING:
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
+        NumericArray,
+        NumericLike,
         ParametrizationName,
     )
 
@@ -417,5 +419,24 @@ class ParametricFamily:
         from pysatl_core.families.parametrizations import parametrization as _param_deco
 
         return _param_deco(family=self, name=name)
+
+    def score(self, parameters: Parametrization, x: NumericLike) -> NumericArray:
+        """
+        Compute the score (gradient of log‑PDF) for the given parameters.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parametrization instance (any parametrization of the family).
+        x : NumericArray
+            Points at which to evaluate the gradient.
+
+        Returns
+        -------
+        NumericArray
+            Gradient with respect to the parameters of the given parametrization.
+            Shape (..., d) where d is the number of parameters.
+        """
+        raise NotImplementedError(f"Family {self.name} does not implement score method")
 
     __call__ = distribution
