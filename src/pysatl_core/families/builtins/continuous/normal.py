@@ -11,7 +11,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import numpy as np
 from scipy.special import erf, erfinv
@@ -31,9 +31,6 @@ from pysatl_core.types import (
     NumericArray,
     UnivariateContinuous,
 )
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 def configure_normal_family() -> None:
@@ -168,21 +165,21 @@ def configure_normal_family() -> None:
         mu = parameters.mu
         return cast(ComplexArray, np.exp(1j * mu * t - 0.5 * (sigma**2) * (t**2)))
 
-    def mean_func(parameters: Parametrization, _: Any) -> float:
+    def mean_func(parameters: Parametrization) -> float:
         """Mean of normal distribution."""
         parameters = cast(_MeanStd, parameters)
         return parameters.mu
 
-    def var_func(parameters: Parametrization, _: Any) -> float:
+    def var_func(parameters: Parametrization) -> float:
         """Variance of normal distribution."""
         parameters = cast(_MeanStd, parameters)
         return parameters.sigma**2
 
-    def skew_func(_1: Parametrization, _2: Any) -> int:
+    def skew_func() -> int:
         """Skewness of normal distribution (always 0)."""
         return 0
 
-    def kurt_func(_1: Parametrization, _2: Any, excess: bool = False) -> int:
+    def kurt_func(*, excess: bool = False) -> int:
         """Raw or excess kurtosis of normal distribution.
 
         Parameters

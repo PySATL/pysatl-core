@@ -74,27 +74,27 @@ class TestExponentialFamily(BaseDistributionTest):
         """Test moment calculations."""
         # Mean
         mean_func = self.exponential_dist_example.query_method(CharacteristicName.MEAN)
-        assert abs(mean_func(None) - 2.0) < self.CALCULATION_PRECISION
+        assert abs(mean_func() - 2.0) < self.CALCULATION_PRECISION
 
         # Variance
         var_func = self.exponential_dist_example.query_method(CharacteristicName.VAR)
-        assert abs(var_func(None) - 4.0) < self.CALCULATION_PRECISION
+        assert abs(var_func() - 4.0) < self.CALCULATION_PRECISION
 
         # Skewness
         skew_func = self.exponential_dist_example.query_method(CharacteristicName.SKEW)
-        assert abs(skew_func(None) - 2.0) < self.CALCULATION_PRECISION
+        assert abs(skew_func() - 2.0) < self.CALCULATION_PRECISION
 
     def test_kurtosis_calculation(self):
         """Test kurtosis calculation with excess parameter."""
         kurt_func = self.exponential_dist_example.query_method(CharacteristicName.KURT)
 
-        raw_kurt = kurt_func(None)
+        raw_kurt = kurt_func()
         assert abs(raw_kurt - 9.0) < self.CALCULATION_PRECISION
 
-        excess_kurt = kurt_func(None, excess=True)
+        excess_kurt = kurt_func(excess=True)
         assert abs(excess_kurt - 6.0) < self.CALCULATION_PRECISION
 
-        raw_kurt_explicit = kurt_func(None, excess=False)
+        raw_kurt_explicit = kurt_func(excess=False)
         assert abs(raw_kurt_explicit - 9.0) < self.CALCULATION_PRECISION
 
     @pytest.mark.parametrize(

@@ -11,24 +11,24 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Protocol, cast
-
-import numpy as np
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from pysatl_core.distributions.registry import characteristic_registry
-from pysatl_core.types import CharacteristicName, NumericArray
+from pysatl_core.types import Method, NumericArray
 
 if TYPE_CHECKING:
-    from typing import Any
+    from collections.abc import Mapping
 
-    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+    from pysatl_core.distributions.computation import (
+        AnalyticalComputation,
+        FittedComputationMethod,
+    )
     from pysatl_core.distributions.distribution import Distribution
-    from pysatl_core.types import GenericCharacteristicName
+    from pysatl_core.distributions.registry.graph import RegistryView
+    from pysatl_core.types import GenericCharacteristicName, LabelName
 
-type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 
-
-class ComputationStrategy[In, Out](Protocol):
+class ComputationStrategy(Protocol):
     """
     Protocol for strategies that resolve computation methods for characteristics.
 
@@ -38,14 +38,12 @@ class ComputationStrategy[In, Out](Protocol):
         Whether to cache fitted computation methods.
     """
 
-    enable_caching: bool
-
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
-    ) -> Method[In, Out]: ...
+    ) -> Method[Any, Any]: ...
 
 
-class DefaultComputationStrategy[In, Out]:
+class DefaultComputationStrategy:
     """
     Default strategy for resolving characteristic computation methods.
 
@@ -61,7 +59,7 @@ class DefaultComputationStrategy[In, Out]:
 
     Attributes
     ----------
-    enable_caching : bool
+    _enable_caching : bool
         Whether caching is enabled.
     _cache : dict[str, FittedComputationMethod]
         Cache of fitted computation methods.
@@ -70,9 +68,13 @@ class DefaultComputationStrategy[In, Out]:
     """
 
     def __init__(self, enable_caching: bool = False) -> None:
-        self.enable_caching = enable_caching
-        self._cache: dict[GenericCharacteristicName, FittedComputationMethod[In, Out]] = {}
+        self._enable_caching = enable_caching
+        self._cache: dict[GenericCharacteristicName, FittedComputationMethod[Any, Any]] = {}
         self._resolving: dict[int, set[GenericCharacteristicName]] = {}
+
+    @property
+    def is_caching_enabled(self) -> bool:
+        return self._enable_caching
 
     def _push_guard(self, distr: Distribution, state: GenericCharacteristicName) -> None:
         """
@@ -101,16 +103,50 @@ class DefaultComputationStrategy[In, Out]:
             if not seen:
                 self._resolving.pop(key, None)
 
+    @staticmethod
+    def _pick_analytical_method(
+        state: GenericCharacteristicName,
+        methods: Mapping[LabelName, AnalyticalComputation[Any, Any]],
+    ) -> AnalyticalComputation[Any, Any]:
+        """
+        Pick the first available analytical method for a characteristic.
+
+        Raises
+        ------
+        RuntimeError
+            If no labeled analytical methods are available for the characteristic.
+        """
+        try:
+            return next(iter(methods.values()))
+        except StopIteration as exc:
+            raise RuntimeError(
+                f"Characteristic '{state}' provides no labeled analytical computations."
+            ) from exc
+
+    @staticmethod
+    def _pick_analytical_loop_method(
+        state: GenericCharacteristicName,
+        view: RegistryView,
+    ) -> Method[Any, Any] | None:
+        """
+        Pick the first analytical self-loop method for a characteristic in a view.
+        """
+        loops = view.analytical_variants(state)
+        if not loops:
+            return None
+        return cast(Method[Any, Any], next(iter(loops.values())).method)
+
     def query_method(
         self, state: GenericCharacteristicName, distr: Distribution, **options: Any
-    ) -> Method[In, Out]:
+    ) -> Method[Any, Any]:
         """
         Resolve a computation method for the target characteristic.
 
         Resolution order:
-        1. Analytical implementation from the distribution
-        2. Cached fitted method (if caching enabled)
-        3. Conversion path from an analytical characteristic via the graph
+        1. Cached fitted method (if caching enabled)
+        2. Analytical implementation for non-registry characteristics
+        3. Analytical self-loop from the registry view
+        4. Conversion path from analytical-loop characteristics via the graph
 
         Parameters
         ----------
@@ -132,42 +168,54 @@ class DefaultComputationStrategy[In, Out]:
             If no analytical base exists, no conversion path is found,
             or a cycle is detected.
         """
-        # 1. Check for analytical implementation
-        if state in distr.analytical_computations:
-            return distr.analytical_computations[state]
-
-        # 2. Check cache if enabled
-        if self.enable_caching:
+        # 1. Check cache if enabled
+        if self._enable_caching:
             cached = self._cache.get(state)
             if cached is not None:
                 return cached
 
-        # 3. Require at least one analytical characteristic
+        # 2. Require at least one analytical characteristic
         if not distr.analytical_computations:
             raise RuntimeError(
                 "Distribution provides no analytical computations to ground conversions."
             )
 
-        # 4. Get filtered graph view for this distribution
-        reg = characteristic_registry().view(distr)
+        # 3. Non-registry characteristics are resolved directly.
+        # It covers the situation where user is providing their analytical computation which isn't
+        # in the graph
+        registry = characteristic_registry()
+        if state not in registry.declared_characteristics:
+            if state in distr.analytical_computations:
+                return self._pick_analytical_method(state, distr.analytical_computations[state])
+            raise RuntimeError(
+                f"Characteristic '{state}' is not declared in the registry and has no "
+                "analytical implementation in the distribution."
+            )
+
+        # 4. Get filtered graph view for this distribution.
+        view = registry.view(distr)
 
         self._push_guard(distr, state)
         try:
-            # 5. Try each analytical characteristic as a source
+            loop_method = self._pick_analytical_loop_method(state, view)
+            if loop_method is not None:
+                return loop_method
+
+            # 5. Try each analytical-loop characteristic as a source
             for src in distr.analytical_computations:
-                if src == state:
-                    return distr.analytical_computations[src]
+                if not view.analytical_variants(src):
+                    continue
 
                 # Find conversion path in the graph
-                path = reg.find_path(src, state)
+                path = view.find_path(src, state)
                 if not path:
                     continue
 
                 # Fit each edge along the path
-                last_fitted: FittedComputationMethod[In, Out] | None = None
+                last_fitted: FittedComputationMethod[Any, Any] | None = None
                 for edge in path:
-                    fitted = edge.fit(distr, **options)
-                    if self.enable_caching:
+                    fitted = edge.prepare(distr, **options)
+                    if self._enable_caching and edge.cacheable:
                         self._cache[edge.target] = fitted
                     last_fitted = fitted
 
@@ -186,47 +234,3 @@ class SamplingStrategy(Protocol):
     """Protocol for strategies that generate samples from distributions."""
 
     def sample(self, n: int, distr: Distribution, **options: Any) -> NumericArray: ...
-
-
-class DefaultSamplingUnivariateStrategy(SamplingStrategy):
-    """
-    Default univariate sampler based on inverse transform sampling.
-
-    This strategy generates samples by applying the PPF (inverse CDF)
-    to uniformly distributed random variables.
-
-    Notes
-    -----
-    - Requires the distribution to provide a PPF computation method.
-    - Assumes that the PPF follows NumPy semantics (vectorized evaluation).
-    - Graph-derived PPFs (scalar-only) are currently not supported.
-    - Returns a NumPy array containing the generated samples.
-    """
-
-    def sample(self, n: int, distr: Distribution, **options: Any) -> NumericArray:
-        """
-        Generate samples from the distribution.
-
-        Parameters
-        ----------
-        n : int
-            Number of samples to generate.
-        distr : Distribution
-            Distribution to sample from.
-        **options : Any
-            Additional options forwarded to the PPF computation.
-
-        Returns
-        -------
-        NumericArray
-            NumPy array containing ``n`` generated samples.
-            The exact array shape depends on the distribution and sampling strategy.
-        """
-        ppf = distr.query_method(CharacteristicName.PPF, **options)
-        rng = np.random.default_rng()
-        U = rng.random(n)
-        # TODO: Now it will be based on the fact that the characteristic
-        #  has NumPy semantics (It is much more faster), that is,
-        #  it will not work with the graph computed characteristics currently.
-        samples = ppf(U)
-        return cast(NumericArray, samples)

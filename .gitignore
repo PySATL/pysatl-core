@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.o
 
 # Distribution / packaging
 .Python
@@ -131,3 +132,15 @@ poetry.lock
 docs/build/*
 docs/source/api/*
 docs/source/examples/*
+
+# Log files
+*.log
+
+# Unuran build artifacts
+src/pysatl_core/sampling/unuran/bindings/_unuran_cffi.c
+
+# ai
+
+.ai/*
+AGENTS.md
+CLAUDE.md

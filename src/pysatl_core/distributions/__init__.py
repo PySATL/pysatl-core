@@ -21,11 +21,9 @@ from .computation import (
 from .distribution import Distribution
 from .registry import *
 from .registry import __all__ as _registry_all
-from .sampling import ArraySample, Sample
 from .strategies import (
     ComputationStrategy,
     DefaultComputationStrategy,
-    DefaultSamplingUnivariateStrategy,
     SamplingStrategy,
 )
 from .support import *
@@ -38,14 +36,10 @@ __all__ = [
     "FittedComputationMethod",
     # distribution
     "Distribution",
-    # sampling
-    "Sample",
-    "ArraySample",
     # strategies
     "ComputationStrategy",
     "DefaultComputationStrategy",
     "SamplingStrategy",
-    "DefaultSamplingUnivariateStrategy",
     # registry
     *_registry_all,
     # support

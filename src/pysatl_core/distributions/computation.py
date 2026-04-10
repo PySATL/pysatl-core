@@ -11,17 +11,24 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, cast, overload, runtime_checkable
+
+from pysatl_core.types import ComputationFunc
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
     from typing import Any
 
     from mypy_extensions import KwArg
 
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName
+
+type Fitter[In, Out] = Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
+type Evaluator[In, Out] = (
+    Callable[[Distribution, KwArg(Any)], Out] | Callable[[Distribution, In, KwArg(Any)], Out]
+)
 
 
 @runtime_checkable
@@ -37,42 +44,14 @@ class Computation[In, Out](Protocol):
 
     @property
     def target(self) -> GenericCharacteristicName: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
 
+    @overload
+    def __call__(self, **kwargs: Any) -> Out: ...
 
-@runtime_checkable
-class FittedComputationMethodProtocol[In, Out](Protocol):
-    """
-    Protocol for fitted computation methods ready for evaluation.
+    @overload
+    def __call__(self, x: In, **kwargs: Any) -> Out: ...
 
-    Attributes
-    ----------
-    target : str
-        Destination characteristic name.
-    sources : Sequence[str]
-        Source characteristic names this method depends on.
-    """
-
-    @property
-    def target(self) -> GenericCharacteristicName: ...
-    @property
-    def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def __call__(self, data: In, **options: Any) -> Out: ...
-
-
-@runtime_checkable
-class ComputationMethodProtocol[In, Out](Protocol):
-    """
-    Protocol for computation method factories that can be fitted to distributions.
-    """
-
-    @property
-    def target(self) -> GenericCharacteristicName: ...
-    @property
-    def sources(self) -> Sequence[GenericCharacteristicName]: ...
-    def fit(
-        self, distribution: Distribution, **options: Any
-    ) -> FittedComputationMethodProtocol[In, Out]: ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Out: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,16 +63,22 @@ class AnalyticalComputation[In, Out]:
     ----------
     target : str
         Characteristic name (e.g., "pdf", "cdf").
-    func : Callable[[In, KwArg(Any)], Out]
+    func : ComputationFunc[In, Out]
         Analytical function that computes the characteristic.
     """
 
     target: GenericCharacteristicName
-    func: Callable[[In, KwArg(Any)], Out]
+    func: ComputationFunc[In, Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the analytical function at the given data."""
-        return self.func(data, **options)
+    @overload
+    def __call__(self, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **options: Any) -> Out:
+        """Evaluate the analytical function."""
+        return self.func(*args, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,17 +92,23 @@ class FittedComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (typically length 1 for unary conversions).
-    func : Callable[[In, KwArg(Any)], Out]
+    func : ComputationFunc[In, Out]
         Callable implementing the fitted conversion.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    func: Callable[[In, KwArg(Any)], Out]
+    func: ComputationFunc[In, Out]
 
-    def __call__(self, data: In, **options: Any) -> Out:
-        """Evaluate the fitted conversion at the given data."""
-        return self.func(data, **options)
+    @overload
+    def __call__(self, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **options: Any) -> Out:
+        """Evaluate the fitted conversion."""
+        return self.func(*args, **options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,13 +125,72 @@ class ComputationMethod[In, Out]:
         Destination characteristic name.
     sources : Sequence[str]
         Source characteristic names (typically length 1 for unary conversions).
-    fitter : Callable[[Distribution, **options], FittedComputationMethod]
+    fitter : Fitter[In, Out] | None
         Function that fits the computation method to a distribution.
+        If provided, the method is considered *cacheable* (fitting may perform
+        expensive precomputation).
+    evaluator : Evaluator[In, Out] | None
+        Direct evaluator that performs the computation in one step, without
+        a separate fitting stage. If provided, the method is considered
+        *non-cacheable* at the strategy level.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
-    fitter: Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
+    fitter: Fitter[In, Out] | None = None
+    evaluator: Evaluator[In, Out] | None = None
+
+    def __post_init__(self) -> None:
+        has_fitter = self.fitter is not None
+        has_eval = self.evaluator is not None
+        if has_fitter == has_eval:
+            raise ValueError(
+                "ComputationMethod must define exactly one of 'fitter' or 'evaluator'."
+            )
+
+    @property
+    def cacheable(self) -> bool:
+        """Whether it makes sense to cache the prepared method at strategy level."""
+        return self.fitter is not None
+
+    def prepare(
+        self, distribution: Distribution, **options: Any
+    ) -> FittedComputationMethod[In, Out]:
+        """Prepare a callable method for a specific distribution.
+
+        - If ``fitter`` is provided, run the fitting stage and return the fitted method.
+        - If ``evaluator`` is provided, bind the distribution and return a lightweight
+          fitted wrapper.
+        """
+        if self.fitter is not None:
+            return self.fitter(distribution, **options)
+
+        def _bound(*args: Any, **kwargs: Any) -> Out:
+            return cast(Evaluator[In, Out], self.evaluator)(distribution, *args, **kwargs)
+
+        return FittedComputationMethod[In, Out](
+            target=self.target,
+            sources=self.sources,
+            func=_bound,
+        )
+
+    @overload
+    def evaluate(self, distribution: Distribution, **options: Any) -> Out: ...
+
+    @overload
+    def evaluate(self, distribution: Distribution, data: In, **options: Any) -> Out: ...
+
+    def evaluate(self, distribution: Distribution, *args: Any, **options: Any) -> Out:
+        """Evaluate *direct* computation methods.
+
+        This is only available for methods defined via ``evaluator``.
+        """
+        if self.evaluator is None:
+            raise RuntimeError(
+                "This ComputationMethod requires fitting. "
+                "Call .fit(...) / .prepare(...) to obtain a callable."
+            )
+        return self.evaluator(distribution, *args, **options)
 
     def fit(self, distribution: Distribution, **options: Any) -> FittedComputationMethod[In, Out]:
         """
@@ -158,4 +208,22 @@ class ComputationMethod[In, Out]:
         FittedComputationMethod
             Fitted method ready for evaluation.
         """
+        if self.fitter is None:
+            raise RuntimeError(
+                "This ComputationMethod is evaluator-based and does not support .fit(). "
+                "Use .prepare(...) or call the method directly."
+            )
         return self.fitter(distribution, **options)
+
+    @overload
+    def __call__(self, distribution: Distribution, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, distribution: Distribution, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, distribution: Distribution, *args: Any, **options: Any) -> Out:
+        """Fit if possible and then evaluate"""
+        return self.prepare(distribution, **options)(*args)
+
+
+type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]

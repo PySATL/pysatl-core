@@ -1,7 +1,13 @@
 [build-system]
 build-backend = "poetry.core.masonry.api"
 
-requires = [ "poetry-core>=1.9" ]
+requires = [
+  "cffi>=1.16",
+  "meson>=0.64",
+  "ninja>=1.10",
+  "poetry-core>=1.9",
+  "setuptools>=69",
+]
 
 [tool.poetry]
 name = "pysatl-core"
@@ -41,10 +47,15 @@ homepage = "https://github.com/PySATL/pysatl-core"
 repository = "https://github.com/PySATL/pysatl-core"
 urls.Issues = "https://github.com/PySATL/pysatl-core/issues"
 
+[tool.poetry.build]
+script = "src/pysatl_core/sampling/unuran/bindings/_cffi_build.py"
+
 [tool.poetry.dependencies]
 python = ">=3.12"
 numpy = "^2.0.0"
 scipy = ">=1.13"
+cffi = "^1.16.0"
+mypy_extensions = ">=1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.6"
@@ -55,6 +66,7 @@ coverage = { version = ">=7.5", extras = [ "toml" ] }
 pre-commit = ">=3.6"
 types-setuptools = "*"
 scipy-stubs = ">=1.13.0.0"
+types-cffi = ">=1.17.0.0"
 
 [tool.poetry.group.docs.dependencies]
 jupyter = "^1.1.1"
@@ -70,6 +82,7 @@ linkify-it-py = "^2.0.3"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+exclude = [ "subprojects" ]
 
 format.line-ending = "lf"
 
@@ -83,6 +96,9 @@ lint.isort.combine-as-imports = true
 lint.isort.force-single-line = false
 lint.isort.known-first-party = [ "pysatl_core" ]
 lint.isort.order-by-type = true
+
+[tool.codespell]
+skip = "subprojects/**"
 
 [tool.pytest.ini_options]
 addopts = "-q --cov=pysatl_core --cov-report=term-missing"

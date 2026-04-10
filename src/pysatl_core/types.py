@@ -12,9 +12,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from math import inf
-from typing import Any, cast, overload
+from typing import TYPE_CHECKING, Any, cast, overload
+
+if TYPE_CHECKING:
+    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
 
 import numpy as np
+from mypy_extensions import KwArg
 from numpy.typing import NDArray
 
 
@@ -88,24 +92,24 @@ class EuclideanDistributionType(DistributionType):
 
 
 UnivariateContinuous = EuclideanDistributionType(kind=Kind.CONTINUOUS, dimension=1)
-"""Type for univariate continuous distributions."""
+"""Predefined DistributionType object for univariate continuous distributions."""
 
 UnivariateDiscrete = EuclideanDistributionType(kind=Kind.DISCRETE, dimension=1)
-"""Type for univariate discrete distributions."""
+"""Predefined DistributionType object for univariate discrete distributions."""
 
-NumPyNumber = np.floating[Any] | np.integer[Any]
+type NumPyNumber = np.floating[Any] | np.integer[Any]
 """Type alias for NumPy numeric types."""
 
-Number = NumPyNumber | int | float
+type Number = NumPyNumber | int | float
 """Type alias for all numeric types."""
 
-NumericArray = NDArray[NumPyNumber]
+type NumericArray = NDArray[NumPyNumber]
 """Type alias for numeric arrays."""
 
-ComplexArray = NDArray[np.complexfloating[Any]]
+type ComplexArray = NDArray[np.complexfloating[Any]]
 """Type alias for complex arrays."""
 
-BoolArray = NDArray[np.bool_]
+type BoolArray = NDArray[np.bool_]
 """Type alias for boolean arrays."""
 
 
@@ -233,14 +237,33 @@ class Interval1D:
         return ContinuousSupportShape1D.BOUNDED_INTERVAL
 
 
+type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
+"""Type alias for a distribution computation method (analytical or fitted)."""
+
 type GenericCharacteristicName = str
 """Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
+
+type LabelName = str
+"""Type alias for labels that distinguish computation variants."""
+
+DEFAULT_ANALYTICAL_COMPUTATION_LABEL: LabelName = "PySATL_default_analytical_computation"
+"""Default label for analytical methods when a label is not explicitly provided."""
 
 type ParametrizationName = str
 """Type alias for parametrization names."""
 
-ScalarFunc = Callable[[float], float]
-"""Type alias for scalar functions (float -> float)."""
+
+type ComputationFunc[In, Out] = Callable[[KwArg(Any)], Out] | Callable[[In, KwArg(Any)], Out]
+"""Callable for a characteristic computation.
+
+Used for functions that are called either without positional arguments
+(nullary characteristics like mean/var) or with exactly one positional
+argument (pointwise characteristics like pdf/cdf/ppf).
+
+Keyword-only options (e.g. ``excess=...``) are intentionally not modeled here:
+implementations may or may not accept them, and wrappers typically forward
+``**options`` dynamically.
+"""
 
 
 class CharacteristicName(StrEnum):
@@ -258,6 +281,7 @@ class CharacteristicName(StrEnum):
     """
 
     PDF = "pdf"
+    DPDF = "dpdf"
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
@@ -284,9 +308,11 @@ __all__ = [
     "UnivariateContinuous",
     "UnivariateDiscrete",
     "GenericCharacteristicName",
+    "LabelName",
+    "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
+    "ComputationFunc",
     "DistributionType",
-    "ScalarFunc",
     "Interval1D",
     "ContinuousSupportShape1D",
     "BoolArray",
@@ -295,4 +321,5 @@ __all__ = [
     "NumericArray",
     "CharacteristicName",
     "FamilyName",
+    "Method",
 ]
