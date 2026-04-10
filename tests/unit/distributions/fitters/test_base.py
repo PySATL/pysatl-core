@@ -50,17 +50,13 @@ class TestFitterOption:
             opt.resolve(kwargs)
 
     def test_resolve_raises_value_error_on_failed_validation(self) -> None:
-        opt = FitterOption(
-            name="limit", type=int, default=200, validate=lambda v: v > 0
-        )
+        opt = FitterOption(name="limit", type=int, default=200, validate=lambda v: v > 0)
         kwargs: dict[str, Any] = {"limit": -1}
         with pytest.raises(ValueError, match="failed validation"):
             opt.resolve(kwargs)
 
     def test_resolve_passes_validation_when_valid(self) -> None:
-        opt = FitterOption(
-            name="limit", type=int, default=200, validate=lambda v: v > 0
-        )
+        opt = FitterOption(name="limit", type=int, default=200, validate=lambda v: v > 0)
         kwargs: dict[str, Any] = {"limit": 100}
         assert opt.resolve(kwargs) == 100
 
@@ -170,6 +166,6 @@ class TestFitterDescriptor:
         from pysatl_core.distributions.fitters import ALL_FITTER_DESCRIPTORS
 
         for desc in ALL_FITTER_DESCRIPTORS:
-            assert desc.cacheable is True, (
-                f"Descriptor '{desc.name}' should be cacheable (fit_ prefix)"
-            )
+            assert (
+                desc.cacheable is True
+            ), f"Descriptor '{desc.name}' should be cacheable (fit_ prefix)"

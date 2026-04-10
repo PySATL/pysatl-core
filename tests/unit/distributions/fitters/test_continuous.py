@@ -13,10 +13,8 @@ __author__ = "Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import Any
 
 import numpy as np
-import pytest
 
 from pysatl_core.distributions.fitters.continuous import (
     FITTER_CDF_TO_PDF_1C,
@@ -40,20 +38,20 @@ class TestFitPdfToCdf1C(DistributionTestBase):
         distr = self.make_uniform_pdf_distribution()
         fitted = fit_pdf_to_cdf_1C(distr)
         xs = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
-        result = np.asarray(fitted.func(xs), dtype=float)
-        np.testing.assert_allclose(result, xs, atol=1e-4)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        np.testing.assert_allclose(result, xs, atol=1e-4)  # type: ignore[arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = self.make_uniform_pdf_distribution()
         fitted = fit_pdf_to_cdf_1C(distr)
-        result = fitted.func(np.float64(0.5))
+        result = fitted.func(np.float64(0.5))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_array_in_array_out(self) -> None:
         distr = self.make_uniform_pdf_distribution()
         fitted = fit_pdf_to_cdf_1C(distr)
         xs = np.array([0.1, 0.5, 0.9])
-        result = fitted.func(xs)
+        result = fitted.func(xs)  # type: ignore[call-arg]
         assert isinstance(result, np.ndarray)
         assert result.shape == (3,)
 
@@ -62,7 +60,7 @@ class TestFitPdfToCdf1C(DistributionTestBase):
         distr = self.make_uniform_pdf_distribution()
         fitted = fit_pdf_to_cdf_1C(distr)
         xs = np.linspace(0.0, 1.0, 20)
-        result = np.asarray(fitted.func(xs), dtype=float)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
         assert np.all(np.diff(result) >= -1e-10)
 
     def test_cdf_bounds(self) -> None:
@@ -70,9 +68,9 @@ class TestFitPdfToCdf1C(DistributionTestBase):
         distr = self.make_uniform_pdf_distribution()
         fitted = fit_pdf_to_cdf_1C(distr)
         xs = np.linspace(-1.0, 2.0, 30)
-        result = np.asarray(fitted.func(xs), dtype=float)
-        assert np.all(result >= 0.0)
-        assert np.all(result <= 1.0)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(result >= 0.0)  # type: ignore[operator]
+        assert np.all(result <= 1.0)  # type: ignore[operator]
 
     def test_segment_wise_unsorted_input(self) -> None:
         """Segment-wise integration should handle unsorted input correctly."""
@@ -80,13 +78,13 @@ class TestFitPdfToCdf1C(DistributionTestBase):
         fitted = fit_pdf_to_cdf_1C(distr)
         # Unsorted input
         xs_unsorted = np.array([0.9, 0.1, 0.5, 0.3, 0.7])
-        result_unsorted = np.asarray(fitted.func(xs_unsorted), dtype=float)
+        result_unsorted = np.asarray(fitted.func(xs_unsorted), dtype=float)  # type: ignore[call-arg,type-var]
         # Sorted input for reference
         xs_sorted = np.sort(xs_unsorted)
-        result_sorted = np.asarray(fitted.func(xs_sorted), dtype=float)
+        result_sorted = np.asarray(fitted.func(xs_sorted), dtype=float)  # type: ignore[call-arg,type-var]
         # Results should match when reordered
         order = np.argsort(xs_unsorted)
-        np.testing.assert_allclose(result_unsorted[order], result_sorted, atol=1e-6)
+        np.testing.assert_allclose(result_unsorted[order], result_sorted, atol=1e-6)  # type: ignore[arg-type]
 
     def test_descriptor_metadata(self) -> None:
         assert FITTER_PDF_TO_CDF_1C.target == CharacteristicName.CDF
@@ -109,22 +107,22 @@ class TestFitCdfToPdf1C(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_pdf_1C(distr)
         xs = np.linspace(-3.0, 3.0, 15)
-        result = np.asarray(fitted.func(xs), dtype=float)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
         # Analytical logistic PDF: e^(-x) / (1 + e^(-x))^2
         expected = np.exp(-xs) / (1.0 + np.exp(-xs)) ** 2
-        np.testing.assert_allclose(result, expected, atol=1e-4)
+        np.testing.assert_allclose(result, expected, atol=1e-4)  # type: ignore[arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_pdf_1C(distr)
-        result = fitted.func(np.float64(0.0))
+        result = fitted.func(np.float64(0.0))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_array_in_array_out(self) -> None:
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_pdf_1C(distr)
         xs = np.array([-1.0, 0.0, 1.0])
-        result = fitted.func(xs)
+        result = fitted.func(xs)  # type: ignore[call-arg]
         assert isinstance(result, np.ndarray)
         assert result.shape == (3,)
 
@@ -132,8 +130,8 @@ class TestFitCdfToPdf1C(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_pdf_1C(distr)
         xs = np.linspace(-5.0, 5.0, 50)
-        result = np.asarray(fitted.func(xs), dtype=float)
-        assert np.all(result >= 0.0)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(result >= 0.0)  # type: ignore[operator]
 
     def test_descriptor_metadata(self) -> None:
         assert FITTER_CDF_TO_PDF_1C.target == CharacteristicName.PDF
@@ -149,15 +147,15 @@ class TestFitCdfToPpf1C(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_ppf_1C(distr)
         qs = np.array([0.1, 0.25, 0.5, 0.75, 0.9])
-        result = np.asarray(fitted.func(qs), dtype=float)
+        result = np.asarray(fitted.func(qs), dtype=float)  # type: ignore[call-arg,type-var]
         # Analytical logistic PPF: log(q / (1 - q))
         expected = np.log(qs / (1.0 - qs))
-        np.testing.assert_allclose(result, expected, atol=1e-3)
+        np.testing.assert_allclose(result, expected, atol=1e-3)  # type: ignore[arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_ppf_1C(distr)
-        result = fitted.func(np.float64(0.5))
+        result = fitted.func(np.float64(0.5))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_boundary_values(self) -> None:
@@ -165,7 +163,7 @@ class TestFitCdfToPpf1C(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_ppf_1C(distr)
         qs = np.array([0.0, 1.0])
-        result = np.asarray(fitted.func(qs), dtype=float)
+        result = np.asarray(fitted.func(qs), dtype=float)  # type: ignore[call-arg,type-var]
         assert result[0] == -np.inf
         assert result[1] == np.inf
 
@@ -173,7 +171,7 @@ class TestFitCdfToPpf1C(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         fitted = fit_cdf_to_ppf_1C(distr)
         qs = np.linspace(0.01, 0.99, 20)
-        result = np.asarray(fitted.func(qs), dtype=float)
+        result = np.asarray(fitted.func(qs), dtype=float)  # type: ignore[call-arg,type-var]
         assert np.all(np.diff(result) >= 0.0)
 
     def test_descriptor_metadata(self) -> None:
@@ -190,13 +188,13 @@ class TestFitPpfToCdf1C(DistributionTestBase):
         distr = self.make_uniform_ppf_distribution()
         fitted = fit_ppf_to_cdf_1C(distr)
         xs = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
-        result = np.asarray(fitted.func(xs), dtype=float)
-        np.testing.assert_allclose(result, xs, atol=1e-3)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        np.testing.assert_allclose(result, xs, atol=1e-3)  # type: ignore[arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = self.make_uniform_ppf_distribution()
         fitted = fit_ppf_to_cdf_1C(distr)
-        result = fitted.func(np.float64(0.5))
+        result = fitted.func(np.float64(0.5))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_cdf_interior_bounds(self) -> None:
@@ -205,9 +203,9 @@ class TestFitPpfToCdf1C(DistributionTestBase):
         fitted = fit_ppf_to_cdf_1C(distr)
         # Only test interior points where brentq can find a root
         xs = np.linspace(0.01, 0.99, 20)
-        result = np.asarray(fitted.func(xs), dtype=float)
-        assert np.all(result >= 0.0)
-        assert np.all(result <= 1.0)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(result >= 0.0)  # type: ignore[operator]
+        assert np.all(result <= 1.0)  # type: ignore[operator]
 
     def test_descriptor_metadata(self) -> None:
         assert FITTER_PPF_TO_CDF_1C.target == CharacteristicName.CDF
@@ -223,7 +221,7 @@ class TestContinuousRoundtrip(DistributionTestBase):
         distr = self.make_logistic_cdf_distribution()
         ppf_fitted = fit_cdf_to_ppf_1C(distr)
         qs = np.linspace(0.05, 0.95, 10)
-        xs = np.asarray(ppf_fitted.func(qs), dtype=float)
+        xs = np.asarray(ppf_fitted.func(qs), dtype=float)  # type: ignore[call-arg,type-var]
         # Now evaluate CDF at those xs
         cdf_func = distr.query_method(CharacteristicName.CDF)
         cdf_vals = np.array([float(cdf_func(float(x))) for x in xs])

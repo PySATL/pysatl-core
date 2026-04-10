@@ -10,7 +10,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from typing import Any
 
-from pysatl_core.distributions.fitters.base import FitterDescriptor, FitterOption
+from pysatl_core.distributions.fitters.base import FitterDescriptor
 from pysatl_core.distributions.fitters.registry import FitterRegistry
 from pysatl_core.types import CharacteristicName
 

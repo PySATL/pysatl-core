@@ -24,7 +24,6 @@ from pysatl_core.distributions.support import (
     IntegerLatticeDiscreteSupport,
 )
 
-
 # ===================================================================
 # maybe_unwrap_scalar
 # ===================================================================

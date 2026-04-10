@@ -35,13 +35,12 @@ from pysatl_core.distributions.fitters.discrete import (
 )
 from pysatl_core.distributions.support import ExplicitTableDiscreteSupport
 from pysatl_core.types import (
-    CharacteristicName,
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL as DEFAULT_ANALYTICAL_LABEL,
+    CharacteristicName,
     Kind,
 )
 from tests.unit.distributions.test_basic import DistributionTestBase
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -117,9 +116,9 @@ class TestContinuousPerformance:
         x = np.linspace(0.05, 0.95, 50)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert elapsed < 10.0, (
-            f"fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
-        )
+        assert (
+            elapsed < 10.0
+        ), f"fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
 
     def test_pdf_to_cdf_segment_wise_scales_subquadratically(self) -> None:
         """Doubling the array size should NOT quadruple the time.
@@ -135,7 +134,7 @@ class TestContinuousPerformance:
         x_large = np.linspace(0.05, 0.95, 40)
 
         # Warm up
-        fitted.func(x_small[:2])
+        fitted.func(x_small[:2])  # type: ignore[call-arg]
 
         _, t_small = _time_call(fitted.func, x_small)
         _, t_large = _time_call(fitted.func, x_large)
@@ -157,9 +156,9 @@ class TestContinuousPerformance:
         x = np.linspace(-5.0, 5.0, 100)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert elapsed < 5.0, (
-            f"fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
-        )
+        assert (
+            elapsed < 5.0
+        ), f"fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
 
     def test_cdf_to_ppf_array_performance(self) -> None:
         """fit_cdf_to_ppf_1C with 50 points should complete in < 10s."""
@@ -168,9 +167,9 @@ class TestContinuousPerformance:
         q = np.linspace(0.01, 0.99, 50)
 
         _, elapsed = _time_call(fitted.func, q)
-        assert elapsed < 10.0, (
-            f"fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
-        )
+        assert (
+            elapsed < 10.0
+        ), f"fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
 
     def test_pdf_to_cdf_sorted_vs_unsorted_similar_time(self) -> None:
         """Segment-wise integration should work well for both sorted and
@@ -186,10 +185,12 @@ class TestContinuousPerformance:
         _, t_shuffled = _time_call(fitted.func, x_shuffled)
 
         # Results should be the same regardless of input order
-        r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)
-        r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)
+        r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)  # type: ignore[call-arg,type-var]
+        r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)  # type: ignore[call-arg,type-var]
         np.testing.assert_allclose(
-            np.sort(r_sorted), np.sort(r_shuffled), atol=1e-8,
+            np.sort(r_sorted),
+            np.sort(r_shuffled),
+            atol=1e-8,
         )
 
         # Timing should be similar (within 3× of each other)
@@ -216,9 +217,9 @@ class TestDiscretePerformance:
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert elapsed < 2.0, (
-            f"fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
-        )
+        assert (
+            elapsed < 2.0
+        ), f"fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
 
     def test_pmf_to_cdf_scales_linearly(self) -> None:
         """Doubling query size should roughly double time, not quadruple."""
@@ -229,7 +230,7 @@ class TestDiscretePerformance:
         x_large = np.linspace(-1.0, 3.0, 1000)
 
         # Warm up
-        fitted.func(x_small[:10])
+        fitted.func(x_small[:10])  # type: ignore[call-arg]
 
         _, t_small = _time_call(fitted.func, x_small)
         _, t_large = _time_call(fitted.func, x_large)
@@ -248,9 +249,9 @@ class TestDiscretePerformance:
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert elapsed < 2.0, (
-            f"fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
-        )
+        assert (
+            elapsed < 2.0
+        ), f"fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
 
     def test_cdf_to_ppf_moderate_array(self) -> None:
         """fit_cdf_to_ppf_1D with 500 query points should be fast."""
@@ -259,9 +260,9 @@ class TestDiscretePerformance:
         q = np.linspace(0.01, 0.99, 500)
 
         _, elapsed = _time_call(fitted.func, q)
-        assert elapsed < 2.0, (
-            f"fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
-        )
+        assert (
+            elapsed < 2.0
+        ), f"fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
 
 
 # ---------------------------------------------------------------------------
@@ -285,9 +286,7 @@ class TestRegistryPerformance:
             target=CharacteristicName.CDF,
             sources=frozenset({CharacteristicName.PDF}),
         )
-        assert elapsed < 0.01, (
-            f"Registry lookup took {elapsed:.4f}s (expected < 10ms)"
-        )
+        assert elapsed < 0.01, f"Registry lookup took {elapsed:.4f}s (expected < 10ms)"
 
     def test_registry_find_all_is_fast(self) -> None:
         """Finding all matching fitters should be sub-millisecond."""
@@ -302,6 +301,4 @@ class TestRegistryPerformance:
             target=CharacteristicName.CDF,
             sources=[CharacteristicName.PDF],
         )
-        assert elapsed < 0.01, (
-            f"Registry find_all took {elapsed:.4f}s (expected < 10ms)"
-        )
+        assert elapsed < 0.01, f"Registry find_all took {elapsed:.4f}s (expected < 10ms)"

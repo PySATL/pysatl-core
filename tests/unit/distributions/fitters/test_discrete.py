@@ -31,12 +31,11 @@ from pysatl_core.distributions.fitters.discrete import (
     fit_cdf_to_pmf_1D,
     fit_cdf_to_ppf_1D,
     fit_pmf_to_cdf_1D,
-    fit_ppf_to_cdf_1D,
 )
 from pysatl_core.distributions.support import ExplicitTableDiscreteSupport
 from pysatl_core.types import (
-    CharacteristicName,
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL as DEFAULT_ANALYTICAL_LABEL,
+    CharacteristicName,
     Kind,
 )
 from tests.unit.distributions.test_basic import DistributionTestBase
@@ -80,27 +79,27 @@ class TestFitPmfToCdf1D(DistributionTestBase):
         fitted = fit_pmf_to_cdf_1D(distr)
 
         # Before first support point
-        assert float(fitted.func(np.float64(-0.5))) == pytest.approx(0.0)
+        assert float(fitted.func(np.float64(-0.5))) == pytest.approx(0.0)  # type: ignore[call-arg,arg-type]
         # At support points
-        assert float(fitted.func(np.float64(0.0))) == pytest.approx(0.2, abs=1e-6)
-        assert float(fitted.func(np.float64(1.0))) == pytest.approx(0.7, abs=1e-6)
-        assert float(fitted.func(np.float64(2.0))) == pytest.approx(1.0, abs=1e-6)
+        assert float(fitted.func(np.float64(0.0))) == pytest.approx(0.2, abs=1e-6)  # type: ignore[call-arg,arg-type]
+        assert float(fitted.func(np.float64(1.0))) == pytest.approx(0.7, abs=1e-6)  # type: ignore[call-arg,arg-type]
+        assert float(fitted.func(np.float64(2.0))) == pytest.approx(1.0, abs=1e-6)  # type: ignore[call-arg,arg-type]
         # Between support points
-        assert float(fitted.func(np.float64(0.5))) == pytest.approx(0.2, abs=1e-6)
+        assert float(fitted.func(np.float64(0.5))) == pytest.approx(0.2, abs=1e-6)  # type: ignore[call-arg,arg-type]
         # After last support point
-        assert float(fitted.func(np.float64(3.0))) == pytest.approx(1.0, abs=1e-6)
+        assert float(fitted.func(np.float64(3.0))) == pytest.approx(1.0, abs=1e-6)  # type: ignore[call-arg,arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = self.make_discrete_point_pmf_distribution()
         fitted = fit_pmf_to_cdf_1D(distr)
-        result = fitted.func(np.float64(1.0))
+        result = fitted.func(np.float64(1.0))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_array_in_array_out(self) -> None:
         distr = self.make_discrete_point_pmf_distribution()
         fitted = fit_pmf_to_cdf_1D(distr)
         xs = np.array([-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5])
-        result = fitted.func(xs)
+        result = fitted.func(xs)  # type: ignore[call-arg]
         assert isinstance(result, np.ndarray)
         assert result.shape == (7,)
 
@@ -108,16 +107,16 @@ class TestFitPmfToCdf1D(DistributionTestBase):
         distr = self.make_discrete_point_pmf_distribution()
         fitted = fit_pmf_to_cdf_1D(distr)
         xs = np.linspace(-1.0, 3.0, 50)
-        result = np.asarray(fitted.func(xs), dtype=float)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
         assert np.all(np.diff(result) >= -1e-10)
 
     def test_cdf_bounds(self) -> None:
         distr = self.make_discrete_point_pmf_distribution()
         fitted = fit_pmf_to_cdf_1D(distr)
         xs = np.linspace(-2.0, 4.0, 50)
-        result = np.asarray(fitted.func(xs), dtype=float)
-        assert np.all(result >= 0.0)
-        assert np.all(result <= 1.0)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(result >= 0.0)  # type: ignore[operator]
+        assert np.all(result <= 1.0)  # type: ignore[operator]
 
     def test_requires_discrete_support(self) -> None:
         distr = self.make_discrete_point_pmf_distribution(is_with_support=False)
@@ -138,20 +137,20 @@ class TestFitCdfToPmf1D:
         distr = _make_discrete_cdf_distribution()
         pmf_fitted = fit_cdf_to_pmf_1D(distr)
         xs = np.array([0.0, 1.0, 2.0])
-        result = np.asarray(pmf_fitted.func(xs), dtype=float)
-        np.testing.assert_allclose(result, [0.2, 0.5, 0.3], atol=1e-6)
+        result = np.asarray(pmf_fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        np.testing.assert_allclose(result, [0.2, 0.5, 0.3], atol=1e-6)  # type: ignore[arg-type]
 
     def test_off_support_returns_zero(self) -> None:
         distr = _make_discrete_cdf_distribution()
         pmf_fitted = fit_cdf_to_pmf_1D(distr)
         xs = np.array([-1.0, 0.5, 1.5, 3.0])
-        result = np.asarray(pmf_fitted.func(xs), dtype=float)
-        np.testing.assert_allclose(result, [0.0, 0.0, 0.0, 0.0], atol=1e-10)
+        result = np.asarray(pmf_fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        np.testing.assert_allclose(result, [0.0, 0.0, 0.0, 0.0], atol=1e-10)  # type: ignore[arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = _make_discrete_cdf_distribution()
         pmf_fitted = fit_cdf_to_pmf_1D(distr)
-        result = pmf_fitted.func(np.float64(1.0))
+        result = pmf_fitted.func(np.float64(1.0))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_descriptor_metadata(self) -> None:
@@ -168,24 +167,24 @@ class TestFitCdfToPpf1D:
         ppf_fitted = fit_cdf_to_ppf_1D(distr)
 
         # CDF: {0: 0.2, 1: 0.7, 2: 1.0}
-        assert float(ppf_fitted.func(np.float64(0.1))) == pytest.approx(0.0)
-        assert float(ppf_fitted.func(np.float64(0.2))) == pytest.approx(0.0)
-        assert float(ppf_fitted.func(np.float64(0.3))) == pytest.approx(1.0)
-        assert float(ppf_fitted.func(np.float64(0.7))) == pytest.approx(1.0)
-        assert float(ppf_fitted.func(np.float64(0.8))) == pytest.approx(2.0)
-        assert float(ppf_fitted.func(np.float64(1.0))) == pytest.approx(2.0)
+        assert float(ppf_fitted.func(np.float64(0.1))) == pytest.approx(0.0)  # type: ignore[call-arg,arg-type]
+        assert float(ppf_fitted.func(np.float64(0.2))) == pytest.approx(0.0)  # type: ignore[call-arg,arg-type]
+        assert float(ppf_fitted.func(np.float64(0.3))) == pytest.approx(1.0)  # type: ignore[call-arg,arg-type]
+        assert float(ppf_fitted.func(np.float64(0.7))) == pytest.approx(1.0)  # type: ignore[call-arg,arg-type]
+        assert float(ppf_fitted.func(np.float64(0.8))) == pytest.approx(2.0)  # type: ignore[call-arg,arg-type]
+        assert float(ppf_fitted.func(np.float64(1.0))) == pytest.approx(2.0)  # type: ignore[call-arg,arg-type]
 
     def test_scalar_in_scalar_out(self) -> None:
         distr = _make_discrete_cdf_distribution()
         ppf_fitted = fit_cdf_to_ppf_1D(distr)
-        result = ppf_fitted.func(np.float64(0.5))
+        result = ppf_fitted.func(np.float64(0.5))  # type: ignore[call-arg,arg-type]
         assert np.ndim(result) == 0
 
     def test_array_in_array_out(self) -> None:
         distr = _make_discrete_cdf_distribution()
         ppf_fitted = fit_cdf_to_ppf_1D(distr)
         qs = np.array([0.1, 0.5, 0.9])
-        result = ppf_fitted.func(qs)
+        result = ppf_fitted.func(qs)  # type: ignore[call-arg]
         assert isinstance(result, np.ndarray)
         assert result.shape == (3,)
 
@@ -212,8 +211,8 @@ class TestDiscreteRoundtrip(DistributionTestBase):
         pmf_fitted = fit_cdf_to_pmf_1D(distr)
 
         xs = np.array([0.0, 1.0, 2.0])
-        pmf_result = np.asarray(pmf_fitted.func(xs), dtype=float)
-        np.testing.assert_allclose(pmf_result, [0.2, 0.5, 0.3], atol=1e-6)
+        pmf_result = np.asarray(pmf_fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        np.testing.assert_allclose(pmf_result, [0.2, 0.5, 0.3], atol=1e-6)  # type: ignore[arg-type]
 
     def test_cdf_ppf_roundtrip(self) -> None:
         """CDF(PPF(q)) should be >= q for discrete distributions."""
@@ -225,7 +224,7 @@ class TestDiscreteRoundtrip(DistributionTestBase):
         ppf_fitted = fit_cdf_to_ppf_1D(cdf_distr)
 
         qs = np.array([0.1, 0.3, 0.5, 0.8])
-        xs = np.asarray(ppf_fitted.func(qs), dtype=float)
-        cdf_at_xs = np.asarray(cdf_fitted.func(xs), dtype=float)
+        xs = np.asarray(ppf_fitted.func(qs), dtype=float)  # type: ignore[call-arg,type-var]
+        cdf_at_xs = np.asarray(cdf_fitted.func(xs), dtype=float)  # type: ignore[call-arg,arg-type,type-var]
         # For discrete distributions, CDF(PPF(q)) >= q
-        assert np.all(cdf_at_xs >= qs - 1e-10)
+        assert np.all(cdf_at_xs >= qs - 1e-10)  # type: ignore[operator]
