@@ -442,4 +442,206 @@ class ParametricFamily:
             raise NotImplementedError(f"Family {self.name} does not implement score method")
         return self._score(parameters, x)
 
+    def view(
+        self,
+        parametrization_name: str | None = None,
+        **fixed: Any,
+    ) -> PartialParametricFamily:
+        """
+        Create a view of this family with partially fixed parameters.
+
+        Parameters
+        ----------
+        parametrization_name : str or None, optional
+            Name of the parametrization in which the fixed parameters are given.
+            If not provided, the base parametrization of the family is used.
+        **fixed : Any
+            Parameter names and values to fix.
+
+        Returns
+        -------
+        PartialParametricFamily
+        A view that behaves like the original family but with the specified
+        parameters fixed.
+
+        Examples
+        --------
+        >>> uniform = ParametricFamilyRegister.get("uniform")
+        >>> uniform_lower0 = uniform.view(lower_bound=0)
+        >>> dist = uniform_lower0.distribution(upper_bound=1)  # Uniform(0,1)
+        """
+        return PartialParametricFamily(
+            family=self,
+            fixed_params=fixed,
+            parametrization_name=parametrization_name,
+        )
+
+    __call__ = distribution
+
+
+class PartialParametricFamily:
+    """
+    View on a parametric family with partially fixed parameters.
+
+    This class represents a parametric family where some parameters have been
+    fixed to specific values. It provides the same interface as `ParametricFamily`,
+    but the `distribution` method combines fixed parameters with user-provided
+    parameters to create a concrete distribution.
+
+    The callable interface (`__call__`) matches that of `ParametricFamily`,
+    accepting `parametrization_name`, `sampling_strategy`, `computation_strategy`,
+    and the remaining parameters as keyword arguments.
+
+    Parameters
+    ----------
+    family : ParametricFamily
+        The original parametric family.
+    fixed_params : dict[str, Any]
+        Dictionary of fixed parameter names and their values.
+    parametrization_name : str, optional
+        Name of the parametrization in which the fixed parameters are specified.
+        If not provided, the base parametrization of the family is used.
+
+    Raises
+    ------
+    ValueError
+        If any fixed parameter name is unknown for the specified parametrization,
+        or if the parametrization name is not registered in the family.
+    """
+
+    def __init__(
+        self,
+        family: ParametricFamily,
+        fixed_params: dict[str, Any],
+        parametrization_name: str | None = None,
+    ) -> None:
+        self._family = family
+        self._fixed_params = fixed_params.copy()
+        self._fixed_in_param = parametrization_name or family.base_parametrization_name
+
+    @property
+    def name(self) -> str:
+        """Return the name of the family."""
+        return self._family.name
+
+    @property
+    def parametrizations(self) -> dict[str, type[Parametrization]]:
+        """Return the mapping of parametrization names to classes."""
+        return self._family.parametrizations
+
+    @property
+    def base(self) -> type[Parametrization]:
+        """Return the base parametrization class."""
+        return self._family.base
+
+    def distribution(
+        self,
+        parametrization_name: str | None = None,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+        **kwargs: Any,
+    ) -> ParametricFamilyDistribution:
+        """
+        Create a distribution by combining fixed and provided parameters.
+
+        Parameters
+        ----------
+        parametrization_name : str or None, optional
+            Name of the parametrization to use. Must match the parametrization
+            in which parameters were fixed (or the base if none was specified).
+            If not provided, the fixed parametrization is used.
+        sampling_strategy : SamplingStrategy or None, optional
+            Strategy for generating random samples. If None, the default
+            sampling strategy of the family is used.
+        computation_strategy : ComputationStrategy or None, optional
+            Strategy for computing characteristics and conversions. If None,
+            the default computation strategy of the family is used.
+        **kwargs : Any
+            Additional parameter values to be merged with fixed ones.
+
+        Returns
+        -------
+        ParametricFamilyDistribution
+            A distribution instance with the combined parameters.
+
+        Raises
+        ------
+        ValueError
+            If the requested parametrization differs from the fixed one,
+            or if a parameter appears both fixed and provided with a different value.
+        """
+        target = parametrization_name or self._fixed_in_param
+        if target != self._fixed_in_param:
+            raise ValueError(
+                f"Fixed parameters are defined for parametrization '{self._fixed_in_param}'. "
+                f"Cannot create distribution in '{target}'. "
+                "Use the same parametrization or create a new view with "
+                "fix_params in that parametrization."
+            )
+        # Проверка конфликтов значений
+        for key, fixed_val in self._fixed_params.items():
+            if key in kwargs and kwargs[key] != fixed_val:
+                raise ValueError(
+                    f"Parameter '{key}' is fixed to {fixed_val}, but got {kwargs[key]}"
+                )
+        all_params = {**self._fixed_params, **kwargs}
+        return self._family.distribution(
+            parametrization_name=target,
+            sampling_strategy=sampling_strategy,
+            computation_strategy=computation_strategy,
+            **all_params,
+        )
+
+    def with_fixed_params(self, additional_params: dict[str, Any]) -> PartialParametricFamily:
+        """
+        Create a new view with additional fixed parameters.
+
+        Parameters
+        ----------
+        additional_params : dict[str, Any]
+            Dictionary of parameters to fix (or override existing fixed ones).
+
+        Returns
+        -------
+        PartialParametricFamily
+            A new view with the combined fixed parameters.
+        """
+        new_fixed = {**self._fixed_params, **additional_params}
+        return PartialParametricFamily(self._family, new_fixed, self._fixed_in_param)
+
+    def __getattr__(self, name: str) -> Any:
+        """
+        Delegate attribute access to the underlying family.
+
+        This method is called only when an attribute is not found in the usual
+        places (instance dict, class, etc.). It forwards the request to the
+        original family, allowing the view to behave exactly like a family
+        for all methods and properties not explicitly overridden.
+
+        Parameters
+        ----------
+        name : str
+            Attribute name.
+
+        Returns
+        -------
+        Any
+            The attribute from the underlying family.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist in the family.
+        """
+        # Avoid recursion for internal attributes
+        if name in (
+            "_family",
+            "_fixed_params",
+            "_fixed_in_param",
+            "distribution",
+            "with_fixed_params",
+        ):
+            raise AttributeError(name)
+        return getattr(self._family, name)
+
     __call__ = distribution
