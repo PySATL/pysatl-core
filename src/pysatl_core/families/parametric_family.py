@@ -15,12 +15,14 @@ __license__ = "SPDX-License-Identifier: MIT"
 import inspect
 from collections.abc import Mapping
 from functools import partial
-from typing import TYPE_CHECKING, Any, cast, dataclass_transform
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
 
 import numpy as np
 
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
+from pysatl_core.families.parametrizations import Parametrization
 from pysatl_core.types import (
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
     ComputationFunc,
@@ -32,9 +34,6 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
-    from pysatl_core.families.parametrizations import (
-        Parametrization,
-    )
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
@@ -450,5 +449,375 @@ class ParametricFamily:
         base_params = parameters.transform_to_base_parametrization()
         base_grad = self._base_score(base_params, x_arr)
         return parameters.gradient_transform(base_grad)
+
+    def view(
+        self,
+        *,
+        parametrization_name: str | None = None,
+        **fixed_params: Any,
+    ) -> PartialParametricFamily:
+        """
+        Create a view of this family with partially fixed parameters.
+
+        Parameters
+        ----------
+        parametrization_name : str, optional
+            Name of the parametrization in which the fixed parameters are given.
+            If not provided, the base parametrization of the family is used.
+        **fixed_params : Any
+            Parameter names and values to fix.
+
+        Returns
+        -------
+        PartialParametricFamily
+            A view that behaves like the original family but with the specified
+            parameters fixed.
+
+        Examples
+        --------
+        >>> uniform = ParametricFamilyRegister.get("uniform")
+        >>> uniform_lower0 = uniform.view(lower_bound=0)
+        >>> dist = uniform_lower0.distribution(upper_bound=1)  # Uniform(0,1)
+        """
+        if parametrization_name is not None and parametrization_name not in self.parametrizations:
+            raise ValueError(
+                f"Unknown parametrization '{parametrization_name}' for family '{self.name}'"
+            )
+        return PartialParametricFamily(
+            base_family=self,
+            fixed_params=fixed_params,
+            parametrization_name=parametrization_name,
+        )
+
+    __call__ = distribution
+
+
+class PartialParametricFamily(ParametricFamily):
+    """
+    View on a parametric family with partially fixed parameters.
+
+    This class represents a parametric family where some parameters have been
+    fixed to specific values. It inherits all behaviour from `ParametricFamily`
+    but restricts the available parametrization to the one in which parameters
+    are fixed. All analytical characteristics are preserved via delegation to
+    the base parametrization of the original family.
+
+    Parameters
+    ----------
+    base_family : ParametricFamily
+        The original parametric family.
+    fixed_params : dict[str, Any]
+        Dictionary of fixed parameter names and their values.
+    parametrization_name : str, optional
+        Name of the parametrization in which the fixed parameters are specified.
+        If not provided, the base parametrization of the family is used.
+
+    Raises
+    ------
+    ValueError
+        If all parameters of the chosen parametrization are fixed (use `.distribution()` directly),
+        or if any fixed parameter name is unknown for that parametrization,
+        or if the parametrization name is not registered in the family.
+    """
+
+    def __init__(
+        self,
+        base_family: ParametricFamily,
+        fixed_params: dict[str, Any],
+        parametrization_name: str | None = None,
+    ) -> None:
+        self._fixed_in_param = parametrization_name or base_family.base_parametrization_name
+        self._base_family = base_family
+        self._param_class = base_family.get_parametrization(self._fixed_in_param)
+        self._fixed_params = fixed_params.copy()
+
+        required_fields = set(getattr(self._param_class, "__dataclass_fields__", {}).keys())
+        # Validate that fixed parameters exist
+        unknown = set(self._fixed_params) - required_fields
+        if unknown:
+            raise ValueError(
+                f"Unknown parameters for parametrization '{self._fixed_in_param}': {unknown}"
+            )
+
+        # Check completeness: if all parameters are fixed, raise an error
+        if required_fields.issubset(fixed_params):
+            raise ValueError(
+                f"All parameters of parametrization '{self._fixed_in_param}' are already fixed. "
+                "Use `.distribution()` directly."
+            )
+
+        # Generate lightweight parametrization with only free fields
+        self._free_param_class = self._create_free_param_class()
+        # Assign __param_name__ and __family__ so that instances have .name and .family
+        self._free_param_class.__param_name__ = self._fixed_in_param
+        self._free_param_class.__family__ = self
+
+        self._free_parameter_names = tuple(
+            name
+            for name in getattr(self._param_class, "__dataclass_fields__", {})
+            if name not in self._fixed_params
+        )
+
+        def _view_distr_type(params: Parametrization) -> DistributionType:
+            canonical = base_family.to_base(params)
+            return base_family._distr_type(canonical)
+
+        view_chars = self._build_view_characteristics(base_family)
+
+        super().__init__(
+            name=base_family._name,
+            distr_type=_view_distr_type,
+            distr_parametrizations=[self._fixed_in_param],
+            distr_characteristics=view_chars,
+            support_by_parametrization=base_family._support_resolver,
+            base_score=base_family._base_score,
+        )
+
+        # Register the parametrization (needed for parent methods)
+        self.register_parametrization(self._fixed_in_param, self._free_param_class)
+
+    def _create_free_param_class(self) -> type[Parametrization]:
+        """Create a parametrization class containing only the free (unfixed) parameters.
+
+        The generated class exposes only the fields that were *not* fixed via
+        :meth:`view`.
+
+        Its :meth:`transform_to_base_parametrization` automatically injects the
+        fixed values and delegates to the conversion logic of the
+        original parametrization class.
+
+        The :meth:`validate` method substitutes
+        the fixed values before running the original validation.
+
+        The :meth:`gradient_transform` method maps a base-parametrization gradient to
+        the subspace of free parameters only.
+
+        Returns
+        -------
+        type[Parametrization]
+            A lightweight parametrization class with only the unfixed fields.
+        """
+        fixed_params = self._fixed_params
+        original_class = self._param_class
+        all_fields = getattr(original_class, "__dataclass_fields__", {})
+        free_field_names = [name for name in all_fields if name not in fixed_params]
+
+        def __init__(self: Parametrization, **kwargs: Any) -> None:
+            unexpected = set(kwargs) - set(free_field_names)
+            if unexpected:
+                raise TypeError(
+                    f"__init__() got unexpected keyword arguments: "
+                    f"{', '.join(repr(u) for u in unexpected)}"
+                )
+            missing = set(free_field_names) - set(kwargs)
+            if missing:
+                raise TypeError(
+                    f"__init__() missing required keyword arguments: "
+                    f"{', '.join(repr(m) for m in missing)}"
+                )
+            for name in free_field_names:
+                object.__setattr__(self, name, kwargs[name])
+
+        def transform_to_base(self: Parametrization) -> Parametrization:
+            """Substitute fixed values and delegate to the original parametrization."""
+            combined = {
+                **fixed_params,
+                **{f: getattr(self, f) for f in free_field_names},
+            }
+            original_instance = original_class(**combined)
+            return original_instance.transform_to_base_parametrization()
+
+        def validate(self: Parametrization) -> None:
+            """Validate by combining fixed and free parameters, then delegating."""
+            combined = {
+                **fixed_params,
+                **{f: getattr(self, f) for f in free_field_names},
+            }
+            original_class(**combined).validate()
+
+        def gradient_transform(self: Parametrization, base_grad: NumericArray) -> NumericArray:
+            """Map a gradient from the base parametrization to free-parameter space.
+
+            The base gradient is first transformed into the original (full)
+            parametrization.  Components that correspond to fixed parameters are
+            then discarded, keeping only the directions of the free parameters.
+            """
+            combined = {
+                **fixed_params,
+                **{f: getattr(self, f) for f in free_field_names},
+            }
+            full_instance = original_class(**combined)
+            full_grad = full_instance.gradient_transform(base_grad)
+            all_field_names = list(all_fields.keys())
+            free_indices = [i for i, name in enumerate(all_field_names) if name in free_field_names]
+            return full_grad[..., free_indices]
+
+        new_class = type(
+            f"{original_class.__name__}Free",
+            (Parametrization,),
+            {
+                "__init__": __init__,
+                "transform_to_base_parametrization": transform_to_base,
+                "validate": validate,
+                "gradient_transform": gradient_transform,
+                "__dataclass_fields__": {name: all_fields[name] for name in free_field_names},
+                "__annotations__": {name: all_fields[name].type for name in free_field_names},
+            },
+        )
+        return new_class
+
+    @property
+    def parametrizations(self) -> dict[str, type[Parametrization]]:
+        """Return a dictionary containing only the fixed (free‑parameter) parametrization."""
+        return {self._fixed_in_param: self._free_param_class}
+
+    @property
+    def parent_family(self) -> ParametricFamily:
+        """Original family this view was created from."""
+        return self._base_family
+
+    @property
+    def fixed_parameters(self) -> Mapping[str, Any]:
+        """Fixed parameter values."""
+        return MappingProxyType(self._fixed_params)
+
+    @property
+    def fixed_parameter_names(self) -> frozenset[str]:
+        """Names of fixed parameters."""
+        return frozenset(self._fixed_params)
+
+    @property
+    def free_parameter_names(self) -> tuple[str, ...]:
+        """Names of parameters that remain free in this view."""
+        return self._free_parameter_names
+
+    @overload
+    def get_parametrization(self) -> type[Parametrization]: ...
+
+    @overload
+    def get_parametrization(self, name: ParametrizationName) -> type[Parametrization]: ...
+
+    def get_parametrization(self, name: ParametrizationName | None = None) -> type[Parametrization]:
+        """Return the lightweight parametrization class with only free parameters.
+
+        If `name` is omitted, returns the fixed parametrization class.
+        If `name` is given, it must match the fixed parametrization name.
+
+        Raises KeyError for any other name.
+        """
+        if name is None:
+            return self._free_param_class
+        if name != self._fixed_in_param:
+            raise KeyError(
+                f"Parametrization '{name}' is not available in this view. "
+                f"Only '{self._fixed_in_param}' is available."
+            )
+        return self._free_param_class
+
+    @property
+    def base(self) -> type[Parametrization]:
+        """Return a lightweight parametrization class with only free parameters.
+
+        Its ``transform_to_base_parametrization`` substitutes fixed values and
+        delegates to the original parametrization.
+        """
+        return self._free_param_class
+
+    def to_base(self, parameters: Parametrization) -> Parametrization:
+        """Convert view parameters to the original family's base parametrization.
+        The view's own base is the lightweight class, but the true base is the
+        original family's base. We always transform through the full parametrization.
+        """
+        return parameters.transform_to_base_parametrization()
+
+    def _build_view_characteristics(self, base_family: ParametricFamily) -> dict[str, Any]:
+        view_chars = {}
+        original_base = base_family.base_parametrization_name
+
+        def wrap_provider(
+            provider: ParametricFamilyCharacteristic[Any, Any],
+        ) -> ParametricFamilyCharacteristic[Any, Any]:
+            def wrapped(params: Parametrization, *args: Any, **kwargs: Any) -> Any:
+                base_params = base_family.to_base(params)
+                bound = ParametricFamily._bind_parametrization(provider, base_params)
+                return bound(*args, **kwargs)
+
+            return wrapped
+
+        def wrap_fixed_provider(
+            provider: ParametricFamilyCharacteristic[Any, Any],
+        ) -> ParametricFamilyCharacteristic[Any, Any]:
+            def wrapped(params: Parametrization, *args: Any, **kwargs: Any) -> Any:
+                combined = {
+                    **self._fixed_params,
+                    **{f: getattr(params, f) for f in self.free_parameter_names},
+                }
+                full_params = self._param_class(**combined)
+                bound = ParametricFamily._bind_parametrization(provider, full_params)
+                return bound(*args, **kwargs)
+
+            return wrapped
+
+        for char_name, char_map in base_family.distr_characteristics.items():
+            if self._fixed_in_param in char_map:
+                providers = char_map[self._fixed_in_param]
+                wrapped_providers = {
+                    label: wrap_fixed_provider(provider) if callable(provider) else provider
+                    for label, provider in providers.items()
+                }
+                view_chars[char_name] = {self._fixed_in_param: wrapped_providers}
+            elif original_base in char_map:
+                original_provider = char_map[original_base]
+                wrapped = {
+                    label: wrap_provider(provider) if callable(provider) else provider
+                    for label, provider in original_provider.items()
+                }
+                view_chars[char_name] = {self._fixed_in_param: wrapped}
+
+        return view_chars
+
+    def distribution(
+        self,
+        parametrization_name: str | None = None,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+        **kwargs: Any,
+    ) -> ParametricFamilyDistribution:
+        target = parametrization_name or self._fixed_in_param
+        if target != self._fixed_in_param:
+            raise ValueError(
+                f"Only parametrization '{self._fixed_in_param}' is available in this view. "
+                "Please omit 'parametrization_name' or use the fixed one."
+            )
+        for key, fixed_val in self._fixed_params.items():
+            if key in kwargs and kwargs[key] != fixed_val:
+                raise ValueError(
+                    f"Parameter '{key}' is fixed to {fixed_val}, but got {kwargs[key]}"
+                )
+        return super().distribution(
+            parametrization_name=target,
+            sampling_strategy=sampling_strategy,
+            computation_strategy=computation_strategy,
+            **kwargs,
+        )
+
+    def view(
+        self,
+        *,
+        parametrization_name: str | None = None,
+        **additional_params: Any,
+    ) -> PartialParametricFamily:
+        if parametrization_name is not None and parametrization_name != self._fixed_in_param:
+            raise ValueError(
+                f"Cannot change parametrization. Current fixed parametrization is "
+                f"'{self._fixed_in_param}'. Use the same or omit the argument."
+            )
+        for key, fixed_val in self._fixed_params.items():
+            if key in additional_params and additional_params[key] != fixed_val:
+                raise ValueError(
+                    f"Parameter '{key}' is fixed to {fixed_val}, but got {additional_params[key]}"
+                )
+        new_fixed = {**self._fixed_params, **additional_params}
+        return PartialParametricFamily(self._base_family, new_fixed, self._fixed_in_param)
 
     __call__ = distribution
