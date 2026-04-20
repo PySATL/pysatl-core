@@ -20,6 +20,7 @@ from pysatl_core.types import (
     DistributionType,
     GenericCharacteristicName,
     ParametrizationName,
+    UnivariateContinuous,
 )
 
 if TYPE_CHECKING:
@@ -44,9 +45,14 @@ class ExponentialFamilyParametrization(Parametrization):
 
 
 @dataclass
-class ExponentialConjugateHyperparameters:
-    effective_suff_stat_value: NumberParameter
-    effective_sample_size: int
+class ExponentialConjugateHyperparameters(Parametrization):
+    effective_suff_stat_value: NumericArray
+    effective_sample_size: Number
+
+    def transform_to_base_parametrization(self) -> ExponentialFamilyParametrization:
+        return ExponentialFamilyParametrization(
+            np.append(self.effective_suff_stat_value, self.effective_sample_size)
+        )
 
 
 class ContinuousExponentialClassFamily(ParametricFamily):
@@ -250,10 +256,10 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         return func
 
     def posterior_hyperparameters(
-        self, prior_hyper: ExponentialConjugateHyperparameters, sample: list[Any]
+        self, parametrizaiton: ExponentialConjugateHyperparameters, sample: list[Any]
     ) -> ExponentialConjugateHyperparameters:
-        posterior_effective_suff_stat_value = prior_hyper.effective_suff_stat_value
-        posterior_effective_sample_size = prior_hyper.effective_sample_size
+        posterior_effective_suff_stat_value = parametrizaiton.effective_suff_stat_value
+        posterior_effective_sample_size = parametrizaiton.effective_sample_size
         if hasattr(sample, "__iter__") and not isinstance(sample, str):
             posterior_effective_suff_stat_value += np.sum(
                 [self._sufficient(x) for x in sample],  # type: ignore[arg-type]
@@ -268,3 +274,36 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             effective_suff_stat_value=posterior_effective_suff_stat_value,
             effective_sample_size=posterior_effective_sample_size,
         )
+
+    @property
+    def posterior_predictive(self) -> ParametricFamily:
+        def conjugate_log_partition(
+            parametrization: ExponentialConjugateHyperparameters,
+        ) -> NumberParameter:
+            conjugate_value = self.conjugate_prior_family._log_partition(
+                parametrization.transform_to_base_parametrization().theta
+            )
+            return np.exp(conjugate_value)
+
+        def posterior_density(parametrization: Parametrization, x: NumberParameter) -> Number:
+            parametrization = cast(ExponentialConjugateHyperparameters, parametrization)
+            return cast(
+                np.float32,
+                self._normalization(x)
+                * conjugate_log_partition(parametrization)
+                / conjugate_log_partition(
+                    self.posterior_hyperparameters(
+                        parametrizaiton=parametrization, sample=[self._sufficient(x)]
+                    )
+                ),
+            )
+
+        family = ParametricFamily(
+            name=f"PosteriorPredictive{self.name}",
+            distr_type=UnivariateContinuous,
+            distr_characteristics={CharacteristicName.PDF: posterior_density},
+            distr_parametrizations=["posterior"],
+            support_by_parametrization=lambda _: ContinuousSupport(),
+        )
+        parametrization(family=family, name="posterior")(ExponentialConjugateHyperparameters)
+        return family
