@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 from mypy_extensions import KwArg
 
-from pysatl_core.distributions.computation import (
+from pysatl_core.distributions.computations.computation import (
     AnalyticalComputation,
-    ComputationMethod,
     FittedComputationMethod,
+    FitterMethod,
 )
 from pysatl_core.distributions.support import (
     ContinuousSupport,
@@ -116,16 +116,14 @@ class DistributionTestBase:
         )
 
     @staticmethod
-    def make_fictitious_computation_method(
-        target: str, sources: Sequence[str]
-    ) -> ComputationMethod:
+    def make_fictitious_computation_method(target: str, sources: Sequence[str]) -> FitterMethod:
         def _fitted_const(val: Any) -> FittedComputationMethod[Any, Any]:
             def _impl(*_args: Any, **_kwargs: Any) -> Any:
                 return val
 
             return cast(FittedComputationMethod[Any, Any], _impl)
 
-        return ComputationMethod(
+        return FitterMethod(
             target=target, sources=sources, fitter=lambda *_a, **_k: _fitted_const(None)
         )
 

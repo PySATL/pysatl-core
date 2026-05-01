@@ -22,7 +22,7 @@ from typing import Any, cast
 import numpy as np
 from mypy_extensions import KwArg
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.computations.continuous import (
     fit_cdf_to_pdf_1C,
     fit_cdf_to_ppf_1C,

@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pysatl_core.distributions.computations.helpers import (
+from pysatl_core.distributions.computations._utils import (
     collect_support,
     estimate_support_bounds,
     maybe_unwrap_scalar,
