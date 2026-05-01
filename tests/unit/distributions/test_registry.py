@@ -311,7 +311,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
                 func=cast(Callable[[KwArg(Any)], float], c_func),
             )
 
-        hyper_method = ComputationMethod[Any, Any](
+        hyper_method = ComputationMethod(
             target="C",
             sources=("A", "B"),
             fitter=cast(
@@ -424,7 +424,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
 
         reg.add_computation(
-            ComputationMethod[Any, Any](
+            ComputationMethod(
                 target="mean",
                 sources=("pdf",),
                 fitter=cast(
@@ -434,7 +434,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod[Any, Any](
+            ComputationMethod(
                 target="second_moment",
                 sources=("pdf",),
                 fitter=cast(
@@ -444,7 +444,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod[Any, Any](
+            ComputationMethod(
                 target="mean_sq",
                 sources=("mean",),
                 fitter=cast(
@@ -454,7 +454,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod[Any, Any](
+            ComputationMethod(
                 target="var",
                 sources=("second_moment", "mean_sq"),
                 fitter=cast(

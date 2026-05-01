@@ -118,7 +118,7 @@ class DistributionTestBase:
     @staticmethod
     def make_fictitious_computation_method(
         target: str, sources: Sequence[str]
-    ) -> ComputationMethod[Any, Any]:
+    ) -> ComputationMethod:
         def _fitted_const(val: Any) -> FittedComputationMethod[Any, Any]:
             def _impl(*_args: Any, **_kwargs: Any) -> Any:
                 return val
