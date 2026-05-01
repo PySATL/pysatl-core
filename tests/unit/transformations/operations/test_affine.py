@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.distributions.strategies import DefaultComputationStrategy
 from pysatl_core.distributions.support import ContinuousSupport

@@ -13,10 +13,10 @@ import pytest
 from mypy_extensions import KwArg
 
 from pysatl_core.distributions import strategies as strategies_module
-from pysatl_core.distributions.computation import (
+from pysatl_core.distributions.computations.computation import (
     AnalyticalComputation,
-    ComputationMethod,
     FittedComputationMethod,
+    FitterMethod,
 )
 from pysatl_core.distributions.distribution import Distribution
 from pysatl_core.distributions.registry import (
@@ -277,10 +277,12 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert all(not edge.is_analytical for edge in variants.values())
 
         path = view.find_path("src", "dst", prefer_label="fast")
-        assert path == [alternative_method]
+        assert path is not None
+        assert [edge.method for edge in path] == [alternative_method]
 
         path = view.find_path("src", "dst")
-        assert path == [default_method]
+        assert path is not None
+        assert [edge.method for edge in path] == [default_method]
 
     def test_hyperedge_many_to_one_projection_and_single_fitter(
         self, monkeypatch: pytest.MonkeyPatch
@@ -311,7 +313,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
                 func=cast(Callable[[KwArg(Any)], float], c_func),
             )
 
-        hyper_method = ComputationMethod(
+        hyper_method = FitterMethod(
             target="C",
             sources=("A", "B"),
             fitter=cast(
@@ -335,8 +337,12 @@ class TestCharacteristicRegistry(DistributionTestBase):
         view = reg.view(distr)
         assert view.variants("A", "C")["ab_to_c"].method is hyper_method
         assert view.variants("B", "C")["ab_to_c"].method is hyper_method
-        assert view.find_path("A", "C") == [hyper_method]
-        assert view.find_path("B", "C") == [hyper_method]
+        path_a = view.find_path("A", "C")
+        path_b = view.find_path("B", "C")
+        assert path_a is not None
+        assert path_b is not None
+        assert [edge.method for edge in path_a] == [hyper_method]
+        assert [edge.method for edge in path_b] == [hyper_method]
 
         monkeypatch.setattr(strategies_module, "characteristic_registry", lambda: reg)
         strategy = DefaultComputationStrategy(enable_caching=True)
@@ -424,7 +430,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
 
         reg.add_computation(
-            ComputationMethod(
+            FitterMethod(
                 target="mean",
                 sources=("pdf",),
                 fitter=cast(
@@ -434,7 +440,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod(
+            FitterMethod(
                 target="second_moment",
                 sources=("pdf",),
                 fitter=cast(
@@ -444,7 +450,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod(
+            FitterMethod(
                 target="mean_sq",
                 sources=("mean",),
                 fitter=cast(
@@ -454,7 +460,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             )
         )
         reg.add_computation(
-            ComputationMethod(
+            FitterMethod(
                 target="var",
                 sources=("second_moment", "mean_sq"),
                 fitter=cast(

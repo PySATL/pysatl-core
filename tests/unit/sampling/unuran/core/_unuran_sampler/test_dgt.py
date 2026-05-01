@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
     IntegerLatticeDiscreteSupport,

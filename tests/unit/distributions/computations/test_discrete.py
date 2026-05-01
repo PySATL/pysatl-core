@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from mypy_extensions import KwArg
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.computations.discrete import (
     FITTER_CDF_TO_PMF_1D,
     FITTER_CDF_TO_PPF_1D,

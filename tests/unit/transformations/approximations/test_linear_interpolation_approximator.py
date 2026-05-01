@@ -9,7 +9,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.transformations.approximations import (
     CDFMonotoneSplineApproximation,
