@@ -4,6 +4,10 @@ Default configuration and cached accessor for the global characteristic registry
  - No auto-configuration in constructor.
  - Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
   singleton instance and seeds it with a set of edges.
+
+Descriptors are registered lazily: only their metadata (target, sources, tags)
+is used to declare graph edges at configuration time.  The actual
+``to_computation_method()`` call happens on demand when the strategy resolves a path.
 """
 
 from __future__ import annotations
@@ -14,16 +18,15 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from functools import lru_cache
 
-from pysatl_core.distributions.computation import ComputationMethod
-from pysatl_core.distributions.fitters import (
-    fit_cdf_to_pdf_1C,
-    fit_cdf_to_pmf_1D,
-    fit_cdf_to_ppf_1C,
-    fit_cdf_to_ppf_1D,
-    fit_pdf_to_cdf_1C,
-    fit_pmf_to_cdf_1D,
-    fit_ppf_to_cdf_1C,
-    fit_ppf_to_cdf_1D,
+from pysatl_core.distributions.computations import (
+    FITTER_CDF_TO_PDF_1C,
+    FITTER_CDF_TO_PMF_1D,
+    FITTER_CDF_TO_PPF_1C,
+    FITTER_CDF_TO_PPF_1D,
+    FITTER_PDF_TO_CDF_1C,
+    FITTER_PMF_TO_CDF_1D,
+    FITTER_PPF_TO_CDF_1C,
+    FITTER_PPF_TO_CDF_1D,
 )
 from pysatl_core.distributions.registry.constraint import (
     GraphPrimitiveConstraint,
@@ -32,40 +35,20 @@ from pysatl_core.distributions.registry.constraint import (
     SetConstraint,
 )
 from pysatl_core.distributions.registry.graph import CharacteristicRegistry
-from pysatl_core.types import CharacteristicName, Kind, NumericArray
+from pysatl_core.types import CharacteristicName, Kind
 
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
-    pdf_to_cdf_1C = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PDF], fitter=fit_pdf_to_cdf_1C
-    )
-    cdf_to_pdf_1C = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.PDF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_pdf_1C
-    )
-    cdf_to_ppf_1C = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1C
-    )
-    ppf_to_cdf_1C = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1C
-    )
+    pdf_to_cdf_1C = FITTER_PDF_TO_CDF_1C.to_computation_method()
+    cdf_to_pdf_1C = FITTER_CDF_TO_PDF_1C.to_computation_method()
+    cdf_to_ppf_1C = FITTER_CDF_TO_PPF_1C.to_computation_method()
+    ppf_to_cdf_1C = FITTER_PPF_TO_CDF_1C.to_computation_method()
 
-    pmf_to_cdf_1D = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.CDF,
-        sources=[CharacteristicName.PMF],
-        fitter=fit_pmf_to_cdf_1D,
-    )
-    cdf_to_pmf_1D = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.PMF,
-        sources=[CharacteristicName.CDF],
-        fitter=fit_cdf_to_pmf_1D,
-    )
-    cdf_to_ppf_1D = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.PPF, sources=[CharacteristicName.CDF], fitter=fit_cdf_to_ppf_1D
-    )
-    ppf_to_cdf_1D = ComputationMethod[NumericArray, NumericArray](
-        target=CharacteristicName.CDF, sources=[CharacteristicName.PPF], fitter=fit_ppf_to_cdf_1D
-    )
+    pmf_to_cdf_1D = FITTER_PMF_TO_CDF_1D.to_computation_method()
+    cdf_to_pmf_1D = FITTER_CDF_TO_PMF_1D.to_computation_method()
+    cdf_to_ppf_1D = FITTER_CDF_TO_PPF_1D.to_computation_method()
+    ppf_to_cdf_1D = FITTER_PPF_TO_CDF_1D.to_computation_method()
 
     dim1_constraint = NumericConstraint(allowed=frozenset({1}))
     kind_continuous = SetConstraint(allowed=frozenset({Kind.CONTINUOUS}))

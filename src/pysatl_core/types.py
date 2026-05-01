@@ -21,6 +21,9 @@ import numpy as np
 from mypy_extensions import KwArg
 from numpy.typing import NDArray
 
+if TYPE_CHECKING:
+    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+
 
 class Kind(StrEnum):
     """
@@ -268,6 +271,25 @@ implementations may or may not accept them, and wrappers typically forward
 type ParentRole = str
 """Type alias for logical roles of parent distributions in a transformation."""
 
+type FitterFunc = Callable[..., FittedComputationMethod[NumericArray, NumericArray]]
+"""Callable that fits a computation method to a distribution.
+
+A fitter performs expensive precomputation (e.g. numerical integration,
+table construction) and returns a ``FittedComputationMethod`` that can
+be cached and reused.
+
+The first positional argument is always a ``Distribution``; additional
+keyword arguments are fitter-specific options with explicit defaults.
+"""
+
+type EvaluatorFunc = Callable[..., NumericArray]
+"""Callable that directly evaluates a characteristic for a distribution.
+
+An evaluator is lightweight and called on every query without caching.
+The first positional argument is always a ``Distribution``; it may
+optionally accept a second positional data argument.
+"""
+
 
 class CharacteristicName(StrEnum):
     """
@@ -399,6 +421,8 @@ __all__ = [
     "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
     "ComputationFunc",
+    "FitterFunc",
+    "EvaluatorFunc",
     "ContinuousCdfEvaluator",
     "TransformationName",
     "BinaryOperationName",
