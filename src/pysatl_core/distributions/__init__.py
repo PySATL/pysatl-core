@@ -13,13 +13,10 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from .computation import (
-    AnalyticalComputation,
-    ComputationMethod,
-    FittedComputationMethod,
-)
 from .computations.computation import (
+    AnalyticalComputation,
     EvaluatorMethod,
+    FittedComputationMethod,
     FitterMethod,
 )
 from .distribution import Distribution
@@ -36,7 +33,7 @@ from .support import __all__ as _support_all
 __all__ = [
     # computation primitives
     "AnalyticalComputation",
-    "ComputationMethod",
+    "FitterMethod",
     "FittedComputationMethod",
     "FitterMethod",
     "EvaluatorMethod",

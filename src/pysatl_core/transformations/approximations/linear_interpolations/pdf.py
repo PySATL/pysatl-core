@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.transformations.approximations.linear_interpolations._common import (
     evaluate_on_grid,

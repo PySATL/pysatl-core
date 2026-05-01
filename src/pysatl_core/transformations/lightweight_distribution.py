@@ -15,7 +15,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.distribution import _KEEP, Distribution
 from pysatl_core.distributions.strategies import (
     ComputationStrategy,

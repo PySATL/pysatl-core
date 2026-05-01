@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from pysatl_core.distributions.computation import Method
+from pysatl_core.distributions.computations.computation import Method
 from pysatl_core.transformations.operations.methods._utils import (
     _merge_transformation_methods,
     _source_requirements_for_roles,

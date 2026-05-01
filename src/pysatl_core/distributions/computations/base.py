@@ -164,24 +164,189 @@ class ComputationOption(_BaseOption):
     """
 
 
-def _resolve_options(
-    options: tuple[_BaseOption, ...],
-    kwargs: dict[str, Any],
-) -> dict[str, Any]:
-    """Resolve a tuple of option descriptors from *kwargs* (mutates *kwargs*)."""
-    return {opt.name: opt.resolve(kwargs) for opt in options}
+@dataclass(frozen=True, slots=True)
+class OptionsDescriptor:
+    """
+    Compact, graph-level form of a computation descriptor.
 
+    A *short* descriptor carries only the metadata required by the strategy
+    when resolving caller-supplied ``**options`` against a specific edge in
+    the characteristic graph.  It is the graph-level primitive: it is
+    immutable, decoupled from the heavy fitter/evaluator callable, and
+    cheap to attach to every :class:`ComputationEdgeMeta` so the strategy
+    can route options per-edge along a multi-hop conversion path.
 
-def _option_names(options: tuple[_BaseOption, ...]) -> tuple[str, ...]:
-    return tuple(opt.name for opt in options)
+    Attributes
+    ----------
+    name : str
+        Descriptor identifier (matches the originating
+        :class:`FitterDescriptor` / :class:`EvaluatorDescriptor` name).
+        Empty by default for edges that were declared without a descriptor.
+    characteristic_options : tuple[CharacteristicOption, ...]
+        Options intrinsic to the characteristic.
+    computation_options : tuple[ComputationOption, ...]
+        Options controlling the numerical algorithm.
+    """
 
+    name: str = ""
+    characteristic_options: tuple[CharacteristicOption, ...] = ()
+    computation_options: tuple[ComputationOption, ...] = ()
 
-def _option_defaults(options: tuple[_BaseOption, ...]) -> dict[str, Any]:
-    return {opt.name: opt.default for opt in options}
+    @property
+    def options(self) -> tuple[_BaseOption, ...]:
+        """All options (characteristic first, then computation)."""
+        return self.characteristic_options + self.computation_options
+
+    def resolve_characteristic_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Resolve only the *characteristic* options from *kwargs*."""
+        return {opt.name: opt.resolve(kwargs) for opt in self.characteristic_options}
+
+    def resolve_computation_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Resolve only the *computation* options from *kwargs*."""
+        return {opt.name: opt.resolve(kwargs) for opt in self.computation_options}
+
+    def resolve_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Resolve *all* declared options (characteristic + computation) from *kwargs*.
+
+        Consumes recognised keys from *kwargs* and returns a dict of
+        ``{option_name: resolved_value}``.  Unrecognised keys are left
+        in *kwargs* untouched.
+        """
+        return {opt.name: opt.resolve(kwargs) for opt in self.options}
 
 
 @dataclass(frozen=True, slots=True)
-class FitterDescriptor:
+class _BaseDescriptor:
+    """
+    Abstract base for computation descriptors.
+
+    Holds the common fields and option-resolution methods shared between
+    ``FitterDescriptor`` and ``EvaluatorDescriptor``.
+
+    Attributes
+    ----------
+    name : str
+        Unique human-readable identifier.
+    target : GenericCharacteristicName
+        Characteristic produced by this descriptor.
+    sources : Sequence[GenericCharacteristicName]
+        Characteristics consumed by this descriptor.
+    characteristic_options : tuple[CharacteristicOption, ...]
+        Options intrinsic to the characteristic (shared between fitters and
+        evaluators, encoded into the cache key).
+    computation_options : tuple[ComputationOption, ...]
+        Options controlling the numerical algorithm.
+    constraint_tags : frozenset[str]
+        Constraint tags used for matching.
+    description : str
+        Human-readable summary.
+    """
+
+    name: str
+    target: GenericCharacteristicName
+    sources: Sequence[GenericCharacteristicName]
+    characteristic_options: tuple[CharacteristicOption, ...] = ()
+    computation_options: tuple[ComputationOption, ...] = ()
+    constraint_tags: frozenset[str] = field(default_factory=frozenset)
+    description: str = ""
+
+    @property
+    def options(self) -> tuple[_BaseOption, ...]:
+        """All options (characteristic first, then computation)."""
+        return self.characteristic_options + self.computation_options
+
+    def resolve_characteristic_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Resolve only the *characteristic* options from *kwargs*.
+
+        Consumes recognised keys from *kwargs* and returns a dict of
+        ``{option_name: resolved_value}``.  Unrecognised keys are left
+        in *kwargs* untouched.
+
+        Parameters
+        ----------
+        kwargs : dict[str, Any]
+            Mutable keyword-argument dict from the caller.
+
+        Returns
+        -------
+        dict[str, Any]
+        """
+        return {opt.name: opt.resolve(kwargs) for opt in self.characteristic_options}
+
+    def resolve_computation_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Resolve only the *computation* options from *kwargs*.
+
+        Parameters
+        ----------
+        kwargs : dict[str, Any]
+            Mutable keyword-argument dict from the caller.
+
+        Returns
+        -------
+        dict[str, Any]
+        """
+        return {opt.name: opt.resolve(kwargs) for opt in self.computation_options}
+
+    def resolve_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Resolve *all* declared options (characteristic + computation) from *kwargs*.
+
+        Consumes recognised keys from *kwargs* and returns a dict of
+        ``{option_name: resolved_value}``.  Unrecognised keys are left
+        in *kwargs* untouched.
+
+        Parameters
+        ----------
+        kwargs : dict[str, Any]
+            Mutable keyword-argument dict from the caller.
+
+        Returns
+        -------
+        dict[str, Any]
+            Mapping from option name to resolved (validated, typed) value.
+        """
+        return {opt.name: opt.resolve(kwargs) for opt in self.options}
+
+    def to_options_descriptor(self) -> OptionsDescriptor:
+        """
+        Return the :class:`OptionsDescriptor` projection of this descriptor.
+
+        The returned object carries only the option metadata (and the
+        descriptor name for traceability) required by the strategy when
+        resolving user-supplied ``**options`` against a specific edge in
+        the characteristic graph.  It deliberately omits the heavy callable
+        (``fitter`` / ``evaluator``) and the matching metadata
+        (``target``, ``sources``, ``constraint_tags``) which are already
+        encoded in the graph topology and edge constraints.
+        """
+        return OptionsDescriptor(
+            name=self.name,
+            characteristic_options=self.characteristic_options,
+            computation_options=self.computation_options,
+        )
+
+    def option_names(self) -> tuple[str, ...]:
+        """Return the names of all declared options (characteristic + computation)."""
+        return tuple(opt.name for opt in self.options)
+
+    def option_defaults(self) -> dict[str, Any]:
+        """Return ``{name: default}`` for every declared option."""
+        return {opt.name: opt.default for opt in self.options}
+
+    def characteristic_option_names(self) -> tuple[str, ...]:
+        """Return the names of characteristic options only."""
+        return tuple(opt.name for opt in self.characteristic_options)
+
+    def computation_option_names(self) -> tuple[str, ...]:
+        """Return the names of computation options only."""
+        return tuple(opt.name for opt in self.computation_options)
+
+
+@dataclass(frozen=True, slots=True)
+class FitterDescriptor(_BaseDescriptor):
     """
     Complete metadata for a cacheable fitter.
 
@@ -214,19 +379,7 @@ class FitterDescriptor:
     first, then computation) for backwards-compatible resolution.
     """
 
-    name: str
-    target: GenericCharacteristicName
-    sources: Sequence[GenericCharacteristicName]
-    fitter: FitterFunc
-    characteristic_options: tuple[CharacteristicOption, ...] = ()
-    computation_options: tuple[ComputationOption, ...] = ()
-    constraint_tags: frozenset[str] = field(default_factory=frozenset)
-    description: str = ""
-
-    @property
-    def options(self) -> tuple[_BaseOption, ...]:
-        """All options (characteristic first, then computation)."""
-        return (*self.characteristic_options, *self.computation_options)
+    fitter: FitterFunc = field(default=None)  # type: ignore[assignment]
 
     def to_computation_method(self) -> FitterMethod:
         """
@@ -244,79 +397,9 @@ class FitterDescriptor:
             fitter=self.fitter,
         )
 
-    def resolve_characteristic_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve only the *characteristic* options from *kwargs*.
-
-        Consumes recognised keys from *kwargs* and returns a dict of
-        ``{option_name: resolved_value}``.  Unrecognised keys are left
-        in *kwargs* untouched.
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-        """
-        return _resolve_options(self.characteristic_options, kwargs)
-
-    def resolve_computation_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve only the *computation* options from *kwargs*.
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-        """
-        return _resolve_options(self.computation_options, kwargs)
-
-    def resolve_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve *all* declared options (characteristic + computation) from *kwargs*.
-
-        Consumes recognised keys from *kwargs* and returns a dict of
-        ``{option_name: resolved_value}``.  Unrecognised keys are left
-        in *kwargs* untouched.
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-            Mapping from option name to resolved (validated, typed) value.
-        """
-        return _resolve_options(self.options, kwargs)
-
-    def option_names(self) -> tuple[str, ...]:
-        """Return the names of all declared options (characteristic + computation)."""
-        return _option_names(self.options)
-
-    def option_defaults(self) -> dict[str, Any]:
-        """Return ``{name: default}`` for every declared option."""
-        return _option_defaults(self.options)
-
-    def characteristic_option_names(self) -> tuple[str, ...]:
-        """Return the names of characteristic options only."""
-        return _option_names(self.characteristic_options)
-
-    def computation_option_names(self) -> tuple[str, ...]:
-        """Return the names of computation options only."""
-        return _option_names(self.computation_options)
-
 
 @dataclass(frozen=True, slots=True)
-class EvaluatorDescriptor:
+class EvaluatorDescriptor(_BaseDescriptor):
     """
     Complete metadata for a non-cacheable evaluator.
 
@@ -348,19 +431,7 @@ class EvaluatorDescriptor:
         Human-readable summary of what the evaluator does.
     """
 
-    name: str
-    target: GenericCharacteristicName
-    sources: Sequence[GenericCharacteristicName]
-    evaluator: EvaluatorFunc
-    characteristic_options: tuple[CharacteristicOption, ...] = ()
-    computation_options: tuple[ComputationOption, ...] = ()
-    constraint_tags: frozenset[str] = field(default_factory=frozenset)
-    description: str = ""
-
-    @property
-    def options(self) -> tuple[_BaseOption, ...]:
-        """All options (characteristic first, then computation)."""
-        return (*self.characteristic_options, *self.computation_options)
+    evaluator: EvaluatorFunc = field(default=None)  # type: ignore[assignment]
 
     def to_computation_method(self) -> EvaluatorMethod:
         """
@@ -378,75 +449,11 @@ class EvaluatorDescriptor:
             evaluator=self.evaluator,
         )
 
-    def resolve_characteristic_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve only the *characteristic* options from *kwargs*.
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-        """
-        return _resolve_options(self.characteristic_options, kwargs)
-
-    def resolve_computation_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve only the *computation* options from *kwargs*.
-
-        For evaluators these are applied on **every call** (not just at
-        fit-time as for fitters).
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-        """
-        return _resolve_options(self.computation_options, kwargs)
-
-    def resolve_options(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """
-        Resolve *all* declared options (characteristic + computation) from *kwargs*.
-
-        Parameters
-        ----------
-        kwargs : dict[str, Any]
-            Mutable keyword-argument dict from the caller.
-
-        Returns
-        -------
-        dict[str, Any]
-            Mapping from option name to resolved (validated, typed) value.
-        """
-        return _resolve_options(self.options, kwargs)
-
-    def option_names(self) -> tuple[str, ...]:
-        """Return the names of all declared options (characteristic + computation)."""
-        return _option_names(self.options)
-
-    def option_defaults(self) -> dict[str, Any]:
-        """Return ``{name: default}`` for every declared option."""
-        return _option_defaults(self.options)
-
-    def characteristic_option_names(self) -> tuple[str, ...]:
-        """Return the names of characteristic options only."""
-        return _option_names(self.characteristic_options)
-
-    def computation_option_names(self) -> tuple[str, ...]:
-        """Return the names of computation options only."""
-        return _option_names(self.computation_options)
-
 
 __all__ = [
     "CharacteristicOption",
     "ComputationOption",
-    "FitterDescriptor",
     "EvaluatorDescriptor",
+    "FitterDescriptor",
+    "OptionsDescriptor",
 ]

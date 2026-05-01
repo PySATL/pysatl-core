@@ -5,29 +5,33 @@ Core building blocks for computing distribution characteristics and
 conversions between them (e.g., PDF to CDF, CDF to PPF).
 
 This module provides:
+- ``FittedComputationMethod``: fitted conversion method ready for use
 - ``FitterMethod``: cacheable computation that performs expensive precomputation
 - ``EvaluatorMethod``: lightweight direct computation called on every query
+- ``AnalyticalComputation``: analytical computation provided directly by a distribution
+- ``Computation``: protocol for computations that evaluate a single characteristic
 """
 
 from __future__ import annotations
 
-__author__ = "Irina Sergeeva"
+__author__ = "Irina Sergeeva, Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any, Protocol, overload, runtime_checkable
 
-from pysatl_core.types import ComputationFunc
+from pysatl_core.types import ComputationFunc, NumericArray
 
 if TYPE_CHECKING:
+    from mypy_extensions import KwArg
+
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import (
         EvaluatorFunc,
         FitterFunc,
         GenericCharacteristicName,
-        NumericArray,
     )
 
 
@@ -194,10 +198,73 @@ class EvaluatorMethod:
 type ComputationMethodUnion = FitterMethod | EvaluatorMethod
 """Union type for computation methods (fitter or evaluator)."""
 
+type Fitter[In, Out] = Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
+type Evaluator[In, Out] = (
+    Callable[[Distribution, KwArg(Any)], Out] | Callable[[Distribution, In, KwArg(Any)], Out]
+)
+
+
+@runtime_checkable
+class Computation[In, Out](Protocol):
+    """
+    Protocol for computations that evaluate a single characteristic.
+
+    Attributes
+    ----------
+    target : str
+        Name of the characteristic this computation produces.
+    """
+
+    @property
+    def target(self) -> GenericCharacteristicName: ...
+
+    @overload
+    def __call__(self, **kwargs: Any) -> Out: ...
+
+    @overload
+    def __call__(self, x: In, **kwargs: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Out: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyticalComputation[In, Out]:
+    """
+    Analytical computation provided directly by a distribution.
+
+    Parameters
+    ----------
+    target : str
+        Characteristic name (e.g., "pdf", "cdf").
+    func : ComputationFunc[In, Out]
+        Analytical function that computes the characteristic.
+    """
+
+    target: GenericCharacteristicName
+    func: ComputationFunc[In, Out]
+
+    @overload
+    def __call__(self, **options: Any) -> Out: ...
+
+    @overload
+    def __call__(self, data: In, **options: Any) -> Out: ...
+
+    def __call__(self, *args: Any, **options: Any) -> Out:
+        """Evaluate the analytical function."""
+        return self.func(*args, **options)
+
+
+type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
+
 
 __all__ = [
+    "AnalyticalComputation",
+    "Computation",
+    "ComputationMethodUnion",
+    "Evaluator",
+    "EvaluatorMethod",
+    "Fitter",
     "FittedComputationMethod",
     "FitterMethod",
-    "EvaluatorMethod",
-    "ComputationMethodUnion",
+    "Method",
 ]

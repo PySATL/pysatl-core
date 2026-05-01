@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Self, cast
 
 from pysatl_core.distributions.strategies import (
     ComputationStrategy,
+    ExecutionPlan,
     SamplingStrategy,
 )
 from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
@@ -28,7 +29,7 @@ _KEEP: object = object()
 if TYPE_CHECKING:
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.computations.computation import AnalyticalComputation
     from pysatl_core.distributions.support import Support
     from pysatl_core.types import (
         DistributionType,
@@ -290,6 +291,30 @@ class Distribution(ABC):
             Callable method that computes the characteristic.
         """
         return self.computation_strategy.query_method(characteristic_name, self, **options)
+
+    def explain(self, characteristic_name: GenericCharacteristicName) -> ExecutionPlan:
+        """
+        Describe how the attached computation strategy will compute a characteristic.
+
+        Returns an :class:`ExecutionPlan` listing every step (loop or
+        conversion edge) and the option descriptors that will be consulted
+        at each step.  The plan is also pinned by the strategy, so a
+        subsequent :meth:`query_method` / :meth:`calculate_characteristic`
+        call for the same ``characteristic_name`` follows exactly the
+        same edges -- which is useful for introspection and protects
+        against non-deterministic strategy choices.
+
+        Parameters
+        ----------
+        characteristic_name : str
+            Name of the characteristic to introspect.
+
+        Returns
+        -------
+        ExecutionPlan
+            The plan describing the resolution path.
+        """
+        return self.computation_strategy.explain(characteristic_name, self)
 
     def calculate_characteristic(
         self, characteristic_name: GenericCharacteristicName, value: Any, **options: Any
