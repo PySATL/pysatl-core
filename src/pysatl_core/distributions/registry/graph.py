@@ -37,7 +37,7 @@ from pysatl_core.distributions.registry.graph_primitives import (
 )
 
 if TYPE_CHECKING:
-    from pysatl_core.distributions.computation import ComputationMethod
+    from pysatl_core.distributions.computations.computation import ComputationMethodUnion
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName, LabelName
 
@@ -176,7 +176,7 @@ class CharacteristicRegistry:
 
     def add_computation(
         self,
-        method: ComputationMethod[Any, Any],
+        method: ComputationMethodUnion,
         *,
         label: LabelName = DEFAULT_COMPUTATION_KEY,
         constraint: GraphPrimitiveConstraint | None = None,
@@ -186,7 +186,8 @@ class CharacteristicRegistry:
 
         Parameters
         ----------
-        method : ComputationMethod
+        method : ComputationMethodUnion
+
             Computation object with one-or-many sources and one target.
         label : LabelName, default=DEFAULT_COMPUTATION_KEY
             Variant label for the edge.

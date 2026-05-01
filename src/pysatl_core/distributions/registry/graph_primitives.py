@@ -14,12 +14,15 @@ from typing import Any
 
 from pysatl_core.distributions.computation import (
     AnalyticalComputation,
-    ComputationMethod,
+)
+from pysatl_core.distributions.computations.computation import (
+    ComputationMethodUnion,
 )
 from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
 from pysatl_core.types import LabelName
 
-type EdgeMethod = ComputationMethod[Any, Any] | AnalyticalComputation[Any, Any]
+type EdgeMethod = ComputationMethodUnion | AnalyticalComputation[Any, Any]
+
 
 DEFAULT_COMPUTATION_KEY: LabelName = "PySATL_default_computation"
 """Default label for computation edges when no specific label is provided."""
@@ -57,7 +60,7 @@ class ComputationEdgeMeta(EdgeMeta):
     Edge metadata for conversion computations from the registry graph.
     """
 
-    method: ComputationMethod[Any, Any]
+    method: ComputationMethodUnion
     is_analytical: bool = field(default=False)
 
     def edge_kind(self) -> str:

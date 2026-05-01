@@ -18,6 +18,10 @@ from .computation import (
     ComputationMethod,
     FittedComputationMethod,
 )
+from .computations.computation import (
+    EvaluatorMethod,
+    FitterMethod,
+)
 from .distribution import Distribution
 from .registry import *
 from .registry import __all__ as _registry_all
@@ -34,6 +38,8 @@ __all__ = [
     "AnalyticalComputation",
     "ComputationMethod",
     "FittedComputationMethod",
+    "FitterMethod",
+    "EvaluatorMethod",
     # distribution
     "Distribution",
     # strategies

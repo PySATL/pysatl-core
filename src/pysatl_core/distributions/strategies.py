@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.computation import (
         AnalyticalComputation,
+    )
+    from pysatl_core.distributions.computations.computation import (
         FittedComputationMethod,
     )
     from pysatl_core.distributions.distribution import Distribution
