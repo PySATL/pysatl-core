@@ -15,14 +15,20 @@ from math import inf
 from typing import TYPE_CHECKING, Any, cast, overload
 
 if TYPE_CHECKING:
-    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+    from pysatl_core.distributions.computations.computation import (
+        AnalyticalComputation,
+        FittedComputationMethod,
+    )
 
 import numpy as np
 from mypy_extensions import KwArg
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
-    from pysatl_core.distributions.computation import AnalyticalComputation, FittedComputationMethod
+    from pysatl_core.distributions.computations.computation import (
+        AnalyticalComputation,
+        FittedComputationMethod,
+    )
 
 
 class Kind(StrEnum):

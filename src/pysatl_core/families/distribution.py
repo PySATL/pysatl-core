@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
 
-    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.computations.computation import AnalyticalComputation
     from pysatl_core.distributions.strategies import (
         ComputationStrategy,
         SamplingStrategy,

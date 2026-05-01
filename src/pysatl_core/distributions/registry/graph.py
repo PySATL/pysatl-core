@@ -37,6 +37,7 @@ from pysatl_core.distributions.registry.graph_primitives import (
 )
 
 if TYPE_CHECKING:
+    from pysatl_core.distributions.computations.base import OptionsDescriptor
     from pysatl_core.distributions.computations.computation import ComputationMethodUnion
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName, LabelName
@@ -180,6 +181,7 @@ class CharacteristicRegistry:
         *,
         label: LabelName = DEFAULT_COMPUTATION_KEY,
         constraint: GraphPrimitiveConstraint | None = None,
+        options_descriptor: OptionsDescriptor | None = None,
     ) -> None:
         """
         Add a labeled computation edge.
@@ -193,6 +195,12 @@ class CharacteristicRegistry:
             Variant label for the edge.
         constraint : GraphPrimitiveConstraint, optional
             Edge applicability constraint. If None, a pass-through constraint is used.
+        options_descriptor : OptionsDescriptor, optional
+            Compact, graph-level form of the originating descriptor's
+            options.  Carries only the option metadata used by the strategy
+            to resolve user-supplied ``**options`` for this specific edge.
+            If omitted, an empty :class:`OptionsDescriptor` is attached,
+            which behaves as a no-op during option resolution.
 
         Raises
         ------
@@ -206,6 +214,8 @@ class CharacteristicRegistry:
         - Hyperedges are represented as projected edges from each source to target,
           while preserving one shared underlying computation method.
         """
+        from pysatl_core.distributions.computations.base import OptionsDescriptor
+
         if not method.sources:
             raise ValueError("Computation must define at least one source characteristic.")
 
@@ -218,6 +228,7 @@ class CharacteristicRegistry:
         edge_meta = ComputationEdgeMeta(
             method=method,
             constraint=constraint or GraphPrimitiveConstraint(),
+            options_descriptor=options_descriptor or OptionsDescriptor(),
         )
 
         # TODO: We need to be careful here if some constraint more general and with the same label
@@ -577,7 +588,7 @@ class RegistryView:
         dst: GenericCharacteristicName,
         *,
         prefer_label: LabelName | None = None,
-    ) -> list[Any] | None:
+    ) -> list[ComputationEdgeMeta] | None:
         """
         Find a computation path from src to dst using BFS.
 
@@ -590,8 +601,17 @@ class RegistryView:
 
         Returns
         -------
-        list of Any or None
-            List of computation methods forming the path, or None if no path exists.
+        list of ComputationEdgeMeta or None
+            List of edge metadata objects forming the path, or None if no
+            path exists.  Each entry exposes both the underlying computation
+            method (``edge.method``) and the options descriptor
+            (``edge.options_descriptor``) used by the strategy to route
+            options.
+
+            Self-loop edges (``AnalyticalLoopEdgeMeta`` /
+            ``TransformationLoopEdgeMeta``) never appear in the returned
+            path: they live only on ``char -> char`` slots and are excluded
+            by BFS, which starts with ``src`` already visited.
 
         Notes
         -----
@@ -604,7 +624,9 @@ class RegistryView:
             return []
 
         visited: set[GenericCharacteristicName] = {src}
-        parent: dict[GenericCharacteristicName, tuple[GenericCharacteristicName, Any]] = {}
+        parent: dict[
+            GenericCharacteristicName, tuple[GenericCharacteristicName, ComputationEdgeMeta]
+        ] = {}
         queue: list[GenericCharacteristicName] = [src]
         qi = 0
 
@@ -614,16 +636,19 @@ class RegistryView:
             for w, by_label in self._adj.get(v, {}).items():
                 if not by_label or w in visited:
                     continue
-                method = self._pick_method(by_label, prefer_label)
+                edge = self._pick_edge(by_label, prefer_label)
+                # BFS only traverses non-loop edges (v != w), so the picked
+                # edge is always a conversion ComputationEdgeMeta.
+                assert isinstance(edge, ComputationEdgeMeta)
                 visited.add(w)
-                parent[w] = (v, method)
+                parent[w] = (v, edge)
                 if w == dst:
                     # Reconstruct path
-                    path: list[Any] = []
+                    path: list[ComputationEdgeMeta] = []
                     cur = dst
                     while cur != src:
-                        pv, m = parent[cur]
-                        path.append(m)
+                        pv, e = parent[cur]
+                        path.append(e)
                         cur = pv
                     path.reverse()
                     return path
@@ -771,12 +796,12 @@ class RegistryView:
         return self._reachable_from_many({src}, allowed=allowed)
 
     @staticmethod
-    def _pick_method(
+    def _pick_edge(
         variants: Mapping[LabelName, EdgeMeta],
         prefer_label: LabelName | None,
-    ) -> Any:
+    ) -> EdgeMeta:
         """
-        Select a method from label variants.
+        Select an edge from label variants.
 
         Parameters
         ----------
@@ -787,12 +812,13 @@ class RegistryView:
 
         Returns
         -------
-        Any
-            Selected computation method.
+        EdgeMeta
+            Selected edge metadata (carries both the computation method
+            and its short descriptor).
         """
         if prefer_label and prefer_label in variants:
-            return variants[prefer_label].method
+            return variants[prefer_label]
         if DEFAULT_COMPUTATION_KEY in variants:
-            return variants[DEFAULT_COMPUTATION_KEY].method
+            return variants[DEFAULT_COMPUTATION_KEY]
         label = min(variants)
-        return variants[label].method
+        return variants[label]

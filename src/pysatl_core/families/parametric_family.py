@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, cast, dataclass_transform
 
 import numpy as np
 
-from pysatl_core.distributions.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.types import (
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL,

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from pysatl_core.distributions.computation import Method
+from pysatl_core.distributions.computations.computation import Method
 from pysatl_core.distributions.distribution import _KEEP, Distribution
 from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.distributions.support import (

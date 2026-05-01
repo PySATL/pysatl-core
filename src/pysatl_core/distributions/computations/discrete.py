@@ -26,14 +26,14 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from pysatl_core.distributions.computations.base import ComputationOption, FitterDescriptor
-from pysatl_core.distributions.computations.computation import FittedComputationMethod
-from pysatl_core.distributions.computations.helpers import (
+from pysatl_core.distributions.computations._utils import (
     build_tail_table,
     collect_support,
     maybe_unwrap_scalar,
     resolve,
 )
+from pysatl_core.distributions.computations.base import ComputationOption, FitterDescriptor
+from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.distributions.support import (
     DiscreteSupport,
     IntegerLatticeDiscreteSupport,

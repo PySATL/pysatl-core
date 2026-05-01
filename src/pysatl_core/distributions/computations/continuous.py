@@ -39,17 +39,17 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy import integrate as _sp_integrate, optimize as _sp_optimize
 
+from pysatl_core.distributions.computations._utils import (
+    estimate_support_bounds,
+    maybe_unwrap_scalar,
+    resolve,
+)
 from pysatl_core.distributions.computations.base import (
     CharacteristicOption,
     ComputationOption,
     FitterDescriptor,
 )
 from pysatl_core.distributions.computations.computation import FittedComputationMethod
-from pysatl_core.distributions.computations.helpers import (
-    estimate_support_bounds,
-    maybe_unwrap_scalar,
-    resolve,
-)
 from pysatl_core.types import CharacteristicName, NumericArray
 
 if TYPE_CHECKING:

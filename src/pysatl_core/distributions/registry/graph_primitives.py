@@ -12,10 +12,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from pysatl_core.distributions.computation import (
-    AnalyticalComputation,
-)
+from pysatl_core.distributions.computations.base import OptionsDescriptor
 from pysatl_core.distributions.computations.computation import (
+    AnalyticalComputation,
     ComputationMethodUnion,
 )
 from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
@@ -58,9 +57,21 @@ class EdgeMeta(ABC):
 class ComputationEdgeMeta(EdgeMeta):
     """
     Edge metadata for conversion computations from the registry graph.
+
+    The ``options_descriptor`` field stores the compact, graph-level form
+    of the originating :class:`FitterDescriptor` /
+    :class:`EvaluatorDescriptor` options.  The strategy uses it to resolve
+    user-supplied ``**options`` for this specific edge while walking a
+    conversion path, without touching the heavy descriptor object or
+    rebuilding edges.
+
+    Edges declared programmatically (e.g. in tests) without an originating
+    descriptor get a default empty :class:`OptionsDescriptor`, which
+    behaves as a no-op during option resolution.
     """
 
     method: ComputationMethodUnion
+    options_descriptor: OptionsDescriptor = field(default_factory=OptionsDescriptor)
     is_analytical: bool = field(default=False)
 
     def edge_kind(self) -> str:

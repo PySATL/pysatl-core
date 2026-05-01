@@ -8,6 +8,11 @@ Default configuration and cached accessor for the global characteristic registry
 Descriptors are registered lazily: only their metadata (target, sources, tags)
 is used to declare graph edges at configuration time.  The actual
 ``to_computation_method()`` call happens on demand when the strategy resolves a path.
+
+Lookup of fitter descriptors by ``(target, sources, tags)`` is delegated to
+``FitterRegistry``: ``configuration`` does not depend on individual descriptor
+identifiers but only on the (source, target) pairs and the constraint tag set
+they are expected to satisfy.
 """
 
 from __future__ import annotations
@@ -17,17 +22,10 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.computations import (
-    FITTER_CDF_TO_PDF_1C,
-    FITTER_CDF_TO_PMF_1D,
-    FITTER_CDF_TO_PPF_1C,
-    FITTER_CDF_TO_PPF_1D,
-    FITTER_PDF_TO_CDF_1C,
-    FITTER_PMF_TO_CDF_1D,
-    FITTER_PPF_TO_CDF_1C,
-    FITTER_PPF_TO_CDF_1D,
-)
+from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
+from pysatl_core.distributions.computations.registry import FitterRegistry
 from pysatl_core.distributions.registry.constraint import (
     GraphPrimitiveConstraint,
     NonNullConstraint,
@@ -37,18 +35,64 @@ from pysatl_core.distributions.registry.constraint import (
 from pysatl_core.distributions.registry.graph import CharacteristicRegistry
 from pysatl_core.types import CharacteristicName, Kind
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from pysatl_core.types import GenericCharacteristicName
+
+
+_CONTINUOUS_1D_TAGS: frozenset[str] = frozenset({"continuous", "univariate"})
+_DISCRETE_1D_TAGS: frozenset[str] = frozenset({"discrete", "univariate"})
+
+
+def _add_edges(
+    reg: CharacteristicRegistry,
+    fitter_reg: FitterRegistry,
+    pairs: Iterable[tuple[GenericCharacteristicName, GenericCharacteristicName]],
+    *,
+    tags: frozenset[str],
+    constraint: GraphPrimitiveConstraint,
+) -> None:
+    """
+    Look up fitters by ``(source, target, tags)`` and attach their computation
+    methods to the characteristic graph under the same edge constraint.
+
+    Parameters
+    ----------
+    reg : CharacteristicRegistry
+        Target characteristic graph.
+    fitter_reg : FitterRegistry
+        Index of fitter descriptors to query.
+    pairs : Iterable[tuple[str, str]]
+        ``(source, target)`` pairs to register.
+    tags : frozenset[str]
+        Required constraint tags for the descriptor lookup.
+    constraint : GraphPrimitiveConstraint
+        Edge constraint applied to every added computation.
+
+    Raises
+    ------
+    RuntimeError
+        If no descriptor matches one of the requested ``(source, target, tags)``.
+    """
+    for src, tgt in pairs:
+        descriptor = fitter_reg.find(tgt, [src], required_tags=tags)
+        if descriptor is None:
+            raise RuntimeError(
+                f"No fitter descriptor registered for {src} -> {tgt} "
+                f"with required tags {sorted(tags)}."
+            )
+        reg.add_computation(
+            descriptor.to_computation_method(),
+            constraint=constraint,
+            options_descriptor=descriptor.to_options_descriptor(),
+        )
+
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
-    pdf_to_cdf_1C = FITTER_PDF_TO_CDF_1C.to_computation_method()
-    cdf_to_pdf_1C = FITTER_CDF_TO_PDF_1C.to_computation_method()
-    cdf_to_ppf_1C = FITTER_CDF_TO_PPF_1C.to_computation_method()
-    ppf_to_cdf_1C = FITTER_PPF_TO_CDF_1C.to_computation_method()
-
-    pmf_to_cdf_1D = FITTER_PMF_TO_CDF_1D.to_computation_method()
-    cdf_to_pmf_1D = FITTER_CDF_TO_PMF_1D.to_computation_method()
-    cdf_to_ppf_1D = FITTER_CDF_TO_PPF_1D.to_computation_method()
-    ppf_to_cdf_1D = FITTER_PPF_TO_CDF_1D.to_computation_method()
+    fitter_reg = FitterRegistry()
+    fitter_reg.register_many(ALL_FITTER_DESCRIPTORS)
 
     dim1_constraint = NumericConstraint(allowed=frozenset({1}))
     kind_continuous = SetConstraint(allowed=frozenset({Kind.CONTINUOUS}))
@@ -98,17 +142,31 @@ def _configure(reg: CharacteristicRegistry) -> None:
         },
     )
 
-    reg.add_computation(pdf_to_cdf_1C, constraint=edge_cont_dim1)
-    reg.add_computation(cdf_to_pdf_1C, constraint=edge_cont_dim1)
+    _add_edges(
+        reg,
+        fitter_reg,
+        pairs=(
+            (CharacteristicName.PDF, CharacteristicName.CDF),
+            (CharacteristicName.CDF, CharacteristicName.PDF),
+            (CharacteristicName.CDF, CharacteristicName.PPF),
+            (CharacteristicName.PPF, CharacteristicName.CDF),
+        ),
+        tags=_CONTINUOUS_1D_TAGS,
+        constraint=edge_cont_dim1,
+    )
 
-    reg.add_computation(cdf_to_ppf_1C, constraint=edge_cont_dim1)
-    reg.add_computation(ppf_to_cdf_1C, constraint=edge_cont_dim1)
-
-    reg.add_computation(pmf_to_cdf_1D, constraint=edge_disc_dim1)
-    reg.add_computation(cdf_to_pmf_1D, constraint=edge_disc_dim1)
-
-    reg.add_computation(ppf_to_cdf_1D, constraint=edge_disc_dim1)
-    reg.add_computation(cdf_to_ppf_1D, constraint=edge_disc_dim1)
+    _add_edges(
+        reg,
+        fitter_reg,
+        pairs=(
+            (CharacteristicName.PMF, CharacteristicName.CDF),
+            (CharacteristicName.CDF, CharacteristicName.PMF),
+            (CharacteristicName.CDF, CharacteristicName.PPF),
+            (CharacteristicName.PPF, CharacteristicName.CDF),
+        ),
+        tags=_DISCRETE_1D_TAGS,
+        constraint=edge_disc_dim1,
+    )
 
 
 @lru_cache(maxsize=1)

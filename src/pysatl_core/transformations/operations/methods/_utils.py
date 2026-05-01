@@ -15,7 +15,7 @@ from typing import Any, cast
 import numpy as np
 from scipy.integrate import quad
 
-from pysatl_core.distributions.computation import Method
+from pysatl_core.distributions.computations.computation import Method
 from pysatl_core.types import (
     ComplexArray,
     ComputationFunc,

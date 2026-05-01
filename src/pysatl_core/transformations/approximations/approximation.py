@@ -11,7 +11,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from pysatl_core.distributions.computation import AnalyticalComputation
+    from pysatl_core.distributions.computations.computation import AnalyticalComputation
     from pysatl_core.transformations.distribution import DerivedDistribution
 
 

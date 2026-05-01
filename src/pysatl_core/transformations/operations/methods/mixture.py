@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from pysatl_core.distributions.computation import Method
+from pysatl_core.distributions.computations.computation import Method
 from pysatl_core.transformations.operations.methods._utils import (
     _central_moments_from_raw,
     _eval_nullary_scalar,
