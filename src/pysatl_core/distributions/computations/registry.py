@@ -3,6 +3,11 @@ Fitter registry for descriptor lookup and matching.
 
 Provides ``FitterRegistry`` for registering, querying, and prioritising
 fitter descriptors by target, sources, and constraint tags.
+
+The module-level ``fitter_registry()`` function returns a process-wide
+singleton that is populated lazily on first access with all built-in
+descriptors from :mod:`pysatl_core.distributions.computations.continuous`
+and :mod:`pysatl_core.distributions.computations.discrete`.
 """
 
 from __future__ import annotations
@@ -11,12 +16,13 @@ __author__ = "Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from pysatl_core.distributions.computations.base import FitterDescriptor
+    from pysatl_core.distributions.computations.descriptors import FitterDescriptor
     from pysatl_core.types import GenericCharacteristicName
 
 
@@ -27,7 +33,7 @@ class FitterRegistry:
     Examples
     --------
     >>> registry = FitterRegistry()
-    >>> registry.register(FITTER_PDF_TO_CDF_1C)
+    >>> registry.register(some_descriptor)
     >>> desc = registry.find("cdf", ["pdf"], required_tags={"continuous", "univariate"})
     """
 
@@ -135,6 +141,41 @@ class FitterRegistry:
         return any(d.name == name for d in self._all)
 
 
+@lru_cache(maxsize=1)
+def fitter_registry() -> FitterRegistry:
+    """
+    Return the process-wide singleton ``FitterRegistry``, populated lazily.
+
+    All built-in continuous and discrete fitter descriptors are created and
+    registered on the first call.  Subsequent calls return the cached instance.
+
+    Notes
+    -----
+    - Descriptors are **not** created at import time; they are built here on
+      first access, keeping module-level side-effects to a minimum.
+    - Users who need a custom registry should instantiate ``FitterRegistry()``
+      directly and populate it themselves.
+    """
+    from pysatl_core.distributions.computations.continuous import (
+        _build_continuous_descriptors,
+    )
+    from pysatl_core.distributions.computations.discrete import (
+        _build_discrete_descriptors,
+    )
+
+    reg = FitterRegistry()
+    reg.register_many(_build_continuous_descriptors())
+    reg.register_many(_build_discrete_descriptors())
+    return reg
+
+
+def reset_fitter_registry() -> None:
+    """Reset the cached fitter registry (useful in tests)."""
+    fitter_registry.cache_clear()
+
+
 __all__ = [
     "FitterRegistry",
+    "fitter_registry",
+    "reset_fitter_registry",
 ]

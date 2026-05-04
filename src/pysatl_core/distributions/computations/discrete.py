@@ -11,7 +11,7 @@ Option taxonomy used here
     the discrete support fully determines the characteristic domain.
 
 ``ComputationOption``
-    * ``fit_ppf_to_cdf_1D``: ``n_q_grid`` — grid resolution for probing the
+    * ``_fit_ppf_to_cdf_1D``: ``n_q_grid`` — grid resolution for probing the
       PPF at fit-time.  Affects only the accuracy of the table construction,
       not the semantic meaning of the CDF.
 """
@@ -27,13 +27,14 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from pysatl_core.distributions.computations._utils import (
+    build_head_table,
     build_tail_table,
-    collect_support,
-    maybe_unwrap_scalar,
+    collect_discrete_support,
     resolve,
 )
-from pysatl_core.distributions.computations.base import ComputationOption, FitterDescriptor
 from pysatl_core.distributions.computations.computation import FittedComputationMethod
+from pysatl_core.distributions.computations.descriptors import FitterDescriptor
+from pysatl_core.distributions.computations.options import ComputationOption
 from pysatl_core.distributions.support import (
     DiscreteSupport,
     IntegerLatticeDiscreteSupport,
@@ -44,9 +45,18 @@ if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
 
 
-def fit_pmf_to_cdf_1D(
+def _require_discrete_support(distribution: Distribution, conversion: str) -> DiscreteSupport:
+    """Return distribution support or raise a conversion-specific error."""
+    support = distribution.support
+    if support is None or not isinstance(support, DiscreteSupport):
+        raise RuntimeError(f"Discrete support is required for {conversion}.")
+    return support
+
+
+def _fit_pmf_to_cdf_1D(
     distribution: Distribution,
     /,
+    eps: float = 1e-12,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``pmf -> cdf`` conversion for discrete distributions.
@@ -55,6 +65,16 @@ def fit_pmf_to_cdf_1D(
     ----------
     distribution : Distribution
         Must expose a discrete ``support`` and a ``pmf`` characteristic.
+    eps : float, default 1e-12
+        *(Computation option)* Stopping threshold for the tail walk when the
+        support is one-sided unbounded.
+
+        * **Right-bounded, left-unbounded**: the downward walk continues while
+          ``1 - cumulative_sum >= eps``; once the remaining left-tail
+          probability falls below *eps* it is considered negligible.
+        * **Left-bounded, right-unbounded**: the upward walk (via mirroring)
+          continues while ``1 - cumulative_sum >= eps``; once the remaining
+          right-tail probability falls below *eps* it is considered negligible.
 
     Returns
     -------
@@ -65,9 +85,7 @@ def fit_pmf_to_cdf_1D(
     RuntimeError
         If the support is missing, empty, or a two-sided infinite lattice.
     """
-    support = distribution.support
-    if support is None or not isinstance(support, DiscreteSupport):
-        raise RuntimeError("Discrete support is required for pmf->cdf.")
+    support = _require_discrete_support(distribution, "pmf->cdf")
 
     pmf_func = resolve(distribution, CharacteristicName.PMF)
 
@@ -76,20 +94,47 @@ def fit_pmf_to_cdf_1D(
         and not support.is_left_bounded
         and support.is_right_bounded
     ):
-        xs, tail_from = build_tail_table(support, pmf_func)
-        max_k = float(support.max_k)  # type: ignore[arg-type]
+        xs, tail_from = build_tail_table(support, pmf_func, eps=eps)
+        max_point = float(support.last())  # type: ignore[arg-type]
 
         def _cdf_tail(x: NumericArray, **options: Any) -> NumericArray:
             x_arr = np.atleast_1d(np.asarray(x, dtype=float))
             idx = np.searchsorted(xs, x_arr, side="right")
             result = np.clip(1.0 - tail_from[idx], 0.0, 1.0)
-            result[x_arr >= max_k] = 1.0
-            return maybe_unwrap_scalar(result)
+            result[x_arr >= max_point] = 1.0
+            return result
 
         return FittedComputationMethod[NumericArray, NumericArray](
             target=CharacteristicName.CDF,
             sources=[CharacteristicName.PMF],
             func=_cdf_tail,  # type: ignore[arg-type]
+        )
+
+    if (
+        isinstance(support, IntegerLatticeDiscreteSupport)
+        and support.is_left_bounded
+        and not support.is_right_bounded
+    ):
+        xs, cdf_at = build_head_table(support, pmf_func, eps=eps)
+        min_point = float(support.first())  # type: ignore[arg-type]
+
+        def _cdf_head(x: NumericArray, **options: Any) -> NumericArray:
+            x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+            result = np.empty_like(x_arr)
+            below = x_arr < min_point
+            result[below] = 0.0
+            if xs.size == 0:
+                result[~below] = 0.0
+                return result
+            idx = np.searchsorted(xs, x_arr[~below], side="right") - 1
+            idx = np.clip(idx, 0, cdf_at.size - 1)
+            result[~below] = cdf_at[idx]
+            return result
+
+        return FittedComputationMethod[NumericArray, NumericArray](
+            target=CharacteristicName.CDF,
+            sources=[CharacteristicName.PMF],
+            func=_cdf_head,  # type: ignore[arg-type]
         )
 
     if (
@@ -102,7 +147,7 @@ def fit_pmf_to_cdf_1D(
             "by the generic fitter.  Provide an analytical CDF or a custom fitter."
         )
 
-    xs = collect_support(support)
+    xs = collect_discrete_support(support)
     if xs.size == 0:
         raise RuntimeError("Discrete support is empty.")
 
@@ -114,7 +159,7 @@ def fit_pmf_to_cdf_1D(
         x_arr = np.atleast_1d(np.asarray(x, dtype=float))
         idx = np.searchsorted(xs, x_arr, side="right") - 1
         result = np.where(idx < 0, 0.0, cdf_vals[np.clip(idx, 0, cdf_vals.size - 1)])
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
@@ -123,19 +168,39 @@ def fit_pmf_to_cdf_1D(
     )
 
 
-FITTER_PMF_TO_CDF_1D = FitterDescriptor(
-    name="pmf_to_cdf_1D",
-    target=CharacteristicName.CDF,
-    sources=[CharacteristicName.PMF],
-    fitter=fit_pmf_to_cdf_1D,
-    characteristic_options=(),
-    computation_options=(),
-    constraint_tags=frozenset({"discrete", "univariate"}),
-    description="PMF -> CDF via prefix-sum (finite support) or tail summation (left-unbounded).",
-)
+def _build_pmf_to_cdf_1D() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="pmf_to_cdf_1D",
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PMF],
+        fitter=_fit_pmf_to_cdf_1D,
+        characteristic_options=(),
+        computation_options=(
+            ComputationOption(
+                name="eps",
+                type=float,
+                default=1e-12,
+                description=(
+                    "Stopping threshold for the tail walk on one-sided unbounded supports. "
+                    "For right-bounded, left-unbounded supports the downward walk continues "
+                    "while 1 - cumulative_sum >= eps. "
+                    "For left-bounded, right-unbounded supports the upward walk (via mirroring) "
+                    "continues while 1 - cumulative_sum >= eps. "
+                    "Once the remaining tail probability falls below eps it is "
+                    "considered negligible."
+                ),
+                validate=lambda v: 0.0 < v < 1.0,
+            ),
+        ),
+        constraint_tags=frozenset({"discrete", "univariate"}),
+        description=(
+            "PMF -> CDF via prefix-sum (finite support) or tail summation "
+            "(left-unbounded or right-unbounded)."
+        ),
+    )
 
 
-def fit_cdf_to_pmf_1D(
+def _fit_cdf_to_pmf_1D(
     distribution: Distribution,
     /,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
@@ -156,13 +221,11 @@ def fit_cdf_to_pmf_1D(
     RuntimeError
         If the support is missing or empty.
     """
-    support = distribution.support
-    if support is None or not isinstance(support, DiscreteSupport):
-        raise RuntimeError("Discrete support is required for cdf->pmf.")
+    support = _require_discrete_support(distribution, "cdf->pmf")
 
     cdf_func = resolve(distribution, CharacteristicName.CDF)
 
-    xs = collect_support(support)
+    xs = collect_discrete_support(support)
     if xs.size == 0:
         raise RuntimeError("Discrete support is empty.")
 
@@ -184,7 +247,7 @@ def fit_cdf_to_pmf_1D(
         on_support = in_bounds & (xs[np.clip(idx, 0, xs.size - 1)] == x_arr)
         result[on_support] = pmf_vals[idx[on_support]]
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PMF,
@@ -193,19 +256,20 @@ def fit_cdf_to_pmf_1D(
     )
 
 
-FITTER_CDF_TO_PMF_1D = FitterDescriptor(
-    name="cdf_to_pmf_1D",
-    target=CharacteristicName.PMF,
-    sources=[CharacteristicName.CDF],
-    fitter=fit_cdf_to_pmf_1D,
-    characteristic_options=(),
-    computation_options=(),
-    constraint_tags=frozenset({"discrete", "univariate"}),
-    description="CDF -> PMF via finite differences on the support table.",
-)
+def _build_cdf_to_pmf_1D() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="cdf_to_pmf_1D",
+        target=CharacteristicName.PMF,
+        sources=[CharacteristicName.CDF],
+        fitter=_fit_cdf_to_pmf_1D,
+        characteristic_options=(),
+        computation_options=(),
+        constraint_tags=frozenset({"discrete", "univariate"}),
+        description="CDF -> PMF via finite differences on the support table.",
+    )
 
 
-def fit_cdf_to_ppf_1D(
+def _fit_cdf_to_ppf_1D(
     distribution: Distribution,
     /,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
@@ -226,13 +290,11 @@ def fit_cdf_to_ppf_1D(
     RuntimeError
         If the support is missing or empty.
     """
-    support = distribution.support
-    if support is None or not isinstance(support, DiscreteSupport):
-        raise RuntimeError("Discrete support is required for cdf->ppf.")
+    support = _require_discrete_support(distribution, "cdf->ppf")
 
     cdf_func = resolve(distribution, CharacteristicName.CDF)
 
-    xs = collect_support(support)
+    xs = collect_discrete_support(support)
     if xs.size == 0:
         raise RuntimeError("Discrete support is empty.")
 
@@ -262,7 +324,7 @@ def fit_cdf_to_ppf_1D(
             idx = np.clip(idx, 0, xs.size - 1)
             result[interior] = xs[idx]
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PPF,
@@ -271,19 +333,20 @@ def fit_cdf_to_ppf_1D(
     )
 
 
-FITTER_CDF_TO_PPF_1D = FitterDescriptor(
-    name="cdf_to_ppf_1D",
-    target=CharacteristicName.PPF,
-    sources=[CharacteristicName.CDF],
-    fitter=fit_cdf_to_ppf_1D,
-    characteristic_options=(),
-    computation_options=(),
-    constraint_tags=frozenset({"discrete", "univariate"}),
-    description="CDF -> PPF via searchsorted inversion on the support table.",
-)
+def _build_cdf_to_ppf_1D() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="cdf_to_ppf_1D",
+        target=CharacteristicName.PPF,
+        sources=[CharacteristicName.CDF],
+        fitter=_fit_cdf_to_ppf_1D,
+        characteristic_options=(),
+        computation_options=(),
+        constraint_tags=frozenset({"discrete", "univariate"}),
+        description="CDF -> PPF via searchsorted inversion on the support table.",
+    )
 
 
-def fit_ppf_to_cdf_1D(
+def _fit_ppf_to_cdf_1D(
     distribution: Distribution,
     /,
     n_q_grid: int = 4096,
@@ -345,7 +408,7 @@ def fit_ppf_to_cdf_1D(
             idx = np.clip(idx, 0, cdf_table.size - 1)
             result[interior] = cdf_table[idx]
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
@@ -354,36 +417,38 @@ def fit_ppf_to_cdf_1D(
     )
 
 
-FITTER_PPF_TO_CDF_1D = FitterDescriptor(
-    name="ppf_to_cdf_1D",
-    target=CharacteristicName.CDF,
-    sources=[CharacteristicName.PPF],
-    fitter=fit_ppf_to_cdf_1D,
-    characteristic_options=(),
-    computation_options=(
-        ComputationOption(
-            name="n_q_grid",
-            type=int,
-            default=4096,
-            description=(
-                "Number of q-points used to probe the PPF at fit-time.  "
-                "Increase if the distribution has many closely-spaced support points."
+def _build_ppf_to_cdf_1D() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="ppf_to_cdf_1D",
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PPF],
+        fitter=_fit_ppf_to_cdf_1D,
+        characteristic_options=(),
+        computation_options=(
+            ComputationOption(
+                name="n_q_grid",
+                type=int,
+                default=4096,
+                description=(
+                    "Number of q-points used to probe the PPF at fit-time.  "
+                    "Increase if the distribution has many closely-spaced support points."
+                ),
+                validate=lambda v: v >= 16,
             ),
-            validate=lambda v: v >= 16,
         ),
-    ),
-    constraint_tags=frozenset({"discrete", "univariate"}),
-    description="PPF -> CDF via grid probing and step-function table construction.",
-)
+        constraint_tags=frozenset({"discrete", "univariate"}),
+        description="PPF -> CDF via grid probing and step-function table construction.",
+    )
 
 
-__all__ = [
-    "fit_pmf_to_cdf_1D",
-    "FITTER_PMF_TO_CDF_1D",
-    "fit_cdf_to_pmf_1D",
-    "FITTER_CDF_TO_PMF_1D",
-    "fit_cdf_to_ppf_1D",
-    "FITTER_CDF_TO_PPF_1D",
-    "fit_ppf_to_cdf_1D",
-    "FITTER_PPF_TO_CDF_1D",
-]
+def _build_discrete_descriptors() -> list[FitterDescriptor]:
+    """Build and return all discrete 1D fitter descriptors (lazy factory)."""
+    return [
+        _build_pmf_to_cdf_1D(),
+        _build_cdf_to_pmf_1D(),
+        _build_cdf_to_ppf_1D(),
+        _build_ppf_to_cdf_1D(),
+    ]
+
+
+__all__: list[str] = []

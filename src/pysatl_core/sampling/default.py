@@ -58,7 +58,7 @@ class DefaultSamplingUnivariateStrategy(SamplingStrategy):
             NumPy array containing ``n`` generated samples.
             The exact array shape depends on the distribution and sampling strategy.
         """
-        ppf = distr.query_method(CharacteristicName.PPF, **options)
+        ppf = distr.query_method(CharacteristicName.PPF)
         rng = np.random.default_rng()
         U = rng.random(n)
         # TODO: Now it will be based on the fact that the characteristic

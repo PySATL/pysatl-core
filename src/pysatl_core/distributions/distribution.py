@@ -17,8 +17,8 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Self, cast
 
 from pysatl_core.distributions.strategies import (
+    ComputationPlan,
     ComputationStrategy,
-    ExecutionPlan,
     SamplingStrategy,
 )
 from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
@@ -27,9 +27,11 @@ _KEEP: object = object()
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from typing import Any
 
     from pysatl_core.distributions.computations.computation import AnalyticalComputation
+    from pysatl_core.distributions.computations.options import StepOptions
     from pysatl_core.distributions.support import Support
     from pysatl_core.types import (
         DistributionType,
@@ -68,6 +70,20 @@ class Distribution(ABC):
         Strategy for computing characteristics and conversions.
     support : Support or None
         Support of the distribution, if defined.
+
+    Notes
+    -----
+    **Array semantics for analytical characteristics**
+
+    Analytical characteristic methods (e.g. ``pdf``, ``cdf``) should be
+    implemented to accept and return NumPy arrays directly (array semantics).
+    This is the recommended approach because it enables efficient vectorised
+    evaluation.
+
+    If a method accepts only scalar inputs, the computation infrastructure
+    will wrap it automatically via ``numpy.vectorize``, but this incurs a
+    per-element Python call overhead and is significantly slower for large
+    inputs.
     """
 
     def __init__(
@@ -99,6 +115,12 @@ class Distribution(ABC):
             Distribution-provided characteristic methods.
             For non-transformed distributions these methods are fully
             analytical.
+
+            .. note::
+                Each characteristic callable should accept and return NumPy
+                arrays (array semantics).  Scalar-only callables are wrapped
+                automatically via ``numpy.vectorize``, but at a significant
+                per-element overhead cost.
         support : Support or None, default=None
             Support of the distribution.
         sampling_strategy : SamplingStrategy or None, default=None
@@ -273,7 +295,12 @@ class Distribution(ABC):
         )
 
     def query_method(
-        self, characteristic_name: GenericCharacteristicName, **options: Any
+        self,
+        characteristic_name: GenericCharacteristicName,
+        options: StepOptions | None = None,
+        *,
+        characteristic_options: Mapping[str, Any] | None = None,
+        computation_defaults: Mapping[str, Any] | None = None,
     ) -> Method[Any, Any]:
         """
         Query a computation method for a specific characteristic.
@@ -282,21 +309,40 @@ class Distribution(ABC):
         ----------
         characteristic_name : str
             Name of the characteristic to compute (e.g., "pdf", "cdf").
-        **options : Any
-            Additional options for the computation.
+        options : StepOptions | None, default=None
+            Per-step options built via
+            :meth:`ComputationPlan.with_options`.  When ``None``, every
+            edge uses its declared defaults.
+        characteristic_options : Mapping[str, Any] | None, default=None
+            Shared characteristic options broadcast to every step that
+            declares a matching :class:`CharacteristicOption`.  These are
+            intrinsic to the characteristic (e.g. ``eps``, ``x0`` for PPF)
+            and affect the *meaning* of the result and the cache key.
+        computation_defaults : Mapping[str, Any] | None, default=None
+            Per-call computation option defaults.  Override the strategy-level
+            defaults and hardcoded descriptor defaults, but are overridden by
+            per-step values in ``options``.  Do **not** affect the cache key.
 
         Returns
         -------
         Method
             Callable method that computes the characteristic.
         """
-        return self.computation_strategy.query_method(characteristic_name, self, **options)
+        return self.computation_strategy.query_method(
+            characteristic_name,
+            self,
+            options,
+            characteristic_options=characteristic_options,
+            computation_defaults=computation_defaults,
+        )
 
-    def explain(self, characteristic_name: GenericCharacteristicName) -> ExecutionPlan:
+    def explain_computation_path(
+        self, characteristic_name: GenericCharacteristicName
+    ) -> ComputationPlan:
         """
         Describe how the attached computation strategy will compute a characteristic.
 
-        Returns an :class:`ExecutionPlan` listing every step (loop or
+        Returns an :class:`ComputationPlan` listing every step (loop or
         conversion edge) and the option descriptors that will be consulted
         at each step.  The plan is also pinned by the strategy, so a
         subsequent :meth:`query_method` / :meth:`calculate_characteristic`
@@ -311,13 +357,19 @@ class Distribution(ABC):
 
         Returns
         -------
-        ExecutionPlan
+        ComputationPlan
             The plan describing the resolution path.
         """
-        return self.computation_strategy.explain(characteristic_name, self)
+        return self.computation_strategy.explain_computation_path(characteristic_name, self)
 
     def calculate_characteristic(
-        self, characteristic_name: GenericCharacteristicName, value: Any, **options: Any
+        self,
+        characteristic_name: GenericCharacteristicName,
+        value: Any,
+        options: StepOptions | None = None,
+        *,
+        characteristic_options: Mapping[str, Any] | None = None,
+        computation_defaults: Mapping[str, Any] | None = None,
     ) -> Any:
         """
         Calculate a characteristic at the given value.
@@ -328,15 +380,26 @@ class Distribution(ABC):
             Name of the characteristic to compute.
         value : Any
             Point(s) at which to evaluate the characteristic.
-        **options : Any
-            Additional computation options.
+        options : StepOptions | None, default=None
+            Per-step options built via
+            :meth:`ComputationPlan.with_options`.
+        characteristic_options : Mapping[str, Any] | None, default=None
+            Shared characteristic options broadcast to every step that
+            declares a matching :class:`CharacteristicOption`.
+        computation_defaults : Mapping[str, Any] | None, default=None
+            Per-call computation option defaults.
 
         Returns
         -------
         Any
             Value of the characteristic at the given point(s).
         """
-        return self.query_method(characteristic_name, **options)(value)
+        return self.query_method(
+            characteristic_name,
+            options,
+            characteristic_options=characteristic_options,
+            computation_defaults=computation_defaults,
+        )(value)
 
     def sample(self, n: int, **options: Any) -> NumericArray:
         """

@@ -5,9 +5,11 @@ Default configuration and cached accessor for the global characteristic registry
  - Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
   singleton instance and seeds it with a set of edges.
 
-Descriptors are registered lazily: only their metadata (target, sources, tags)
-is used to declare graph edges at configuration time.  The actual
-``to_computation_method()`` call happens on demand when the strategy resolves a path.
+At configuration time, ``to_computation_method()`` is called on each
+``FitterDescriptor`` to build a ``FitterMethod`` (a lightweight wrapper that
+holds the fitter callable) and store it as a graph edge.  The actual
+``fitter(distribution, **options)`` call — the expensive precomputation — happens
+on demand when the strategy resolves a path via ``query_method``.
 
 Lookup of fitter descriptors by ``(target, sources, tags)`` is delegated to
 ``FitterRegistry``: ``configuration`` does not depend on individual descriptor
@@ -24,8 +26,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
-from pysatl_core.distributions.computations.registry import FitterRegistry
+from pysatl_core.distributions.computations.registry import FitterRegistry, fitter_registry
 from pysatl_core.distributions.registry.constraint import (
     GraphPrimitiveConstraint,
     NonNullConstraint,
@@ -91,8 +92,7 @@ def _add_edges(
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
-    fitter_reg = FitterRegistry()
-    fitter_reg.register_many(ALL_FITTER_DESCRIPTORS)
+    fitter_reg = fitter_registry()
 
     dim1_constraint = NumericConstraint(allowed=frozenset({1}))
     kind_continuous = SetConstraint(allowed=frozenset({Kind.CONTINUOUS}))

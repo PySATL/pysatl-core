@@ -376,6 +376,30 @@ class BinaryOperationName(StrEnum):
     DIV = "div"
 
 
+class PerformanceWarning(UserWarning):
+    """
+    Warning emitted when a performance-degrading pattern is detected.
+
+    This warning is raised when a scalar function is used where an
+    array-semantic function is expected.  Scalar functions are wrapped
+    with ``numpy.vectorize``, which incurs a per-element Python call
+    overhead and is significantly slower for large inputs.
+
+    To suppress this warning for a specific call::
+
+        import warnings
+        from pysatl_core import PerformanceWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", PerformanceWarning)
+            result = distribution.calculate_characteristic("pdf", x)
+
+    To fix the root cause, implement the characteristic function to
+    accept and return NumPy arrays directly instead of operating on
+    scalar values.
+    """
+
+
 class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
@@ -449,4 +473,5 @@ __all__ = [
     "CharacteristicName",
     "FamilyName",
     "Method",
+    "PerformanceWarning",
 ]

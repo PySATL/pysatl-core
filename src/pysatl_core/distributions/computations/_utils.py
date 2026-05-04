@@ -1,8 +1,8 @@
 """
 Shared helper utilities for fitter and evaluator implementations.
 
-Provides support resolution, tail-table construction, support-bound
-estimation, and scalar-unwrapping helpers.
+Provides support resolution, tail-table construction, and support-bound
+estimation helpers.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ __author__ = "Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -35,9 +35,16 @@ def resolve(
     """
     Obtain an array-semantic callable for *name* from *distribution*.
 
-    If the underlying method does not natively accept 1-D arrays, a
-    ``np.vectorize`` wrapper is applied transparently.  The probe is a
-    single-element array ``[0.0]``.
+    The callable must accept a 1-D NumPy array and return a NumPy array of the
+    same length.  If the underlying method is a scalar function (returns a
+    0-dimensional result when given a 1-D array, or raises :class:`TypeError`),
+    a :class:`TypeError` is raised immediately.
+
+    .. note::
+        Scalar functions are **not** supported.  They are significantly slower
+        than array-semantic ones because wrapping them with ``numpy.vectorize``
+        incurs a per-element Python call overhead.  Implement characteristic
+        functions to accept and return NumPy arrays directly.
 
     Parameters
     ----------
@@ -53,34 +60,31 @@ def resolve(
 
     Raises
     ------
-    RuntimeError
-        If the distribution cannot provide the requested characteristic.
+    TypeError
+        If the characteristic function is scalar (does not accept or return
+        NumPy arrays).
     """
-    try:
-        fn = distribution.query_method(name)
-    except AttributeError as exc:
-        raise RuntimeError(
-            f"Distribution does not expose characteristic '{name}' "
-            "via computation_strategy.query_method()."
-        ) from exc
+    fn = distribution.query_method(name)
 
-    _probe = np.array([0.0])
+    _probe = np.array([0.5])
     try:
         result = fn(_probe)
         if np.ndim(result) == 0:
             raise TypeError
-    except (TypeError, ValueError):
-        _fn_scalar = fn
-
-        def _vectorised(x: NumericArray, **kwargs: Any) -> NumericArray:
-            return cast("NumericArray", np.vectorize(lambda xi: _fn_scalar(float(xi), **kwargs))(x))
-
-        return _vectorised
+    except TypeError:
+        raise TypeError(
+            f"Characteristic '{name}' of distribution "
+            f"'{type(distribution).__name__}' is implemented as a scalar "
+            "function.  Scalar functions are not supported — implement the "
+            "function to accept and return NumPy arrays directly.  "
+            "Scalar functions incur a per-element Python call overhead and "
+            "are significantly slower for large inputs."
+        ) from None
 
     return fn
 
 
-def collect_support(support: DiscreteSupport) -> np.ndarray:
+def collect_discrete_support(support: DiscreteSupport) -> np.ndarray:
     """
     Materialise a discrete support into a sorted ``float64`` array.
 
@@ -97,22 +101,28 @@ def collect_support(support: DiscreteSupport) -> np.ndarray:
     Raises
     ------
     RuntimeError
-        If the support cannot be materialised (e.g. unbounded lattice).
+        If the support cannot be materialised (e.g. unbounded lattice) or
+        is not a recognised concrete type.
     """
     if isinstance(support, ExplicitTableDiscreteSupport):
         return np.asarray(support.points, dtype=float)
 
     if isinstance(support, IntegerLatticeDiscreteSupport):
-        if support.min_k is not None and support.max_k is not None:
-            first = support.first()
-            if first is None:
-                return np.empty(0, dtype=float)
-            return np.arange(first, support.max_k + 1, support.modulus, dtype=float)
+        first = support.first()
+        last = support.last()
+        if first is not None and last is not None:
+            return np.arange(first, last + 1, support.modulus, dtype=float)
 
-        if support.min_k is None and support.max_k is not None:
+        if first is None and last is not None:
             raise RuntimeError(
                 "Left-unbounded IntegerLatticeDiscreteSupport cannot be fully "
                 "materialised.  Use build_tail_table for pmf→cdf tail summation."
+            )
+
+        if first is not None and last is None:
+            raise RuntimeError(
+                "Right-unbounded IntegerLatticeDiscreteSupport cannot be fully "
+                "materialised.  Use build_head_table for pmf→cdf prefix summation."
             )
 
         raise RuntimeError(
@@ -120,50 +130,28 @@ def collect_support(support: DiscreteSupport) -> np.ndarray:
             "Provide at least one bound."
         )
 
-    xs: list[float] = []
-
-    try:
-        xs = [float(v) for v in support]  # type: ignore[attr-defined]
-        if xs:
-            return np.array(sorted(xs), dtype=float)
-    except Exception:
-        pass
-
-    for attr in ("values", "to_list"):
-        if hasattr(support, attr):
-            try:
-                xs = [float(v) for v in getattr(support, attr)()]
-                if xs:
-                    return np.array(sorted(xs), dtype=float)
-            except Exception:
-                pass
-
-    if hasattr(support, "first") and hasattr(support, "next"):
-        try:
-            cur = support.first()
-            seen: set[Any] = set()
-            while cur is not None and cur not in seen:
-                seen.add(cur)
-                xs.append(float(cur))
-                cur = support.next(cur)
-            if xs:
-                return np.array(sorted(xs), dtype=float)
-        except Exception:
-            pass
-
-    raise RuntimeError("Discrete support must be iterable or expose first()/next().")
+    raise RuntimeError(
+        f"Unsupported DiscreteSupport type: {type(support).__name__!r}.  "
+        "Only ExplicitTableDiscreteSupport and IntegerLatticeDiscreteSupport are supported."
+    )
 
 
 def build_tail_table(
     support: IntegerLatticeDiscreteSupport,
     pmf_func: Callable[..., NumericArray],
+    *,
+    eps: float = 1e-12,
+    batch_size: int = 256,
+    max_batches: int = 100_000,
     **options: Any,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Build a tail-probability table for a right-bounded, left-unbounded lattice.
 
-    Evaluates ``pmf`` on the finite grid ``[residue, residue + modulus, …, max_k]``
-    in a single vectorised call, then computes the reverse cumulative sum.
+    Walks downward from ``max_point`` in steps of ``modulus``, evaluating the PMF
+    in batches, and stops as soon as the remaining left-tail probability
+    ``1 - cumulative_sum`` drops below *eps*.  This correctly handles
+    left-unbounded supports where mass exists arbitrarily far to the left.
 
     Parameters
     ----------
@@ -171,27 +159,60 @@ def build_tail_table(
         Must satisfy ``support.max_k is not None``.
     pmf_func : Callable[..., NumericArray]
         Array-semantic PMF callable.
+    eps : float, default 1e-12
+        Stopping threshold.  The downward walk continues while
+        ``1 - cumulative_sum >= eps``; once the remaining left-tail
+        probability falls below *eps* it is considered negligible.
+    batch_size : int, default 256
+        Number of lattice points evaluated per PMF call.
+    max_batches : int, default 100_000
+        Hard upper limit on the number of batches to prevent infinite loops
+        when the PMF sums to zero or is pathologically flat.
     **options : Any
         Forwarded to *pmf_func*.
 
     Returns
     -------
     xs : np.ndarray
-        Lattice points, shape ``(m,)``.
+        Lattice points in ascending order, shape ``(m,)``.
     tail_from : np.ndarray
         Tail probabilities, shape ``(m + 1,)``.
-        ``tail_from[i] = P(X >= xs[i])``, normalised so ``tail_from[0] == 1``.
+        ``tail_from[i] = P(X >= xs[i])``, with ``tail_from[-1] == 0``.
     """
-    max_k = support.max_k
-    assert max_k is not None, "build_tail_table requires support.max_k to be set"
-    residue = support.residue
+    max_point = support.last()
+    assert max_point is not None, "build_tail_table requires support.max_k to be set"
     modulus = support.modulus
 
-    xs = np.arange(residue, max_k + 1, modulus, dtype=float)
-    if xs.size == 0:
+    collected_xs: list[np.ndarray] = []
+    collected_pmf: list[np.ndarray] = []
+    cumsum: float = 0.0
+    x_top = float(max_point)
+
+    for _ in range(max_batches):
+        batch_xs = x_top - np.arange(batch_size, dtype=float) * modulus
+        batch_pmf = np.clip(np.asarray(pmf_func(batch_xs, **options), dtype=float), 0.0, None)
+
+        batch_cumsum = np.cumsum(batch_pmf)
+        stop_mask = (1.0 - (cumsum + batch_cumsum)) < eps
+        if np.any(stop_mask):
+            cut = int(np.argmax(stop_mask)) + 1
+            collected_xs.append(batch_xs[:cut])
+            collected_pmf.append(batch_pmf[:cut])
+            break
+
+        collected_xs.append(batch_xs)
+        collected_pmf.append(batch_pmf)
+        cumsum += float(batch_cumsum[-1])
+        x_top = float(batch_xs[-1]) - modulus
+
+    if not collected_xs:
         return np.empty(0, dtype=float), np.array([1.0, 0.0])
 
-    pmf_vals = np.clip(np.asarray(pmf_func(xs, **options), dtype=float), 0.0, None)
+    xs = np.concatenate(collected_xs[::-1])[::-1].copy()
+    pmf_vals = np.concatenate(collected_pmf[::-1])[::-1].copy()
+
+    if xs.size == 0:
+        return np.empty(0, dtype=float), np.array([1.0, 0.0])
 
     tail_cumsum = np.empty(xs.size + 1, dtype=float)
     tail_cumsum[-1] = 0.0
@@ -203,6 +224,76 @@ def build_tail_table(
         tail_cumsum /= total
 
     return xs, np.clip(tail_cumsum, 0.0, 1.0)
+
+
+def build_head_table(
+    support: IntegerLatticeDiscreteSupport,
+    pmf_func: Callable[..., NumericArray],
+    *,
+    eps: float = 1e-12,
+    batch_size: int = 256,
+    max_batches: int = 100_000,
+    **options: Any,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Build a CDF table for a left-bounded, right-unbounded lattice.
+
+    Mirrors the support and PMF around zero, delegates to
+    :func:`build_tail_table` (which walks downward from the mirrored
+    ``max_k``), then flips the result back to the original orientation.
+
+    Parameters
+    ----------
+    support : IntegerLatticeDiscreteSupport
+        Must satisfy ``support.min_k is not None``.
+    pmf_func : Callable[..., NumericArray]
+        Array-semantic PMF callable.
+    eps : float, default 1e-12
+        Stopping threshold forwarded to :func:`build_tail_table`.
+    batch_size : int, default 256
+        Number of lattice points evaluated per PMF call.
+    max_batches : int, default 100_000
+        Hard upper limit on the number of batches.
+    **options : Any
+        Forwarded to *pmf_func*.
+
+    Returns
+    -------
+    xs : np.ndarray
+        Lattice points in ascending order, shape ``(m,)``.
+    cdf_at : np.ndarray
+        CDF values, shape ``(m,)``.
+        ``cdf_at[i] = P(X <= xs[i])``.
+    """
+    min_point = support.first()
+    assert min_point is not None, "build_head_table requires support.min_k to be set"
+
+    mirrored_support = IntegerLatticeDiscreteSupport(
+        residue=(-support.residue) % support.modulus,
+        modulus=support.modulus,
+        min_k=None,
+        max_k=-min_point,
+    )
+
+    def mirrored_pmf(x: NumericArray, **kw: Any) -> NumericArray:
+        return pmf_func(-x, **kw, **options)
+
+    xs_mirror, tail_from = build_tail_table(
+        mirrored_support,
+        mirrored_pmf,
+        eps=eps,
+        batch_size=batch_size,
+        max_batches=max_batches,
+    )
+
+    if xs_mirror.size == 0:
+        return np.empty(0, dtype=float), np.empty(0, dtype=float)
+
+    xs = -xs_mirror[::-1].copy()
+    m = xs_mirror.size
+    cdf_at = tail_from[m - 1 :: -1].copy()  # tail_from[m-1], tail_from[m-2], ..., tail_from[0]
+
+    return xs, np.clip(cdf_at, 0.0, 1.0)
 
 
 def estimate_support_bounds(
@@ -259,32 +350,10 @@ def estimate_support_bounds(
     return lo, hi
 
 
-def maybe_unwrap_scalar(result: np.ndarray) -> NumericArray:
-    """
-    If *result* has shape ``(1,)`` return the scalar element, else return as-is.
-
-    This preserves the convention that scalar inputs produce scalar outputs
-    while array inputs produce array outputs.
-
-    Parameters
-    ----------
-    result : np.ndarray
-        1-D result array.
-
-    Returns
-    -------
-    NumericArray
-        Scalar or array.
-    """
-    if result.shape == (1,):
-        return cast("NumericArray", result[0])
-    return cast("NumericArray", result)
-
-
 __all__ = [
     "resolve",
-    "collect_support",
+    "collect_discrete_support",
     "build_tail_table",
+    "build_head_table",
     "estimate_support_bounds",
-    "maybe_unwrap_scalar",
 ]
