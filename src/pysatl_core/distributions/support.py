@@ -233,9 +233,9 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     modulus : int
         Step size between lattice points (must be positive).
     min_k : int, optional
-        Minimum k value (inclusive).
+        Lower bound of the support (inclusive).
     max_k : int, optional
-        Maximum k value (inclusive).
+        Upper bound of the support (inclusive).
 
     Raises
     ------

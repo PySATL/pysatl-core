@@ -186,7 +186,7 @@ class EvaluatorMethod:
         """
 
         def _bound(*args: Any, **kwargs: Any) -> NumericArray:
-            return self.evaluator(distribution, *args, **kwargs)
+            return self.evaluator(distribution, *args, **{**options, **kwargs})
 
         return FittedComputationMethod[NumericArray, NumericArray](
             target=self.target,

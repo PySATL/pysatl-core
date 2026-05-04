@@ -12,20 +12,20 @@ Option taxonomy used here
     characteristic.  They affect the *meaning* of the result and must be
     encoded into the cache key.
 
-    * ``fit_cdf_to_ppf_1C``: ``eps``, ``x0``  — define the effective support
+    * ``_fit_cdf_to_ppf_1C``: ``eps``, ``x0``  — define the effective support
       bounds used when inverting the CDF; different values yield a different
       PPF.
-    * ``fit_ppf_to_cdf_1C``: ``q_lowest``, ``q_highest`` — bracket for the
+    * ``_fit_ppf_to_cdf_1C``: ``q_lowest``, ``q_highest`` — bracket for the
       root search; they define the domain of the resulting CDF approximation.
 
 ``ComputationOption``
     Parameters that control the *numerical algorithm* only.  They affect
     speed / accuracy but not the semantic meaning of the result.
 
-    * ``fit_pdf_to_cdf_1C``: ``limit`` — max ``quad`` subdivisions.
-    * ``fit_cdf_to_pdf_1C``: ``h`` — finite-difference step.
-    * ``fit_cdf_to_ppf_1C``: ``max_iter``, ``x_tol`` — bisection parameters.
-    * ``fit_ppf_to_cdf_1C``: ``max_iter`` — brentq iterations.
+    * ``_fit_pdf_to_cdf_1C``: ``limit`` — max ``quad`` subdivisions.
+    * ``_fit_cdf_to_pdf_1C``: ``h`` — finite-difference step.
+    * ``_fit_cdf_to_ppf_1C``: ``max_iter``, ``x_tol`` — bisection parameters.
+    * ``_fit_ppf_to_cdf_1C``: ``max_iter`` — brentq iterations.
 """
 
 from __future__ import annotations
@@ -41,22 +41,21 @@ from scipy import integrate as _sp_integrate, optimize as _sp_optimize
 
 from pysatl_core.distributions.computations._utils import (
     estimate_support_bounds,
-    maybe_unwrap_scalar,
     resolve,
 )
-from pysatl_core.distributions.computations.base import (
+from pysatl_core.distributions.computations.computation import FittedComputationMethod
+from pysatl_core.distributions.computations.descriptors import FitterDescriptor
+from pysatl_core.distributions.computations.options import (
     CharacteristicOption,
     ComputationOption,
-    FitterDescriptor,
 )
-from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.types import CharacteristicName, NumericArray
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
 
 
-def fit_pdf_to_cdf_1C(
+def _fit_pdf_to_cdf_1C(
     distribution: Distribution,
     /,
     limit: int = 200,
@@ -83,7 +82,7 @@ def fit_pdf_to_cdf_1C(
         x_arr = np.atleast_1d(np.asarray(x, dtype=float))
 
         if x_arr.size == 0:
-            return maybe_unwrap_scalar(x_arr.copy())
+            return x_arr.copy()
 
         def _pdf_scalar(t: float) -> float:
             return float(np.asarray(pdf_func(np.array([t]), **options), dtype=float).flat[0])
@@ -114,7 +113,7 @@ def fit_pdf_to_cdf_1C(
         result = np.empty_like(x_arr)
         result[order] = cdf_sorted
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
@@ -123,27 +122,28 @@ def fit_pdf_to_cdf_1C(
     )
 
 
-FITTER_PDF_TO_CDF_1C = FitterDescriptor(
-    name="pdf_to_cdf_1C",
-    target=CharacteristicName.CDF,
-    sources=[CharacteristicName.PDF],
-    fitter=fit_pdf_to_cdf_1C,
-    characteristic_options=(),
-    computation_options=(
-        ComputationOption(
-            name="limit",
-            type=int,
-            default=200,
-            description="Maximum number of quad subdivisions per integral.",
-            validate=lambda v: v > 0,
+def _build_pdf_to_cdf_1C() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="pdf_to_cdf_1C",
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PDF],
+        fitter=_fit_pdf_to_cdf_1C,
+        characteristic_options=(),
+        computation_options=(
+            ComputationOption(
+                name="limit",
+                type=int,
+                default=200,
+                description="Maximum number of quad subdivisions per integral.",
+                validate=lambda v: v > 0,
+            ),
         ),
-    ),
-    constraint_tags=frozenset({"continuous", "univariate"}),
-    description="PDF -> CDF via segment-wise scipy.integrate.quad with cumsum.",
-)
+        constraint_tags=frozenset({"continuous", "univariate"}),
+        description="PDF -> CDF via segment-wise scipy.integrate.quad with cumsum.",
+    )
 
 
-def fit_cdf_to_pdf_1C(
+def _fit_cdf_to_pdf_1C(
     distribution: Distribution,
     /,
     h: float = 1e-5,
@@ -174,8 +174,8 @@ def fit_cdf_to_pdf_1C(
         cdf_mh2 = np.asarray(cdf_func(x_arr - 2.0 * h, **options), dtype=float)
 
         derivative = (-cdf_ph2 + 8.0 * cdf_ph1 - 8.0 * cdf_mh1 + cdf_mh2) / (12.0 * h)
-        result = np.clip(derivative, 0.0, None)
-        return maybe_unwrap_scalar(result)
+        result: NumericArray = np.clip(derivative, 0.0, None)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PDF,
@@ -184,30 +184,31 @@ def fit_cdf_to_pdf_1C(
     )
 
 
-FITTER_CDF_TO_PDF_1C = FitterDescriptor(
-    name="cdf_to_pdf_1C",
-    target=CharacteristicName.PDF,
-    sources=[CharacteristicName.CDF],
-    fitter=fit_cdf_to_pdf_1C,
-    characteristic_options=(),
-    computation_options=(
-        ComputationOption(
-            name="h",
-            type=float,
-            default=1e-5,
-            description=(
-                "Finite-difference step size.  Smaller values improve accuracy "
-                "for smooth CDFs but increase sensitivity to floating-point noise."
+def _build_cdf_to_pdf_1C() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="cdf_to_pdf_1C",
+        target=CharacteristicName.PDF,
+        sources=[CharacteristicName.CDF],
+        fitter=_fit_cdf_to_pdf_1C,
+        characteristic_options=(),
+        computation_options=(
+            ComputationOption(
+                name="h",
+                type=float,
+                default=1e-5,
+                description=(
+                    "Finite-difference step size.  Smaller values improve accuracy "
+                    "for smooth CDFs but increase sensitivity to floating-point noise."
+                ),
+                validate=lambda v: v > 0,
             ),
-            validate=lambda v: v > 0,
         ),
-    ),
-    constraint_tags=frozenset({"continuous", "univariate"}),
-    description="CDF -> PDF via five-point central finite difference.",
-)
+        constraint_tags=frozenset({"continuous", "univariate"}),
+        description="CDF -> PDF via five-point central finite difference.",
+    )
 
 
-def fit_cdf_to_ppf_1C(
+def _fit_cdf_to_ppf_1C(
     distribution: Distribution,
     /,
     max_iter: int = 60,
@@ -267,7 +268,7 @@ def fit_cdf_to_ppf_1C(
 
             result[interior] = 0.5 * (lo + hi)
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.PPF,
@@ -276,55 +277,56 @@ def fit_cdf_to_ppf_1C(
     )
 
 
-FITTER_CDF_TO_PPF_1C = FitterDescriptor(
-    name="cdf_to_ppf_1C",
-    target=CharacteristicName.PPF,
-    sources=[CharacteristicName.CDF],
-    fitter=fit_cdf_to_ppf_1C,
-    characteristic_options=(
-        CharacteristicOption(
-            name="eps",
-            type=float,
-            default=1e-6,
-            description=(
-                "Tail probability threshold for support bound estimation.  "
-                "Affects the effective domain of the PPF — different values "
-                "yield a different result."
+def _build_cdf_to_ppf_1C() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="cdf_to_ppf_1C",
+        target=CharacteristicName.PPF,
+        sources=[CharacteristicName.CDF],
+        fitter=_fit_cdf_to_ppf_1C,
+        characteristic_options=(
+            CharacteristicOption(
+                name="eps",
+                type=float,
+                default=1e-6,
+                description=(
+                    "Tail probability threshold for support bound estimation.  "
+                    "Affects the effective domain of the PPF — different values "
+                    "yield a different result."
+                ),
+                validate=lambda v: 0 < v < 0.5,
             ),
-            validate=lambda v: 0 < v < 0.5,
-        ),
-        CharacteristicOption(
-            name="x0",
-            type=float,
-            default=0.0,
-            description=(
-                "Starting point for exponential bound search.  "
-                "Affects which support bounds are discovered."
+            CharacteristicOption(
+                name="x0",
+                type=float,
+                default=0.0,
+                description=(
+                    "Starting point for exponential bound search.  "
+                    "Affects which support bounds are discovered."
+                ),
             ),
         ),
-    ),
-    computation_options=(
-        ComputationOption(
-            name="max_iter",
-            type=int,
-            default=60,
-            description="Maximum bisection iterations.",
-            validate=lambda v: v > 0,
+        computation_options=(
+            ComputationOption(
+                name="max_iter",
+                type=int,
+                default=60,
+                description="Maximum bisection iterations.",
+                validate=lambda v: v > 0,
+            ),
+            ComputationOption(
+                name="x_tol",
+                type=float,
+                default=1e-10,
+                description="Early-stop tolerance on bracket width.",
+                validate=lambda v: v > 0,
+            ),
         ),
-        ComputationOption(
-            name="x_tol",
-            type=float,
-            default=1e-10,
-            description="Early-stop tolerance on bracket width.",
-            validate=lambda v: v > 0,
-        ),
-    ),
-    constraint_tags=frozenset({"continuous", "univariate"}),
-    description="CDF -> PPF via vectorised bisection with exponential bound search.",
-)
+        constraint_tags=frozenset({"continuous", "univariate"}),
+        description="CDF -> PPF via vectorised bisection with exponential bound search.",
+    )
 
 
-def fit_ppf_to_cdf_1C(
+def _fit_ppf_to_cdf_1C(
     distribution: Distribution,
     /,
     q_lowest: float = 1e-12,
@@ -377,11 +379,14 @@ def fit_ppf_to_cdf_1C(
                         _sp_optimize.brentq(f, q_lowest, q_highest, maxiter=max_iter)  # type: ignore[arg-type, unused-ignore]
                     )
                 except ValueError:
-                    return float("nan")
+                    left_bound = float(
+                        np.asarray(ppf_func(np.array([q_lowest]), **options), dtype=float).flat[0]
+                    )
+                    return 0.0 if xi <= left_bound else 1.0
 
             result[interior] = np.clip(np.frompyfunc(_single, 1, 1)(x_in).astype(float), 0.0, 1.0)
 
-        return maybe_unwrap_scalar(result)
+        return result
 
     return FittedComputationMethod[NumericArray, NumericArray](
         target=CharacteristicName.CDF,
@@ -390,56 +395,58 @@ def fit_ppf_to_cdf_1C(
     )
 
 
-FITTER_PPF_TO_CDF_1C = FitterDescriptor(
-    name="ppf_to_cdf_1C",
-    target=CharacteristicName.CDF,
-    sources=[CharacteristicName.PPF],
-    fitter=fit_ppf_to_cdf_1C,
-    characteristic_options=(
-        CharacteristicOption(
-            name="q_lowest",
-            type=float,
-            default=1e-12,
-            description=(
-                "Left bracket for root search.  Defines the lower bound of "
-                "the CDF domain approximation — different values yield a "
-                "different result near the left tail."
+def _build_ppf_to_cdf_1C() -> FitterDescriptor:
+    return FitterDescriptor(
+        name="ppf_to_cdf_1C",
+        target=CharacteristicName.CDF,
+        sources=[CharacteristicName.PPF],
+        fitter=_fit_ppf_to_cdf_1C,
+        characteristic_options=(
+            CharacteristicOption(
+                name="q_lowest",
+                type=float,
+                default=1e-12,
+                description=(
+                    "Left bracket for root search.  Defines the lower bound of "
+                    "the CDF domain approximation — different values yield a "
+                    "different result near the left tail."
+                ),
+                validate=lambda v: 0 < v < 1,
             ),
-            validate=lambda v: 0 < v < 1,
-        ),
-        CharacteristicOption(
-            name="q_highest",
-            type=float,
-            default=1.0 - 1e-12,
-            description=(
-                "Right bracket for root search.  Defines the upper bound of "
-                "the CDF domain approximation — different values yield a "
-                "different result near the right tail."
+            CharacteristicOption(
+                name="q_highest",
+                type=float,
+                default=1.0 - 1e-12,
+                description=(
+                    "Right bracket for root search.  Defines the upper bound of "
+                    "the CDF domain approximation — different values yield a "
+                    "different result near the right tail."
+                ),
+                validate=lambda v: 0 < v < 1,
             ),
-            validate=lambda v: 0 < v < 1,
         ),
-    ),
-    computation_options=(
-        ComputationOption(
-            name="max_iter",
-            type=int,
-            default=256,
-            description="Maximum brentq iterations per point.",
-            validate=lambda v: v > 0,
+        computation_options=(
+            ComputationOption(
+                name="max_iter",
+                type=int,
+                default=256,
+                description="Maximum brentq iterations per point.",
+                validate=lambda v: v > 0,
+            ),
         ),
-    ),
-    constraint_tags=frozenset({"continuous", "univariate"}),
-    description="PPF -> CDF via root inversion (scipy.optimize.brentq).",
-)
+        constraint_tags=frozenset({"continuous", "univariate"}),
+        description="PPF -> CDF via root inversion (scipy.optimize.brentq).",
+    )
 
 
-__all__ = [
-    "fit_pdf_to_cdf_1C",
-    "FITTER_PDF_TO_CDF_1C",
-    "fit_cdf_to_pdf_1C",
-    "FITTER_CDF_TO_PDF_1C",
-    "fit_cdf_to_ppf_1C",
-    "FITTER_CDF_TO_PPF_1C",
-    "fit_ppf_to_cdf_1C",
-    "FITTER_PPF_TO_CDF_1C",
-]
+def _build_continuous_descriptors() -> list[FitterDescriptor]:
+    """Build and return all continuous 1D fitter descriptors (lazy factory)."""
+    return [
+        _build_pdf_to_cdf_1C(),
+        _build_cdf_to_pdf_1C(),
+        _build_cdf_to_ppf_1C(),
+        _build_ppf_to_cdf_1C(),
+    ]
+
+
+__all__: list[str] = []

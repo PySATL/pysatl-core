@@ -37,8 +37,8 @@ from pysatl_core.distributions.registry.graph_primitives import (
 )
 
 if TYPE_CHECKING:
-    from pysatl_core.distributions.computations.base import OptionsDescriptor
     from pysatl_core.distributions.computations.computation import ComputationMethodUnion
+    from pysatl_core.distributions.computations.options import EdgeOptionsDescriptor
     from pysatl_core.distributions.distribution import Distribution
     from pysatl_core.types import GenericCharacteristicName, LabelName
 
@@ -181,7 +181,7 @@ class CharacteristicRegistry:
         *,
         label: LabelName = DEFAULT_COMPUTATION_KEY,
         constraint: GraphPrimitiveConstraint | None = None,
-        options_descriptor: OptionsDescriptor | None = None,
+        options_descriptor: EdgeOptionsDescriptor | None = None,
     ) -> None:
         """
         Add a labeled computation edge.
@@ -195,11 +195,11 @@ class CharacteristicRegistry:
             Variant label for the edge.
         constraint : GraphPrimitiveConstraint, optional
             Edge applicability constraint. If None, a pass-through constraint is used.
-        options_descriptor : OptionsDescriptor, optional
+        options_descriptor : EdgeOptionsDescriptor, optional
             Compact, graph-level form of the originating descriptor's
             options.  Carries only the option metadata used by the strategy
             to resolve user-supplied ``**options`` for this specific edge.
-            If omitted, an empty :class:`OptionsDescriptor` is attached,
+            If omitted, an empty :class:`EdgeOptionsDescriptor` is attached,
             which behaves as a no-op during option resolution.
 
         Raises
@@ -214,7 +214,7 @@ class CharacteristicRegistry:
         - Hyperedges are represented as projected edges from each source to target,
           while preserving one shared underlying computation method.
         """
-        from pysatl_core.distributions.computations.base import OptionsDescriptor
+        from pysatl_core.distributions.computations.options import EdgeOptionsDescriptor
 
         if not method.sources:
             raise ValueError("Computation must define at least one source characteristic.")
@@ -228,7 +228,7 @@ class CharacteristicRegistry:
         edge_meta = ComputationEdgeMeta(
             method=method,
             constraint=constraint or GraphPrimitiveConstraint(),
-            options_descriptor=options_descriptor or OptionsDescriptor(),
+            options_descriptor=options_descriptor or EdgeOptionsDescriptor(),
         )
 
         # TODO: We need to be careful here if some constraint more general and with the same label

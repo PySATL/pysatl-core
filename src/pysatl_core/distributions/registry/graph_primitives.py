@@ -12,11 +12,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from pysatl_core.distributions.computations.base import OptionsDescriptor
 from pysatl_core.distributions.computations.computation import (
     AnalyticalComputation,
     ComputationMethodUnion,
 )
+from pysatl_core.distributions.computations.options import EdgeOptionsDescriptor
 from pysatl_core.distributions.registry.constraint import GraphPrimitiveConstraint
 from pysatl_core.types import LabelName
 
@@ -66,12 +66,12 @@ class ComputationEdgeMeta(EdgeMeta):
     rebuilding edges.
 
     Edges declared programmatically (e.g. in tests) without an originating
-    descriptor get a default empty :class:`OptionsDescriptor`, which
+    descriptor get a default empty :class:`EdgeOptionsDescriptor`, which
     behaves as a no-op during option resolution.
     """
 
     method: ComputationMethodUnion
-    options_descriptor: OptionsDescriptor = field(default_factory=OptionsDescriptor)
+    options_descriptor: EdgeOptionsDescriptor = field(default_factory=EdgeOptionsDescriptor)
     is_analytical: bool = field(default=False)
 
     def edge_kind(self) -> str:
