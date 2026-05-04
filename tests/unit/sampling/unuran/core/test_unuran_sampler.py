@@ -14,7 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -27,7 +27,7 @@ from pysatl_core.distributions.support import (
 )
 from pysatl_core.sampling.unuran.core.unuran_sampler import DefaultUnuranSampler
 from pysatl_core.sampling.unuran.method_config import UnuranMethod, UnuranMethodConfig
-from pysatl_core.types import CharacteristicName, Kind
+from pysatl_core.types import CharacteristicName, Kind, NumericArray
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
@@ -36,17 +36,13 @@ def _continuous_distr(
     support: Any = None,
 ) -> StandaloneEuclideanUnivariateDistribution:
     """Build a minimal continuous distribution."""
-    from collections.abc import Callable
-    from typing import Any
-
-    from mypy_extensions import KwArg
-
     chars = chars or [CharacteristicName.PDF]
+
+    def _const_one(x: NumericArray, **_: Any) -> NumericArray:
+        return np.ones_like(np.atleast_1d(np.asarray(x, dtype=float)))
+
     acs = [
-        AnalyticalComputation[float, float](
-            target=c,
-            func=cast(Callable[[float, KwArg(Any)], float], lambda x, **_: 1.0),
-        )
+        AnalyticalComputation[NumericArray, NumericArray](target=c, func=_const_one)  # type: ignore[arg-type]
         for c in chars
     ]
     return StandaloneEuclideanUnivariateDistribution(
@@ -60,27 +56,23 @@ def _discrete_distr(
     chars: list[CharacteristicName] | None = None,
 ) -> StandaloneEuclideanUnivariateDistribution:
     """Build a minimal discrete distribution."""
-    from collections.abc import Callable
-    from typing import Any
-
-    from mypy_extensions import KwArg
-
     chars = chars or [CharacteristicName.PMF]
     masses = {0: 0.5, 1: 0.5}
-    pmf_func = cast(
-        Callable[[float, KwArg(Any)], float],
-        lambda x, **_: masses.get(int(x), 0.0),
-    )
+
+    def _pmf(x: NumericArray, **_: Any) -> NumericArray:
+        x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+        return np.array([masses.get(int(round(xi)), 0.0) for xi in x_arr])
+
+    def _const_half(x: NumericArray, **_: Any) -> NumericArray:
+        return np.full_like(np.atleast_1d(np.asarray(x, dtype=float)), 0.5)
+
     acs = []
     for c in chars:
         if c == CharacteristicName.PMF:
-            acs.append(AnalyticalComputation[float, float](target=c, func=pmf_func))
+            acs.append(AnalyticalComputation[NumericArray, NumericArray](target=c, func=_pmf))  # type: ignore[arg-type]
         else:
             acs.append(
-                AnalyticalComputation[float, float](
-                    target=c,
-                    func=cast(Callable[[float, KwArg(Any)], float], lambda x, **_: 0.5),
-                )
+                AnalyticalComputation[NumericArray, NumericArray](target=c, func=_const_half)  # type: ignore[arg-type]
             )
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.DISCRETE,

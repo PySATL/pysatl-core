@@ -6,6 +6,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
 from pysatl_core.transformations.transformation_method import TransformationMethod
@@ -13,6 +14,7 @@ from pysatl_core.types import (
     CharacteristicName,
     ComputationFunc,
     Method,
+    NumericArray,
     ResolvedSourceMethods,
     TransformationName,
 )
@@ -28,16 +30,18 @@ class TestTransformationMethod(DistributionTestBase):
         def _evaluator(
             _owner: object,
             sources: ResolvedSourceMethods,
-        ) -> ComputationFunc[float, float]:
-            base_cdf = cast(Method[float, float], sources[_BASE_ROLE][CharacteristicName.CDF])
+        ) -> ComputationFunc[NumericArray, NumericArray]:
+            base_cdf = cast(
+                Method[NumericArray, NumericArray], sources[_BASE_ROLE][CharacteristicName.CDF]
+            )
             _ = sources[_BASE_ROLE][CharacteristicName.PDF]
 
-            def _cdf(data: float, **options: Any) -> float:
-                return float(base_cdf(data, **options))
+            def _cdf(data: NumericArray, **options: Any) -> NumericArray:
+                return cast(NumericArray, np.asarray(base_cdf(data, **options), dtype=float))
 
-            return cast(ComputationFunc[float, float], _cdf)
+            return cast(ComputationFunc[NumericArray, NumericArray], _cdf)
 
-        method = TransformationMethod[float, float](
+        method = TransformationMethod[NumericArray, NumericArray](
             target=CharacteristicName.CDF,
             transformation=TransformationName.AFFINE,
             bases={_BASE_ROLE: base},
@@ -52,7 +56,8 @@ class TestTransformationMethod(DistributionTestBase):
         )
 
         assert not method.is_analytical
-        assert method(0.0) == pytest.approx(0.5)
+        result = method(np.array([0.0]))
+        assert float(np.asarray(result, dtype=float).flat[0]) == pytest.approx(0.5)
 
     def test_constructor_raises_when_no_sources_present(
         self, monkeypatch: pytest.MonkeyPatch
