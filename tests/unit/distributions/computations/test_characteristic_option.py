@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from pysatl_core.distributions.computations.base import CharacteristicOption
+from pysatl_core.distributions.computations.options import CharacteristicOption
 
 
 class TestCharacteristicOption:

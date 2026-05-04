@@ -16,28 +16,27 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import time
-from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
-from mypy_extensions import KwArg
 
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.computations.continuous import (
-    fit_cdf_to_pdf_1C,
-    fit_cdf_to_ppf_1C,
-    fit_pdf_to_cdf_1C,
+    _fit_cdf_to_pdf_1C,
+    _fit_cdf_to_ppf_1C,
+    _fit_pdf_to_cdf_1C,
 )
 from pysatl_core.distributions.computations.discrete import (
-    fit_cdf_to_pmf_1D,
-    fit_cdf_to_ppf_1D,
-    fit_pmf_to_cdf_1D,
+    _fit_cdf_to_pmf_1D,
+    _fit_cdf_to_ppf_1D,
+    _fit_pmf_to_cdf_1D,
 )
 from pysatl_core.distributions.support import ExplicitTableDiscreteSupport
 from pysatl_core.types import (
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL as DEFAULT_ANALYTICAL_LABEL,
     CharacteristicName,
     Kind,
+    NumericArray,
 )
 from tests.unit.distributions.test_basic import DistributionTestBase
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
@@ -74,22 +73,19 @@ def _make_discrete_pmf_distribution() -> StandaloneEuclideanUnivariateDistributi
 def _make_discrete_cdf_distribution() -> StandaloneEuclideanUnivariateDistribution:
     """Discrete distribution with analytical CDF for cdf→pmf and cdf→ppf tests."""
 
-    def cdf(x: float, **_: Any) -> float:
-        if x < 0.0:
-            return 0.0
-        if x < 1.0:
-            return 0.2
-        if x < 2.0:
-            return 0.7
-        return 1.0
+    def cdf(x: NumericArray, **_: Any) -> NumericArray:
+        x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+        return np.where(
+            x_arr < 0.0, 0.0, np.where(x_arr < 1.0, 0.2, np.where(x_arr < 2.0, 0.7, 1.0))
+        )
 
-    cdf_func = cast(Callable[[float, KwArg(Any)], float], cdf)
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.DISCRETE,
         analytical_computations={
             CharacteristicName.CDF: {
-                DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[float, float](
-                    target=CharacteristicName.CDF, func=cdf_func
+                DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
+                    target=CharacteristicName.CDF,
+                    func=cdf,  # type: ignore[arg-type]
                 )
             }
         },
@@ -106,19 +102,19 @@ class TestContinuousPerformance:
     """Performance sanity checks for continuous fitters."""
 
     def test_pdf_to_cdf_moderate_array_completes_in_time(self) -> None:
-        """fit_pdf_to_cdf_1C with 50 points should complete in < 10s.
+        """_fit_pdf_to_cdf_1C with 50 points should complete in < 10s.
 
         This catches quadratic blow-up: 50 points with segment-wise
         integration should be ~50 quad calls, not 50 full-range integrals.
         """
         distr = _make_uniform_pdf_distribution()
-        fitted = fit_pdf_to_cdf_1C(distr)
+        fitted = _fit_pdf_to_cdf_1C(distr)
         x = np.linspace(0.05, 0.95, 50)
 
         _, elapsed = _time_call(fitted.func, x)
         assert (
             elapsed < 10.0
-        ), f"fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        ), f"_fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
 
     def test_pdf_to_cdf_segment_wise_scales_subquadratically(self) -> None:
         """Doubling the array size should NOT quadruple the time.
@@ -128,7 +124,7 @@ class TestContinuousPerformance:
         We allow up to 5× growth for 2× input to account for noise.
         """
         distr = _make_uniform_pdf_distribution()
-        fitted = fit_pdf_to_cdf_1C(distr)
+        fitted = _fit_pdf_to_cdf_1C(distr)
 
         x_small = np.linspace(0.05, 0.95, 20)
         x_large = np.linspace(0.05, 0.95, 40)
@@ -150,32 +146,32 @@ class TestContinuousPerformance:
             )
 
     def test_cdf_to_pdf_array_performance(self) -> None:
-        """fit_cdf_to_pdf_1C with 100 points should complete quickly."""
+        """_fit_cdf_to_pdf_1C with 100 points should complete quickly."""
         distr = _make_logistic_cdf_distribution()
-        fitted = fit_cdf_to_pdf_1C(distr)
+        fitted = _fit_cdf_to_pdf_1C(distr)
         x = np.linspace(-5.0, 5.0, 100)
 
         _, elapsed = _time_call(fitted.func, x)
         assert (
             elapsed < 5.0
-        ), f"fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
+        ), f"_fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
 
     def test_cdf_to_ppf_array_performance(self) -> None:
-        """fit_cdf_to_ppf_1C with 50 points should complete in < 10s."""
+        """_fit_cdf_to_ppf_1C with 50 points should complete in < 10s."""
         distr = _make_logistic_cdf_distribution()
-        fitted = fit_cdf_to_ppf_1C(distr)
+        fitted = _fit_cdf_to_ppf_1C(distr)
         q = np.linspace(0.01, 0.99, 50)
 
         _, elapsed = _time_call(fitted.func, q)
         assert (
             elapsed < 10.0
-        ), f"fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        ), f"_fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
 
     def test_pdf_to_cdf_sorted_vs_unsorted_similar_time(self) -> None:
         """Segment-wise integration should work well for both sorted and
         unsorted inputs (it sorts internally)."""
         distr = _make_uniform_pdf_distribution()
-        fitted = fit_pdf_to_cdf_1C(distr)
+        fitted = _fit_pdf_to_cdf_1C(distr)
 
         x_sorted = np.linspace(0.05, 0.95, 30)
         rng = np.random.default_rng(42)
@@ -193,10 +189,12 @@ class TestContinuousPerformance:
             atol=1e-8,
         )
 
-        # Timing should be similar (within 3× of each other)
+        # Timing should be similar (within 5× of each other).
+        # 3× was too tight for CI environments where scheduling jitter can
+        # easily produce a 3–4× spread on sub-10 ms measurements.
         if t_sorted > 0.001 and t_shuffled > 0.001:
             ratio = max(t_sorted, t_shuffled) / min(t_sorted, t_shuffled)
-            assert ratio < 3.0, (
+            assert ratio < 5.0, (
                 f"Sorted/unsorted timing ratio {ratio:.1f}× "
                 f"(sorted={t_sorted:.4f}s, shuffled={t_shuffled:.4f}s)"
             )
@@ -211,20 +209,20 @@ class TestDiscretePerformance:
     """Performance sanity checks for discrete fitters."""
 
     def test_pmf_to_cdf_moderate_array(self) -> None:
-        """fit_pmf_to_cdf_1D with 1000 query points should be fast."""
+        """_fit_pmf_to_cdf_1D with 1000 query points should be fast."""
         distr = _make_discrete_pmf_distribution()
-        fitted = fit_pmf_to_cdf_1D(distr)
+        fitted = _fit_pmf_to_cdf_1D(distr)
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
         assert (
             elapsed < 2.0
-        ), f"fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        ), f"_fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
 
     def test_pmf_to_cdf_scales_linearly(self) -> None:
         """Doubling query size should roughly double time, not quadruple."""
         distr = _make_discrete_pmf_distribution()
-        fitted = fit_pmf_to_cdf_1D(distr)
+        fitted = _fit_pmf_to_cdf_1D(distr)
 
         x_small = np.linspace(-1.0, 3.0, 500)
         x_large = np.linspace(-1.0, 3.0, 1000)
@@ -243,26 +241,26 @@ class TestDiscretePerformance:
             )
 
     def test_cdf_to_pmf_moderate_array(self) -> None:
-        """fit_cdf_to_pmf_1D with 1000 query points should be fast."""
+        """_fit_cdf_to_pmf_1D with 1000 query points should be fast."""
         distr = _make_discrete_cdf_distribution()
-        fitted = fit_cdf_to_pmf_1D(distr)
+        fitted = _fit_cdf_to_pmf_1D(distr)
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
         assert (
             elapsed < 2.0
-        ), f"fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        ), f"_fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
 
     def test_cdf_to_ppf_moderate_array(self) -> None:
-        """fit_cdf_to_ppf_1D with 500 query points should be fast."""
+        """_fit_cdf_to_ppf_1D with 500 query points should be fast."""
         distr = _make_discrete_cdf_distribution()
-        fitted = fit_cdf_to_ppf_1D(distr)
+        fitted = _fit_cdf_to_ppf_1D(distr)
         q = np.linspace(0.01, 0.99, 500)
 
         _, elapsed = _time_call(fitted.func, q)
         assert (
             elapsed < 2.0
-        ), f"fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
+        ), f"_fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
 
 
 # ---------------------------------------------------------------------------
@@ -275,11 +273,10 @@ class TestRegistryPerformance:
 
     def test_registry_lookup_is_fast(self) -> None:
         """Finding a fitter in the registry should be sub-millisecond."""
-        from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
-        from pysatl_core.distributions.computations.registry import FitterRegistry
+        from pysatl_core.distributions.computations.registry import FitterRegistry, fitter_registry
 
         reg = FitterRegistry()
-        reg.register_many(ALL_FITTER_DESCRIPTORS)
+        reg.register_many(fitter_registry().all_descriptors())
 
         _, elapsed = _time_call(
             reg.find,
@@ -290,11 +287,10 @@ class TestRegistryPerformance:
 
     def test_registry_find_all_is_fast(self) -> None:
         """Finding all matching fitters should be sub-millisecond."""
-        from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
-        from pysatl_core.distributions.computations.registry import FitterRegistry
+        from pysatl_core.distributions.computations.registry import FitterRegistry, fitter_registry
 
         reg = FitterRegistry()
-        reg.register_many(ALL_FITTER_DESCRIPTORS)
+        reg.register_many(fitter_registry().all_descriptors())
 
         _, elapsed = _time_call(
             reg.find_all,

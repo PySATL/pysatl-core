@@ -63,28 +63,29 @@ class TestCharacteristicRegistry(DistributionTestBase):
         qs = np.linspace(1e-6, 1.0 - 1e-6, 7)
         quantiles = np.asarray(ppf(qs), dtype=float)
         assert quantiles.shape == qs.shape
-        roundtrip = np.asarray([float(cdf(float(x))) for x in quantiles], dtype=float)
+        roundtrip = np.asarray(cdf(quantiles), dtype=float)
         assert float(np.max(np.abs(roundtrip - qs))) < 5e-3
 
     def test_view_adds_analytical_self_loops_with_labels(self) -> None:
-        def cdf_primary(x: float, **_kwargs: Any) -> float:
-            return 1.0 / (1.0 + np.exp(-x))
+        def cdf_primary(x: np.ndarray, **_kwargs: Any) -> np.ndarray:
+            x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+            return 1.0 / (1.0 + np.exp(-x_arr))
 
-        def cdf_secondary(x: float, **_kwargs: Any) -> float:
-            return 1.0 / (1.0 + np.exp(-x))
-
-        cdf_primary_func = cast(Callable[[float, KwArg(Any)], float], cdf_primary)
-        cdf_secondary_func = cast(Callable[[float, KwArg(Any)], float], cdf_secondary)
+        def cdf_secondary(x: np.ndarray, **_kwargs: Any) -> np.ndarray:
+            x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+            return 1.0 / (1.0 + np.exp(-x_arr))
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations={
                 CharacteristicName.CDF: {
-                    "primary": AnalyticalComputation[float, float](
-                        target=CharacteristicName.CDF, func=cdf_primary_func
+                    "primary": AnalyticalComputation[np.ndarray, np.ndarray](
+                        target=CharacteristicName.CDF,
+                        func=cdf_primary,  # type: ignore[arg-type]
                     ),
-                    "secondary": AnalyticalComputation[float, float](
-                        target=CharacteristicName.CDF, func=cdf_secondary_func
+                    "secondary": AnalyticalComputation[np.ndarray, np.ndarray](
+                        target=CharacteristicName.CDF,
+                        func=cdf_secondary,  # type: ignore[arg-type]
                     ),
                 }
             },
@@ -99,24 +100,23 @@ class TestCharacteristicRegistry(DistributionTestBase):
         assert view.analytical_variants(CharacteristicName.CDF) == loops
 
     def test_strategy_prefers_first_analytical_loop(self) -> None:
-        def cdf_first(_x: float, **_kwargs: Any) -> float:
-            return 0.25
+        def cdf_first(x: np.ndarray, **_kwargs: Any) -> np.ndarray:
+            return np.full_like(np.atleast_1d(np.asarray(x, dtype=float)), 0.25)
 
-        def cdf_second(_x: float, **_kwargs: Any) -> float:
-            return 0.75
-
-        cdf_first_func = cast(Callable[[float, KwArg(Any)], float], cdf_first)
-        cdf_second_func = cast(Callable[[float, KwArg(Any)], float], cdf_second)
+        def cdf_second(x: np.ndarray, **_kwargs: Any) -> np.ndarray:
+            return np.full_like(np.atleast_1d(np.asarray(x, dtype=float)), 0.75)
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations={
                 CharacteristicName.CDF: {
-                    "first": AnalyticalComputation[float, float](
-                        target=CharacteristicName.CDF, func=cdf_first_func
+                    "first": AnalyticalComputation[np.ndarray, np.ndarray](
+                        target=CharacteristicName.CDF,
+                        func=cdf_first,  # type: ignore[arg-type]
                     ),
-                    "second": AnalyticalComputation[float, float](
-                        target=CharacteristicName.CDF, func=cdf_second_func
+                    "second": AnalyticalComputation[np.ndarray, np.ndarray](
+                        target=CharacteristicName.CDF,
+                        func=cdf_second,  # type: ignore[arg-type]
                     ),
                 }
             },
@@ -126,7 +126,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
         strategy = DefaultComputationStrategy(enable_caching=False)
         cdf = strategy.query_method(CharacteristicName.CDF, distr)
 
-        assert cdf(0.0) == pytest.approx(0.25)
+        assert float(cdf(np.array([0.0]))[0]) == pytest.approx(0.25)
 
     def test_configuration_discrete_requires_support_then_ok(self) -> None:
         reg = characteristic_registry()

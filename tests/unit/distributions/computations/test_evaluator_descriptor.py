@@ -1,5 +1,5 @@
 """
-Tests for EvaluatorDescriptor.
+Tests for EvaluatorDescriptor and EvaluatorMethod.
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pysatl_core.distributions.computations.base import (
+from pysatl_core.distributions.computations.descriptors import EvaluatorDescriptor
+from pysatl_core.distributions.computations.options import (
     CharacteristicOption,
     ComputationOption,
-    EvaluatorDescriptor,
 )
 from pysatl_core.types import CharacteristicName, NumericArray
 
@@ -131,3 +131,67 @@ class TestEvaluatorDescriptor:
         assert desc.resolve_options({}) == {}
         assert desc.resolve_characteristic_options({}) == {}
         assert desc.resolve_computation_options({}) == {}
+
+
+class TestEvaluatorMethodPrepare:
+    """Tests for EvaluatorMethod.prepare() option forwarding."""
+
+    def test_prepare_time_options_are_forwarded_to_evaluator(self) -> None:
+        """
+        Options passed to ``prepare()`` must be forwarded to the evaluator
+        when the returned wrapper is called, so that edge-level options
+        (resolved by the strategy before calling ``prepare``) are not silently
+        dropped.
+        """
+        from pysatl_core.distributions.computations.computation import EvaluatorMethod
+
+        received: dict[str, Any] = {}
+
+        def evaluator(_distribution: Any, x: NumericArray, /, **kwargs: Any) -> NumericArray:
+            received.update(kwargs)
+            return np.asarray(x, dtype=float)
+
+        method = EvaluatorMethod(target="cdf", sources=["pdf"], evaluator=evaluator)
+        fitted = method.prepare(None, tol=1e-6, max_iter=100)  # type: ignore[arg-type]
+        fitted(np.array([0.5]))
+
+        assert received.get("tol") == pytest.approx(1e-6)
+        assert received.get("max_iter") == 100
+
+    def test_call_time_options_override_prepare_time_options(self) -> None:
+        """
+        Options supplied at call time must take precedence over those
+        supplied at prepare time, so callers can still override per-call.
+        """
+        from pysatl_core.distributions.computations.computation import EvaluatorMethod
+
+        received: dict[str, Any] = {}
+
+        def evaluator(_distribution: Any, x: NumericArray, /, **kwargs: Any) -> NumericArray:
+            received.update(kwargs)
+            return np.asarray(x, dtype=float)
+
+        method = EvaluatorMethod(target="cdf", sources=["pdf"], evaluator=evaluator)
+        fitted = method.prepare(None, tol=1e-6)  # type: ignore[arg-type]
+        fitted(np.array([0.5]), tol=1e-3)  # call-time override
+
+        assert received.get("tol") == pytest.approx(1e-3)
+
+    def test_prepare_without_options_works_as_before(self) -> None:
+        """
+        Calling ``prepare()`` with no options must still produce a working
+        wrapper that forwards only call-time kwargs (backward-compatible).
+        """
+        from pysatl_core.distributions.computations.computation import EvaluatorMethod
+
+        received: dict[str, Any] = {}
+
+        def evaluator(_distribution: Any, x: NumericArray, /, **kwargs: Any) -> NumericArray:
+            received.update(kwargs)
+            return np.asarray(x, dtype=float)
+
+        method = EvaluatorMethod(target="cdf", sources=["pdf"], evaluator=evaluator)
+        fitted = method.prepare(None)  # type: ignore[arg-type]
+        fitted(np.array([0.5]), tol=1e-9)
+
+        assert received.get("tol") == pytest.approx(1e-9)

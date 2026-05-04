@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
-from pysatl_core.distributions.computations.base import (
+from pysatl_core.distributions.computations.descriptors import FitterDescriptor
+from pysatl_core.distributions.computations.options import (
     CharacteristicOption,
     ComputationOption,
-    FitterDescriptor,
 )
 from pysatl_core.types import CharacteristicName
 
@@ -152,18 +152,18 @@ class TestFitterDescriptor:
 
     def test_all_builtin_descriptors_are_fitter_descriptors(self) -> None:
         """All built-in descriptors should be FitterDescriptor instances."""
-        from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
+        from pysatl_core.distributions.computations.registry import fitter_registry
 
-        for desc in ALL_FITTER_DESCRIPTORS:
+        for desc in fitter_registry().all_descriptors():
             assert isinstance(
                 desc, FitterDescriptor
             ), f"Descriptor '{desc.name}' should be a FitterDescriptor"
 
     def test_builtin_descriptors_have_correct_option_kinds(self) -> None:
         """Verify that built-in descriptors use the correct option types."""
-        from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
+        from pysatl_core.distributions.computations.registry import fitter_registry
 
-        for desc in ALL_FITTER_DESCRIPTORS:
+        for desc in fitter_registry().all_descriptors():
             for char_opt in desc.characteristic_options:
                 assert isinstance(char_opt, CharacteristicOption), (
                     f"Descriptor '{desc.name}': characteristic_options must contain "

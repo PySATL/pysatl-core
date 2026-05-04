@@ -10,7 +10,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from typing import Any
 
-from pysatl_core.distributions.computations.base import FitterDescriptor
+from pysatl_core.distributions.computations.descriptors import FitterDescriptor
 from pysatl_core.distributions.computations.registry import FitterRegistry
 from pysatl_core.types import CharacteristicName
 
@@ -160,11 +160,12 @@ class TestFitterRegistry:
         assert reg.find(CharacteristicName.PPF, [CharacteristicName.PDF]) is None
 
     def test_all_fitter_descriptors_registered(self) -> None:
-        """Verify that ALL_FITTER_DESCRIPTORS contains all 8 built-in fitters."""
-        from pysatl_core.distributions.computations import ALL_FITTER_DESCRIPTORS
+        """Verify that the default fitter_registry contains all 8 built-in fitters."""
+        from pysatl_core.distributions.computations.registry import fitter_registry
 
-        assert len(ALL_FITTER_DESCRIPTORS) == 8
-        names = {d.name for d in ALL_FITTER_DESCRIPTORS}
+        descriptors = fitter_registry().all_descriptors()
+        assert len(descriptors) == 8
+        names = {d.name for d in descriptors}
         expected = {
             "pdf_to_cdf_1C",
             "cdf_to_pdf_1C",
