@@ -346,7 +346,8 @@ def _fit_ppf_to_cdf_1C(
         lower bound of the CDF domain approximation.
     q_highest : float, default 1 - 1e-12
         *(Characteristic option)* Right bracket for root search.  Defines the
-        upper bound of the CDF domain approximation.
+        upper bound of the CDF domain approximation.  Must be strictly greater
+        than *q_lowest*.
     max_iter : int, default 256
         *(Computation option)* Maximum brentq iterations per point.
 
@@ -354,7 +355,17 @@ def _fit_ppf_to_cdf_1C(
     -------
     FittedComputationMethod[NumericArray, NumericArray]
         Array-semantic ``cdf`` callable.
+
+    Raises
+    ------
+    ValueError
+        If ``q_highest <= q_lowest``.
     """
+    if q_highest <= q_lowest:
+        raise ValueError(
+            f"q_highest must be greater than q_lowest, got q_lowest={q_lowest!r}, "
+            f"q_highest={q_highest!r}."
+        )
     ppf_func = resolve(distribution, CharacteristicName.PPF)
 
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:

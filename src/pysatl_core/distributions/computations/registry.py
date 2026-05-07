@@ -17,7 +17,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -30,6 +30,9 @@ class FitterRegistry:
     """
     Registry that stores fitter descriptors and selects the best match.
 
+    This class is a singleton: every call to ``FitterRegistry()`` returns the
+    same instance.  Use ``FitterRegistry._reset()`` in tests to clear state.
+
     Examples
     --------
     >>> registry = FitterRegistry()
@@ -37,12 +40,40 @@ class FitterRegistry:
     >>> desc = registry.find("cdf", ["pdf"], required_tags={"continuous", "univariate"})
     """
 
+    _instance: ClassVar[FitterRegistry | None] = None
+
+    def __new__(cls) -> Self:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance  # type: ignore[return-value]
+
     def __init__(self) -> None:
+        if getattr(self, "_initialized", False):
+            return
         self._by_key: dict[
             tuple[GenericCharacteristicName, tuple[GenericCharacteristicName, ...]],
             list[FitterDescriptor],
         ] = {}
         self._all: list[FitterDescriptor] = []
+        self._initialized = True
+
+    def __copy__(self) -> Self:
+        """Singleton copy returns the same instance."""
+        return self
+
+    def __deepcopy__(self, memo: dict[Any, Any]) -> Self:
+        """Singleton deepcopy returns the same instance."""
+        return self
+
+    @classmethod
+    def _reset(cls) -> None:
+        """
+        Clear the singleton instance (for testing purposes only).
+
+        Resets all registered descriptors and allows the next ``FitterRegistry()``
+        call to create a fresh instance.
+        """
+        cls._instance = None
 
     def register(self, descriptor: FitterDescriptor) -> None:
         """
@@ -153,8 +184,9 @@ def fitter_registry() -> FitterRegistry:
     -----
     - Descriptors are **not** created at import time; they are built here on
       first access, keeping module-level side-effects to a minimum.
-    - Users who need a custom registry should instantiate ``FitterRegistry()``
-      directly and populate it themselves.
+    - ``FitterRegistry`` is a singleton; ``FitterRegistry() is fitter_registry()``
+      is always ``True`` after the first call.
+    - To reset the singleton (e.g. in tests), call ``reset_fitter_registry()``.
     """
     from pysatl_core.distributions.computations.continuous import (
         _build_continuous_descriptors,
@@ -172,6 +204,7 @@ def fitter_registry() -> FitterRegistry:
 def reset_fitter_registry() -> None:
     """Reset the cached fitter registry (useful in tests)."""
     fitter_registry.cache_clear()
+    FitterRegistry._reset()
 
 
 __all__ = [
