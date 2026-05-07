@@ -1,14 +1,16 @@
 """
 Default configuration and cached accessor for the global characteristic registry.
 
- - No auto-configuration in constructor.
- - Provide ``characteristic_registry()`` with ``@lru_cache`` that builds the
-  singleton instance and seeds it with a set of edges.
+Notes
+-----
+No auto-configuration happens in the constructor. The module provides
+``characteristic_registry()`` with ``@lru_cache`` that builds the singleton
+instance and seeds it with a set of edges.
 
 At configuration time, ``to_computation_method()`` is called on each
 ``FitterDescriptor`` to build a ``FitterMethod`` (a lightweight wrapper that
-holds the fitter callable) and store it as a graph edge.  The actual
-``fitter(distribution, **options)`` call — the expensive precomputation — happens
+holds the fitter callable) and store it as a graph edge. The actual
+``fitter(distribution, **options)`` call - the expensive precomputation - happens
 on demand when the strategy resolves a path via ``query_method``.
 
 Lookup of fitter descriptors by ``(target, sources, tags)`` is delegated to

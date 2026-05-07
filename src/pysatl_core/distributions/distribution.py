@@ -53,13 +53,7 @@ class Distribution(ABC):
     ----------
     distribution_type : DistributionType
         Type information about the distribution (kind, dimension, etc.).
-    analytical_computations : Mapping[
-        GenericCharacteristicName,
-        (
-            AnalyticalComputation[Any, Any]
-            | Mapping[LabelName, AnalyticalComputation[Any, Any]]
-        ),
-    ]
+    analytical_computations : Mapping
         Distribution-provided characteristic methods.
         For non-transformed distributions every method in this mapping is
         fully analytical, so this mapping matches the set of loops with
@@ -104,14 +98,7 @@ class Distribution(ABC):
         ----------
         distribution_type : DistributionType
             Type information about the distribution (kind, dimension, etc.).
-        analytical_computations :
-            Mapping[
-                GenericCharacteristicName,
-                (
-                    AnalyticalComputation[Any, Any]
-                    | Mapping[LabelName, AnalyticalComputation[Any, Any]]
-                ),
-            ]
+        analytical_computations : Mapping
             Distribution-provided characteristic methods.
             For non-transformed distributions these methods are fully
             analytical.
