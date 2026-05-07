@@ -10,6 +10,10 @@ The test distribution has support {0, 1, 2} with PMF {0.0: 0.2, 1.0: 0.5, 2.0: 0
 
 Right-unbounded tests use a truncated geometric-like PMF on {0, 1, 2, ...}
 with P(X=k) = 0.5^(k+1) for k >= 0.
+
+Right-open CDF convention (right_closed=False) tests verify:
+- F⁻(x) = P(ξ < x) excludes mass at x (differs from standard F(x) = P(ξ ≤ x) at support points).
+- The identity 1 - F⁻(x) = P(ξ ≥ x), needed for computing the CDF of -ξ.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from pysatl_core.distributions.computations.discrete import (
     _fit_cdf_to_pmf_1D,
     _fit_cdf_to_ppf_1D,
     _fit_pmf_to_cdf_1D,
+    _fit_ppf_to_cdf_1D,
 )
 from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
@@ -209,7 +214,8 @@ class TestFitPpfToCdf1D:
         desc = _build_ppf_to_cdf_1D()
         assert desc.target == CharacteristicName.CDF
         assert desc.sources == [CharacteristicName.PPF]
-        assert desc.option_names() == ("n_q_grid",)
+        # right_closed is a CharacteristicOption; n_q_grid is a ComputationOption
+        assert desc.option_names() == ("right_closed", "n_q_grid")
 
 
 def _make_right_unbounded_pmf_distribution() -> StandaloneEuclideanUnivariateDistribution:
@@ -318,3 +324,186 @@ class TestDiscreteRoundtrip(DistributionTestBase):
         cdf_at_xs = np.asarray(cdf_fitted.func(xs), dtype=float)  # type: ignore[call-arg,arg-type,type-var]
         # For discrete distributions, CDF(PPF(q)) >= q
         assert np.all(cdf_at_xs >= qs - 1e-10)  # type: ignore[operator]
+
+
+# ---------------------------------------------------------------------------
+# Right-open CDF convention (right_closed=False)
+# ---------------------------------------------------------------------------
+# Support {0, 1, 2}, PMF {0: 0.2, 1: 0.5, 2: 0.3}
+# Right-closed CDF:  F(x)  = P(ξ ≤ x): 0 for x<0, 0.2 at x=0, 0.7 at x=1, 1.0 at x=2
+# Right-open   CDF:  F⁻(x) = P(ξ < x): 0 for x≤0, 0.2 for 0<x≤1, 0.7 for 1<x≤2, 1.0 for x>2
+#
+# Key identity: 1 - F⁻(x) = P(ξ ≥ x), useful for computing CDF of -ξ.
+
+
+class TestPmfToCdfRightOpen(DistributionTestBase):
+    """Tests for _fit_pmf_to_cdf_1D with right_closed=False (right-open convention)."""
+
+    def test_right_open_at_support_points(self) -> None:
+        """F⁻(x) at support points should exclude the mass at x."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        # F⁻(0) = P(ξ < 0) = 0
+        assert float(fitted.func(np.float64(0.0))[0]) == pytest.approx(0.0, abs=1e-10)  # type: ignore[call-arg,arg-type]
+        # F⁻(1) = P(ξ < 1) = P(ξ = 0) = 0.2
+        assert float(fitted.func(np.float64(1.0))[0]) == pytest.approx(0.2, abs=1e-6)  # type: ignore[call-arg,arg-type]
+        # F⁻(2) = P(ξ < 2) = P(ξ = 0) + P(ξ = 1) = 0.7
+        assert float(fitted.func(np.float64(2.0))[0]) == pytest.approx(0.7, abs=1e-6)  # type: ignore[call-arg,arg-type]
+
+    def test_right_open_between_support_points(self) -> None:
+        """F⁻(x) between support points equals F(x) (no mass there)."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted_open = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+        fitted_closed = _fit_pmf_to_cdf_1D(distr, right_closed=True)
+
+        # Between 0 and 1: both conventions agree
+        x_between = np.array([0.5])
+        np.testing.assert_allclose(
+            np.asarray(fitted_open.func(x_between), dtype=np.float64),  # type: ignore[call-arg,arg-type]
+            np.asarray(fitted_closed.func(x_between), dtype=np.float64),  # type: ignore[call-arg,arg-type]
+            atol=1e-10,
+        )
+
+    def test_right_open_before_support(self) -> None:
+        """F⁻(x) = 0 for x <= first support point."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        assert float(fitted.func(np.float64(-1.0))[0]) == pytest.approx(0.0)  # type: ignore[call-arg,arg-type]
+        assert float(fitted.func(np.float64(0.0))[0]) == pytest.approx(0.0)  # type: ignore[call-arg,arg-type]
+
+    def test_right_open_after_last_support(self) -> None:
+        """F⁻(x) = 1 for x > last support point."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        assert float(fitted.func(np.float64(3.0))[0]) == pytest.approx(1.0)  # type: ignore[call-arg,arg-type]
+
+    def test_right_open_negation_identity(self) -> None:
+        """1 - F⁻(x) = P(ξ ≥ x) for all support points."""
+        # Support {0, 1, 2}, PMF {0: 0.2, 1: 0.5, 2: 0.3}
+        # P(ξ ≥ 0) = 1.0, P(ξ ≥ 1) = 0.8, P(ξ ≥ 2) = 0.3
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        xs = np.array([0.0, 1.0, 2.0])
+        f_open = np.asarray(fitted.func(xs), dtype=np.float64)  # type: ignore[call-arg]
+        p_geq = np.float64(1.0) - f_open
+        np.testing.assert_allclose(p_geq, [1.0, 0.8, 0.3], atol=1e-6)
+
+    def test_right_open_monotonicity(self) -> None:
+        """F⁻(x) must be non-decreasing."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+        xs = np.linspace(-1.0, 3.0, 50)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(np.diff(result) >= -1e-10)
+
+    def test_right_open_bounds(self) -> None:
+        """F⁻(x) must lie in [0, 1]."""
+        distr = self.make_discrete_point_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+        xs = np.linspace(-2.0, 4.0, 50)
+        result = np.asarray(fitted.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        assert np.all(result >= 0.0)  # type: ignore[operator]
+        assert np.all(result <= 1.0)  # type: ignore[operator]
+
+    def test_descriptor_has_right_closed_option(self) -> None:
+        """pmf_to_cdf_1D descriptor must declare right_closed as a CharacteristicOption."""
+        desc = _build_pmf_to_cdf_1D()
+        char_names = [o.name for o in desc.characteristic_options]
+        assert "right_closed" in char_names
+
+
+class TestPmfToCdfRightOpenRightUnbounded:
+    """Tests for _fit_pmf_to_cdf_1D right-open convention on a right-unbounded lattice."""
+
+    def test_right_open_at_support_points(self) -> None:
+        """F⁻(k) = P(ξ < k) = 1 - 0.5^k for geometric(0.5) on {0,1,2,...}."""
+        distr = _make_right_unbounded_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        # F⁻(0) = P(ξ < 0) = 0
+        assert float(fitted.func(np.array([0.0]))[0]) == pytest.approx(0.0, abs=1e-6)  # type: ignore[call-arg]
+        # F⁻(1) = P(ξ < 1) = P(ξ = 0) = 0.5
+        assert float(fitted.func(np.array([1.0]))[0]) == pytest.approx(0.5, abs=1e-6)  # type: ignore[call-arg]
+        # F⁻(2) = P(ξ < 2) = P(ξ=0) + P(ξ=1) = 0.75
+        assert float(fitted.func(np.array([2.0]))[0]) == pytest.approx(0.75, abs=1e-6)  # type: ignore[call-arg]
+
+    def test_right_open_negation_identity(self) -> None:
+        """1 - F⁻(k) = P(ξ ≥ k) = 0.5^k for geometric(0.5)."""
+        distr = _make_right_unbounded_pmf_distribution()
+        fitted = _fit_pmf_to_cdf_1D(distr, right_closed=False)
+
+        for k in range(5):
+            f_open = float(fitted.func(np.array([float(k)]))[0])  # type: ignore[call-arg]
+            p_geq = 1.0 - f_open
+            expected = 0.5**k  # P(ξ ≥ k) = 0.5^k for geometric(0.5)
+            assert p_geq == pytest.approx(expected, abs=1e-5), f"P(ξ ≥ {k}) mismatch"
+
+
+class TestPpfToCdfRightOpen:
+    """Tests for _fit_ppf_to_cdf_1D with right_closed=False (right-open convention)."""
+
+    def _make_ppf_distribution(self) -> StandaloneEuclideanUnivariateDistribution:
+        """Discrete distribution with support {0,1,2}, PMF {0:0.2, 1:0.5, 2:0.3}."""
+
+        # PPF: Q(q) = 0 for q<=0.2, 1 for 0.2<q<=0.7, 2 for q>0.7
+        def ppf(q: NumericArray, **_: Any) -> NumericArray:
+            q_arr = np.atleast_1d(np.asarray(q, dtype=float))
+            return np.where(q_arr <= 0.2, 0.0, np.where(q_arr <= 0.7, 1.0, 2.0))
+
+        return StandaloneEuclideanUnivariateDistribution(
+            kind=Kind.DISCRETE,
+            analytical_computations={
+                CharacteristicName.PPF: {
+                    DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
+                        target=CharacteristicName.PPF,
+                        func=ppf,  # type: ignore[arg-type]
+                    )
+                }
+            },
+            support=ExplicitTableDiscreteSupport([0, 1, 2]),
+        )
+
+    def test_right_open_at_support_points(self) -> None:
+        """F⁻(x) at support points should exclude the mass at x."""
+        distr = self._make_ppf_distribution()
+        fitted = _fit_ppf_to_cdf_1D(distr, right_closed=False)
+
+        # F⁻(0) = P(ξ < 0) = 0
+        assert float(fitted.func(np.float64(0.0))[0]) == pytest.approx(0.0, abs=0.01)  # type: ignore[call-arg,arg-type]
+        # F⁻(1) = P(ξ < 1) = 0.2
+        assert float(fitted.func(np.float64(1.0))[0]) == pytest.approx(0.2, abs=0.01)  # type: ignore[call-arg,arg-type]
+        # F⁻(2) = P(ξ < 2) = 0.7
+        assert float(fitted.func(np.float64(2.0))[0]) == pytest.approx(0.7, abs=0.01)  # type: ignore[call-arg,arg-type]
+
+    def test_right_open_negation_identity(self) -> None:
+        """1 - F⁻(x) = P(ξ ≥ x) for support points."""
+        distr = self._make_ppf_distribution()
+        fitted = _fit_ppf_to_cdf_1D(distr, right_closed=False)
+
+        xs = np.array([0.0, 1.0, 2.0])
+        f_open = np.asarray(fitted.func(xs), dtype=np.float64)  # type: ignore[call-arg]
+        p_geq = np.float64(1.0) - f_open
+        # P(ξ ≥ 0) = 1.0, P(ξ ≥ 1) = 0.8, P(ξ ≥ 2) = 0.3
+        np.testing.assert_allclose(p_geq, [1.0, 0.8, 0.3], atol=0.01)
+
+    def test_right_open_vs_closed_differ_at_support(self) -> None:
+        """Right-open and right-closed CDFs must differ at support points."""
+        distr = self._make_ppf_distribution()
+        fitted_open = _fit_ppf_to_cdf_1D(distr, right_closed=False)
+        fitted_closed = _fit_ppf_to_cdf_1D(distr, right_closed=True)
+
+        xs = np.array([0.0, 1.0, 2.0])
+        open_vals = np.asarray(fitted_open.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        closed_vals = np.asarray(fitted_closed.func(xs), dtype=float)  # type: ignore[call-arg,type-var]
+        # At support points the two conventions differ by the PMF mass
+        assert not np.allclose(open_vals, closed_vals, atol=0.05)
+
+    def test_descriptor_has_right_closed_option(self) -> None:
+        """ppf_to_cdf_1D descriptor must declare right_closed as a CharacteristicOption."""
+        desc = _build_ppf_to_cdf_1D()
+        char_names = [o.name for o in desc.characteristic_options]
+        assert "right_closed" in char_names

@@ -7,8 +7,18 @@ discrete distribution characteristics (PMF, CDF, PPF).
 Option taxonomy used here
 -------------------------
 ``CharacteristicOption``
-    None of the current discrete fitters have characteristic options because
-    the discrete support fully determines the characteristic domain.
+    * ``_fit_pmf_to_cdf_1D``, ``_fit_ppf_to_cdf_1D``: ``right_closed`` —
+      controls the CDF convention:
+
+      * ``True`` (default): right-closed, standard convention
+        ``F(x) = P(ξ ≤ x)``.
+      * ``False``: right-open convention ``F⁻(x) = P(ξ < x)``.
+
+      The right-open form is useful when computing the CDF of ``-ξ``:
+      ``P(-ξ ≤ -x) = P(ξ ≥ x) = 1 - P(ξ < x) = 1 - F⁻(x)``.
+
+      Because this option changes the *meaning* of the result it is a
+      ``CharacteristicOption`` and is encoded into the cache key.
 
 ``ComputationOption``
     * ``_fit_ppf_to_cdf_1D``: ``n_q_grid`` — grid resolution for probing the
@@ -22,7 +32,7 @@ __author__ = "Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -34,7 +44,7 @@ from pysatl_core.distributions.computations._utils import (
 )
 from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.distributions.computations.descriptors import FitterDescriptor
-from pysatl_core.distributions.computations.options import ComputationOption
+from pysatl_core.distributions.computations.options import CharacteristicOption, ComputationOption
 from pysatl_core.distributions.support import (
     DiscreteSupport,
     IntegerLatticeDiscreteSupport,
@@ -57,6 +67,7 @@ def _fit_pmf_to_cdf_1D(
     distribution: Distribution,
     /,
     eps: float = 1e-12,
+    right_closed: bool = True,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``pmf -> cdf`` conversion for discrete distributions.
@@ -75,6 +86,15 @@ def _fit_pmf_to_cdf_1D(
         * **Left-bounded, right-unbounded**: the upward walk (via mirroring)
           continues while ``1 - cumulative_sum >= eps``; once the remaining
           right-tail probability falls below *eps* it is considered negligible.
+    right_closed : bool, default True
+        *(Characteristic option)* CDF convention:
+
+        * ``True``: right-closed ``F(x) = P(ξ ≤ x)`` (standard).
+        * ``False``: right-open ``F⁻(x) = P(ξ < x)``.
+
+        The right-open form satisfies
+        ``1 - F⁻(x) = P(ξ ≥ x)``, which is needed when computing the CDF
+        of ``-ξ``.
 
     Returns
     -------
@@ -86,8 +106,8 @@ def _fit_pmf_to_cdf_1D(
         If the support is missing, empty, or a two-sided infinite lattice.
     """
     support = _require_discrete_support(distribution, "pmf->cdf")
-
     pmf_func = resolve(distribution, CharacteristicName.PMF)
+    side: Literal["left", "right"] = "right" if right_closed else "left"
 
     if (
         isinstance(support, IntegerLatticeDiscreteSupport)
@@ -99,9 +119,12 @@ def _fit_pmf_to_cdf_1D(
 
         def _cdf_tail(x: NumericArray, **options: Any) -> NumericArray:
             x_arr = np.atleast_1d(np.asarray(x, dtype=float))
-            idx = np.searchsorted(xs, x_arr, side="right")
-            result = np.clip(1.0 - tail_from[idx], 0.0, 1.0)
-            result[x_arr >= max_point] = 1.0
+            idx = np.searchsorted(xs, x_arr, side=side)
+            result: NumericArray = np.clip(np.asarray(1.0 - tail_from[idx], dtype=float), 0.0, 1.0)
+            if right_closed:
+                result[x_arr >= max_point] = 1.0
+            else:
+                result[x_arr > max_point] = 1.0
             return result
 
         return FittedComputationMethod[NumericArray, NumericArray](
@@ -121,12 +144,12 @@ def _fit_pmf_to_cdf_1D(
         def _cdf_head(x: NumericArray, **options: Any) -> NumericArray:
             x_arr = np.atleast_1d(np.asarray(x, dtype=float))
             result = np.empty_like(x_arr)
-            below = x_arr < min_point
+            below = x_arr < min_point if right_closed else x_arr <= min_point
             result[below] = 0.0
             if xs.size == 0:
                 result[~below] = 0.0
                 return result
-            idx = np.searchsorted(xs, x_arr[~below], side="right") - 1
+            idx = np.searchsorted(xs, x_arr[~below], side=side) - 1
             idx = np.clip(idx, 0, cdf_at.size - 1)
             result[~below] = cdf_at[idx]
             return result
@@ -157,7 +180,7 @@ def _fit_pmf_to_cdf_1D(
 
     def _cdf(x: NumericArray, **options: Any) -> NumericArray:
         x_arr = np.atleast_1d(np.asarray(x, dtype=float))
-        idx = np.searchsorted(xs, x_arr, side="right") - 1
+        idx = np.searchsorted(xs, x_arr, side=side) - 1
         result = np.where(idx < 0, 0.0, cdf_vals[np.clip(idx, 0, cdf_vals.size - 1)])
         return result
 
@@ -174,7 +197,19 @@ def _build_pmf_to_cdf_1D() -> FitterDescriptor:
         target=CharacteristicName.CDF,
         sources=[CharacteristicName.PMF],
         fitter=_fit_pmf_to_cdf_1D,
-        characteristic_options=(),
+        characteristic_options=(
+            CharacteristicOption(
+                name="right_closed",
+                type=bool,
+                default=True,
+                description=(
+                    "CDF convention.  True (default): right-closed F(x) = P(ξ ≤ x).  "
+                    "False: right-open F⁻(x) = P(ξ < x).  "
+                    "The right-open form satisfies 1 - F⁻(x) = P(ξ ≥ x), "
+                    "which is needed when computing the CDF of -ξ."
+                ),
+            ),
+        ),
         computation_options=(
             ComputationOption(
                 name="eps",
@@ -195,7 +230,8 @@ def _build_pmf_to_cdf_1D() -> FitterDescriptor:
         constraint_tags=frozenset({"discrete", "univariate"}),
         description=(
             "PMF -> CDF via prefix-sum (finite support) or tail summation "
-            "(left-unbounded or right-unbounded)."
+            "(left-unbounded or right-unbounded).  Supports right-closed and "
+            "right-open CDF conventions via the ``right_closed`` characteristic option."
         ),
     )
 
@@ -350,6 +386,7 @@ def _fit_ppf_to_cdf_1D(
     distribution: Distribution,
     /,
     n_q_grid: int = 4096,
+    right_closed: bool = True,
 ) -> FittedComputationMethod[NumericArray, NumericArray]:
     """
     Fit a ``ppf -> cdf`` conversion for discrete distributions.
@@ -362,6 +399,15 @@ def _fit_ppf_to_cdf_1D(
         *(Computation option)* Grid resolution for probing the PPF at
         fit-time.  Increase if the distribution has many closely-spaced
         support points.
+    right_closed : bool, default True
+        *(Characteristic option)* CDF convention:
+
+        * ``True``: right-closed ``F(x) = P(ξ ≤ x)`` (standard).
+        * ``False``: right-open ``F⁻(x) = P(ξ < x)``.
+
+        The right-open form satisfies
+        ``1 - F⁻(x) = P(ξ ≥ x)``, which is needed when computing the CDF
+        of ``-ξ``.
 
     Returns
     -------
@@ -384,9 +430,17 @@ def _fit_ppf_to_cdf_1D(
     right_idx[:-1] = change_idx[1:] - 1
     right_idx[-1] = n_q_grid - 1
 
-    cdf_table = q_grid[right_idx]
-    cdf_table = np.clip(cdf_table, 0.0, 1.0)
-    np.maximum.accumulate(cdf_table, out=cdf_table)
+    left_idx = change_idx.copy()
+    cdf_table_closed = np.clip(q_grid[right_idx], 0.0, 1.0)
+    cdf_table_open = np.clip(
+        np.concatenate([[0.0], q_grid[left_idx[1:] - 1]]),
+        0.0,
+        1.0,
+    )
+    np.maximum.accumulate(cdf_table_closed, out=cdf_table_closed)
+    np.maximum.accumulate(cdf_table_open, out=cdf_table_open)
+
+    cdf_table = cdf_table_closed if right_closed else cdf_table_open
 
     x_min = float(xs_table[0])
     x_max = float(xs_table[-1])
@@ -395,8 +449,13 @@ def _fit_ppf_to_cdf_1D(
         x_arr = np.atleast_1d(np.asarray(x, dtype=float))
         result = np.empty_like(x_arr)
 
-        left_mask = x_arr < x_min
-        right_mask = x_arr >= x_max
+        if right_closed:
+            left_mask = x_arr < x_min
+            right_mask = x_arr >= x_max
+        else:
+            left_mask = x_arr <= x_min
+            right_mask = x_arr > x_max
+
         interior = ~left_mask & ~right_mask
 
         result[left_mask] = 0.0
@@ -404,7 +463,11 @@ def _fit_ppf_to_cdf_1D(
 
         if np.any(interior):
             xi = x_arr[interior]
-            idx = np.searchsorted(xs_table, xi, side="right") - 1
+            if right_closed:
+                idx = np.searchsorted(xs_table, xi, side="right") - 1
+            else:
+                idx = np.searchsorted(xs_table, xi, side="left") - 1
+                idx = idx + 1
             idx = np.clip(idx, 0, cdf_table.size - 1)
             result[interior] = cdf_table[idx]
 
@@ -423,7 +486,19 @@ def _build_ppf_to_cdf_1D() -> FitterDescriptor:
         target=CharacteristicName.CDF,
         sources=[CharacteristicName.PPF],
         fitter=_fit_ppf_to_cdf_1D,
-        characteristic_options=(),
+        characteristic_options=(
+            CharacteristicOption(
+                name="right_closed",
+                type=bool,
+                default=True,
+                description=(
+                    "CDF convention.  True (default): right-closed F(x) = P(ξ ≤ x).  "
+                    "False: right-open F⁻(x) = P(ξ < x).  "
+                    "The right-open form satisfies 1 - F⁻(x) = P(ξ ≥ x), "
+                    "which is needed when computing the CDF of -ξ."
+                ),
+            ),
+        ),
         computation_options=(
             ComputationOption(
                 name="n_q_grid",
@@ -437,7 +512,11 @@ def _build_ppf_to_cdf_1D() -> FitterDescriptor:
             ),
         ),
         constraint_tags=frozenset({"discrete", "univariate"}),
-        description="PPF -> CDF via grid probing and step-function table construction.",
+        description=(
+            "PPF -> CDF via grid probing and step-function table construction.  "
+            "Supports right-closed and right-open CDF conventions via the "
+            "``right_closed`` characteristic option."
+        ),
     )
 
 
