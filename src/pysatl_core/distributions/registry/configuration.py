@@ -26,7 +26,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.computations.registry import FitterRegistry, fitter_registry
+from pysatl_core.distributions.computations.registry import fitter_registry
 from pysatl_core.distributions.registry.constraint import (
     GraphPrimitiveConstraint,
     NonNullConstraint,
@@ -48,7 +48,6 @@ _DISCRETE_1D_TAGS: frozenset[str] = frozenset({"discrete", "univariate"})
 
 def _add_edges(
     reg: CharacteristicRegistry,
-    fitter_reg: FitterRegistry,
     pairs: Iterable[tuple[GenericCharacteristicName, GenericCharacteristicName]],
     *,
     tags: frozenset[str],
@@ -62,8 +61,6 @@ def _add_edges(
     ----------
     reg : CharacteristicRegistry
         Target characteristic graph.
-    fitter_reg : FitterRegistry
-        Index of fitter descriptors to query.
     pairs : Iterable[tuple[str, str]]
         ``(source, target)`` pairs to register.
     tags : frozenset[str]
@@ -76,6 +73,7 @@ def _add_edges(
     RuntimeError
         If no descriptor matches one of the requested ``(source, target, tags)``.
     """
+    fitter_reg = fitter_registry()
     for src, tgt in pairs:
         descriptor = fitter_reg.find(tgt, [src], required_tags=tags)
         if descriptor is None:
@@ -92,8 +90,6 @@ def _add_edges(
 
 def _configure(reg: CharacteristicRegistry) -> None:
     """Default PySATL configuration for characteristic registry."""
-    fitter_reg = fitter_registry()
-
     dim1_constraint = NumericConstraint(allowed=frozenset({1}))
     kind_continuous = SetConstraint(allowed=frozenset({Kind.CONTINUOUS}))
     kind_discrete = SetConstraint(allowed=frozenset({Kind.DISCRETE}))
@@ -144,7 +140,6 @@ def _configure(reg: CharacteristicRegistry) -> None:
 
     _add_edges(
         reg,
-        fitter_reg,
         pairs=(
             (CharacteristicName.PDF, CharacteristicName.CDF),
             (CharacteristicName.CDF, CharacteristicName.PDF),
@@ -157,7 +152,6 @@ def _configure(reg: CharacteristicRegistry) -> None:
 
     _add_edges(
         reg,
-        fitter_reg,
         pairs=(
             (CharacteristicName.PMF, CharacteristicName.CDF),
             (CharacteristicName.CDF, CharacteristicName.PMF),

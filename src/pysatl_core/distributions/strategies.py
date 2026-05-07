@@ -727,9 +727,9 @@ class DefaultComputationStrategy:
 
         self._push_guard(distr, state)
         self._char_options_stack.append(dict(effective_char_options))
+        injected_keys: list[tuple[int, GenericCharacteristicName]] = []
         try:
             last_fitted: FittedComputationMethod[Any, Any] | None = None
-            injected_keys: list[tuple[int, GenericCharacteristicName]] = []
             for step_idx, edge in enumerate(cached_plan.edges):
                 method = edge.method
 
@@ -783,14 +783,14 @@ class DefaultComputationStrategy:
                 )
                 injected_keys.append(intermediate_key)
 
-            # Remove the temporary loop plans injected for intermediate targets.
-            for key in injected_keys:
-                self._path_cache.pop(key, None)
-
             if last_fitted is None:
                 raise RuntimeError(f"Empty path when resolving '{state}'.")
             return last_fitted
         finally:
+            # Remove the temporary loop plans injected for intermediate targets.
+            # Placed in finally to ensure cleanup even if fitting raises.
+            for key in injected_keys:
+                self._path_cache.pop(key, None)
             self._char_options_stack.pop()
             self._pop_guard(distr, state)
 

@@ -10,8 +10,10 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from typing import Any
 
+import pytest
+
 from pysatl_core.distributions.computations.descriptors import FitterDescriptor
-from pysatl_core.distributions.computations.registry import FitterRegistry
+from pysatl_core.distributions.computations.registry import FitterRegistry, reset_fitter_registry
 from pysatl_core.types import CharacteristicName
 
 
@@ -36,6 +38,11 @@ def _make_desc(
 
 class TestFitterRegistry:
     """Tests for the FitterRegistry class."""
+
+    @pytest.fixture(autouse=True)
+    def reset_registry(self) -> None:
+        """Reset the FitterRegistry singleton before each test."""
+        reset_fitter_registry()
 
     def test_register_and_find(self) -> None:
         reg = FitterRegistry()
@@ -139,6 +146,16 @@ class TestFitterRegistry:
         reg.register(_make_desc("pdf_to_cdf"))
         assert "pdf_to_cdf" in reg
         assert "nonexistent" not in reg
+
+    def test_singleton_returns_same_instance(self) -> None:
+        reg1 = FitterRegistry()
+        reg2 = FitterRegistry()
+        assert reg1 is reg2
+
+    def test_fitter_registry_function_returns_same_instance(self) -> None:
+        from pysatl_core.distributions.computations.registry import fitter_registry
+
+        assert FitterRegistry() is fitter_registry()
 
     def test_different_source_target_pairs_are_independent(self) -> None:
         reg = FitterRegistry()
