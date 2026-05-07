@@ -87,6 +87,12 @@ sphinx-copybutton = "^0.5"
 myst-nb = "^1.3.0"
 linkify-it-py = "^2.0.3"
 
+[tool.cibuildwheel]
+archs = [ "auto64" ]
+build = "cp312-* cp313-*"
+skip = "*-musllinux_*"
+test-command = 'python -c "from pysatl_core.sampling.unuran.bindings import _unuran_cffi; assert _unuran_cffi is not None; print(_unuran_cffi.lib.unur_get_errno())"'
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
