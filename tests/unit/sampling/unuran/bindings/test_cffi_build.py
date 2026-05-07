@@ -5,8 +5,10 @@ Tests pure-Python helper functions in the CFFI build script:
   - _configure_logging: logging level and handler setup
   - _get_project_root: ascending to pyproject.toml
   - _extract_library_name: stripping lib prefix and suffixes
+  - _collect_unuran_sources: reading the vendored Meson source list
+  - _write_config_header: generating the local UNU.RAN config header
   - find_unuran: locating library and header in a vendor directory
-  - build_unuran: skipping/invoking the build script
+  - build_unuran: validating the vendored source tree
 """
 
 from __future__ import annotations
@@ -16,16 +18,18 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import logging
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from pysatl_core.sampling.unuran.bindings._cffi_build import (
+    UNURAN_CONFIG_DEFINES,
+    _collect_unuran_sources,
     _configure_logging,
     _extract_library_name,
     _get_project_root,
+    _write_config_header,
     build_unuran,
     find_unuran,
 )
@@ -215,46 +219,85 @@ class TestFindUnuran:
         assert "include_path" in result
 
 
+class TestCollectUnuranSources:
+    """Tests for _collect_unuran_sources function."""
+
+    def _create_vendor_tree(self, base: Path) -> Path:
+        """Create a minimal vendored tree with a Meson source manifest."""
+        source_dir = base / "unuran" / "src"
+        tests_dir = source_dir / "tests"
+        source_dir.mkdir(parents=True)
+        tests_dir.mkdir()
+
+        (source_dir / "unuran.h").write_text("/* header */")
+        (source_dir / "core.c").write_text("/* source */")
+        (tests_dir / "timing.c").write_text("/* test source */")
+        (base / "meson.build").write_text(
+            """
+unuran_sources = files(
+  'unuran/src/core.c',
+  'unuran/src/tests/timing.c',
+)
+
+unuran_include_dirs = include_directories(
+  'unuran/src',
+  'unuran/src/tests',
+)
+""",
+            encoding="utf-8",
+        )
+        return base
+
+    def test_collects_sources_and_include_directories(self, tmp_path: Path) -> None:
+        """Source files and include directories are collected from meson.build."""
+        vendor_dir = self._create_vendor_tree(tmp_path)
+
+        sources, include_dirs = _collect_unuran_sources(vendor_dir)
+
+        assert sources == [(vendor_dir / "unuran" / "src" / "core.c").resolve()]
+        assert include_dirs == [
+            (vendor_dir / "unuran" / "src").resolve(),
+            (vendor_dir / "unuran" / "src" / "tests").resolve(),
+        ]
+
+    def test_raises_when_meson_file_missing(self, tmp_path: Path) -> None:
+        """A missing Meson manifest fails fast."""
+        with pytest.raises(RuntimeError, match="Meson file"):
+            _collect_unuran_sources(tmp_path)
+
+    def test_raises_when_source_file_missing(self, tmp_path: Path) -> None:
+        """A missing source file produces a useful build error."""
+        vendor_dir = self._create_vendor_tree(tmp_path)
+        (vendor_dir / "unuran" / "src" / "core.c").unlink()
+
+        with pytest.raises(RuntimeError, match="Missing UNU.RAN source files"):
+            _collect_unuran_sources(vendor_dir)
+
+
+class TestWriteConfigHeader:
+    """Tests for _write_config_header function."""
+
+    def test_writes_config_header(self, tmp_path: Path) -> None:
+        """config.h is written with expected UNU.RAN macros."""
+        config_header = _write_config_header(tmp_path)
+
+        content = config_header.read_text(encoding="utf-8")
+
+        assert config_header == tmp_path / "config.h"
+        assert "#define HAVE_FLOAT_H 1" in content
+        assert f'#define VERSION "{UNURAN_CONFIG_DEFINES["VERSION"]}"' in content
+
+
 class TestBuildUnuran:
     """Tests for build_unuran function."""
 
-    def test_skips_build_when_library_and_header_already_present(self, tmp_path: Path) -> None:
-        """build_unuran does nothing when both library and header already exist."""
-        lib_dir = tmp_path / "out"
-        lib_dir.mkdir()
-        (lib_dir / "libunuran.a").write_bytes(b"")
-        header_dir = tmp_path / "unuran" / "src"
-        header_dir.mkdir(parents=True)
-        (header_dir / "unuran.h").write_bytes(b"")
+    def test_validates_complete_source_tree(self, tmp_path: Path) -> None:
+        """build_unuran accepts a complete vendored source tree."""
+        vendor_dir = TestCollectUnuranSources()._create_vendor_tree(tmp_path)
 
-        with patch("subprocess.run") as mock_run:
-            build_unuran(tmp_path)
-            mock_run.assert_not_called()
+        build_unuran(vendor_dir)
 
-    def test_raises_when_build_script_missing(self, tmp_path: Path) -> None:
-        """build_unuran raises RuntimeError when build_unuran.py is absent."""
-        # No files at all → find_unuran returns None for both → triggers build attempt
-        with pytest.raises(RuntimeError, match="Build script"):
-            build_unuran(tmp_path)
-
-    def test_invokes_build_script_when_library_missing(self, tmp_path: Path) -> None:
-        """build_unuran calls the build script when the library file is not yet built."""
-        build_script = tmp_path / "build_unuran.py"
-        build_script.write_text("# stub")
-
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            build_unuran(tmp_path)
-
-        mock_run.assert_called_once()
-
-    def test_propagates_subprocess_error_when_build_fails(self, tmp_path: Path) -> None:
-        """A non-zero exit code from the build script propagates as CalledProcessError."""
-        build_script = tmp_path / "build_unuran.py"
-        build_script.write_text("# stub")
-
-        with (
-            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "cmd")),
-            pytest.raises(subprocess.CalledProcessError),
-        ):
+    def test_raises_for_incomplete_source_tree(self, tmp_path: Path) -> None:
+        """build_unuran raises RuntimeError for incomplete vendored sources."""
+        with pytest.raises(RuntimeError, match="Meson file"):
             build_unuran(tmp_path)

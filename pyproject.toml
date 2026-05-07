@@ -3,8 +3,6 @@ build-backend = "poetry.core.masonry.api"
 
 requires = [
   "cffi>=1.16",
-  "meson>=0.64",
-  "ninja>=1.10",
   "poetry-core>=1.9",
   "setuptools>=69",
 ]
@@ -40,8 +38,18 @@ classifiers = [
 ]
 packages = [ { include = "pysatl_core", from = "src" } ]
 include = [
+  { path = "src/pysatl_core/**/*.pyi", format = "wheel" },
+  { path = "src/pysatl_core/**/*.pyi", format = "sdist" },
   { path = "src/pysatl_core/py.typed", format = "wheel" },
   { path = "src/pysatl_core/py.typed", format = "sdist" },
+  { path = "src/pysatl_core/sampling/unuran/bindings/_unuran_cffi*.pyd", format = "wheel" },
+  { path = "src/pysatl_core/sampling/unuran/bindings/_unuran_cffi*.so", format = "wheel" },
+  { path = "src/pysatl_core/sampling/unuran/bindings/cffi_unuran.h", format = "wheel" },
+  { path = "src/pysatl_core/sampling/unuran/bindings/cffi_unuran.h", format = "sdist" },
+  { path = "subprojects/unuran-pysatl/README.md", format = "sdist" },
+  { path = "subprojects/unuran-pysatl/license.txt", format = "sdist" },
+  { path = "subprojects/unuran-pysatl/meson.build", format = "sdist" },
+  { path = "subprojects/unuran-pysatl/unuran/src/**", format = "sdist" },
 ]
 homepage = "https://github.com/PySATL/pysatl-core"
 repository = "https://github.com/PySATL/pysatl-core"
@@ -54,7 +62,7 @@ script = "src/pysatl_core/sampling/unuran/bindings/_cffi_build.py"
 python = ">=3.12"
 numpy = "^2.0.0"
 scipy = ">=1.13"
-cffi = "^1.16.0"
+cffi = ">=1.16.0"
 mypy_extensions = ">=1.0.0"
 
 [tool.poetry.group.dev.dependencies]
