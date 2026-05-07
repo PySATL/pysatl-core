@@ -1,7 +1,7 @@
 # PySATL Core
 
-[status-shield]: https://img.shields.io/github/actions/workflow/status/PySATL/pysatl-core/ci.yml?branch=main&event=push&style=for-the-badge&label=CI
-[status-url]: https://github.com/PySATL/pysatl-core/actions/workflows/ci.yml
+[status-shield]: https://github.com/PySATL/pysatl-core/actions/workflows/ci.yml/badge.svg?branch=main&event=push
+[status-url]: https://github.com/PySATL/pysatl-core/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush
 [license-shield]: https://img.shields.io/github/license/PySATL/pysatl-core.svg?style=for-the-badge&color=blue
 [license-url]: LICENSE
 
@@ -14,8 +14,8 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 
 > **Project status**  
 > PySATL Core is currently in **early alpha**.  
-> It is **not published** to package managers such as `pip` yet.  
-> To experiment with the library, clone the repository and work with it locally.
+> It is not published to PyPI yet. After the first alpha release, the package
+> will be installable with `pip install pysatl-core`.
 
 ---
 
@@ -42,33 +42,41 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 - Python **3.12+** (the project relies on **PEP 695** syntax)
 - NumPy **2.x**
 - SciPy **1.13+**
-- A C toolchain for compiling the UNURAN bindings:
+- A C toolchain when building from source or from an sdist:
   - **Linux/macOS:** GCC (or Clang) plus standard build utilities.
   - **Windows:** Microsoft Visual C++ Build Tools (MSVC) from Visual Studio or the standalone Build Tools installer.
 - Poetry (recommended for development)
 
 ---
 
-## Installation (from source)
+## Installation
+
+After the first PyPI release:
+
+```bash
+pip install pysatl-core
+```
+
+Until then, install from source.
 
 Clone the repository:
 
 ```bash
 git clone https://github.com/PySATL/pysatl-core.git
 cd pysatl-core
-git submodule update --init --remote --recursive
+git submodule update --init --recursive
 ```
 
-### Using Poetry (recommended)
+### Development install
 
 ```bash
-poetry install --with docs
+poetry install --with dev,docs
 ```
 
-### Using pip (editable install)
+### Editable runtime install
 
 ```bash
-pip install -e ".[docs]"
+pip install -e .
 ```
 
 ---
@@ -151,6 +159,16 @@ poetry install --with dev
 poetry run pytest
 poetry run pre-commit run --all-files
 ```
+
+### Package sanity check
+
+```bash
+poetry run python -m build
+poetry run twine check dist/*
+```
+
+These commands build the local distribution artifacts and validate their metadata.
+They do not publish anything.
 
 ---
 
