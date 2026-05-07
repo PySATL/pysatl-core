@@ -13,6 +13,7 @@ version = "0.0.1a0"
 description = "Computation core for PySATL"
 readme = "README.md"
 license = "MIT"
+documentation = "https://pysatl.github.io/pysatl-core/"
 authors = [
   "Leonid Elkin <yolkinleonwork@gmail.com>",
   "Mikhail Mikhailov <desiment@yandex.ru>",
@@ -30,10 +31,17 @@ keywords = [
   "symbolic-computation",
 ]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Mathematics",
   "Typing :: Typed",
 ]
 packages = [ { include = "pysatl_core", from = "src" } ]
@@ -53,7 +61,9 @@ include = [
 ]
 homepage = "https://github.com/PySATL/pysatl-core"
 repository = "https://github.com/PySATL/pysatl-core"
+urls.Changelog = "https://pysatl.github.io/pysatl-core/changelog.html"
 urls.Issues = "https://github.com/PySATL/pysatl-core/issues"
+urls.Security = "https://github.com/PySATL/pysatl-core/security/policy"
 
 [tool.poetry.build]
 script = "src/pysatl_core/sampling/unuran/bindings/_cffi_build.py"

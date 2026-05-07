@@ -1,13 +1,19 @@
 import os
 import sys
+import tomllib
 from datetime import datetime
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath("../../src"))
+
+ROOT = Path(__file__).resolve().parents[2]
+with (ROOT / "pyproject.toml").open("rb") as pyproject_file:
+    PYPROJECT = tomllib.load(pyproject_file)
 
 project = "PySATL Core"
 copyright = f"{datetime.now().year}, Leonid Elkin, Mikhail Mikhailov"
 author = "Leonid Elkin, Mikhail Mikhailov"
-release = "0.0.1a0"
+release = PYPROJECT["tool"]["poetry"]["version"]
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -120,7 +126,7 @@ source_suffix = {
 }
 
 suppress_warnings = [
-    # 'autodoc.duplicate_object',
+    "autodoc.duplicate_object",
     "ref.misc",
 ]
 
