@@ -38,7 +38,7 @@ repos:
         args: [ --fix=lf ]
 
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: 2.3.1
+    rev: v2.21.2
     hooks:
       - id: pyproject-fmt
         files: ^pyproject\.toml$
