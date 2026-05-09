@@ -67,6 +67,6 @@ repos:
           # Альтернатива сделать repo: local, но это менее чисто с точки зрения CI
           - numpy>=2
           - scipy>=1.13
-          - pytest>=8
+          - pytest>=9.0.3
           - scipy-stubs>=1.13
           - types-setuptools>=75
