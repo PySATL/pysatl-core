@@ -69,4 +69,4 @@ repos:
           - scipy>=1.13
           - pytest>=8
           - scipy-stubs>=1.13
-          - types-setuptools>=75
+          - types-setuptools>=82.0.0.20260508
