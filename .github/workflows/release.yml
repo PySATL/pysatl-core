@@ -112,6 +112,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: Download distributions
         uses: actions/download-artifact@v7
         with:
@@ -120,7 +125,7 @@ jobs:
           merge-multiple: true
 
       - name: Install validation tooling
-        run: python -m pip install --upgrade pip twine
+        run: python -m pip install --upgrade pip "twine>=6.2,<7" "packaging>=24.2"
 
       - name: Check distribution metadata
         run: python -m twine check dist/*
