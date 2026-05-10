@@ -22,7 +22,7 @@ import numpy as np
 
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
-from pysatl_core.families.parametrizations import Parametrization
+from pysatl_core.families.parametrizations import Parametrization, ParametrizationConstraint
 from pysatl_core.types import (
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
     ComputationFunc,
@@ -546,21 +546,25 @@ class PartialParametricFamily(ParametricFamily):
                 "Use `.distribution()` directly."
             )
 
-        # Generate lightweight parametrization with only free fields
-        self._free_param_class = self._create_free_param_class()
-        # Assign __param_name__ and __family__ so that instances have .name and .family
-        self._free_param_class.__param_name__ = self._fixed_in_param
-        self._free_param_class.__family__ = self
-
         self._free_parameter_names = tuple(
             name
             for name in getattr(self._param_class, "__dataclass_fields__", {})
             if name not in self._fixed_params
         )
 
+        # Generate lightweight parametrization with only free fields
+        self._free_param_class = self._create_free_param_class()
+        # Assign __param_name__ and __family__ so that instances have .name and .family
+        self._free_param_class.__param_name__ = self._fixed_in_param
+        self._free_param_class.__family__ = self
+
         def _view_distr_type(params: Parametrization) -> DistributionType:
             canonical = base_family.to_base(params)
             return base_family._distr_type(canonical)
+
+        def _view_support(params: Parametrization) -> Support | None:
+            full_params = self._to_full_parametrization(params)
+            return base_family.support_resolver(full_params)
 
         view_chars = self._build_view_characteristics(base_family)
 
@@ -569,12 +573,20 @@ class PartialParametricFamily(ParametricFamily):
             distr_type=_view_distr_type,
             distr_parametrizations=[self._fixed_in_param],
             distr_characteristics=view_chars,
-            support_by_parametrization=base_family._support_resolver,
+            support_by_parametrization=_view_support,
             base_score=base_family._base_score,
         )
 
         # Register the parametrization (needed for parent methods)
         self.register_parametrization(self._fixed_in_param, self._free_param_class)
+
+    def _to_full_parametrization(self, params: Parametrization) -> Parametrization:
+        """Reconstruct the original parametrization by injecting fixed parameters."""
+        combined = {
+            **self._fixed_params,
+            **{name: getattr(params, name) for name in self._free_parameter_names},
+        }
+        return self._param_class(**combined)
 
     def _create_free_param_class(self) -> type[Parametrization]:
         """Create a parametrization class containing only the free (unfixed) parameters.
@@ -597,10 +609,10 @@ class PartialParametricFamily(ParametricFamily):
         type[Parametrization]
             A lightweight parametrization class with only the unfixed fields.
         """
-        fixed_params = self._fixed_params
         original_class = self._param_class
         all_fields = getattr(original_class, "__dataclass_fields__", {})
-        free_field_names = [name for name in all_fields if name not in fixed_params]
+        free_field_names = list(self._free_parameter_names)
+        partial_family = self
 
         def __init__(self: Parametrization, **kwargs: Any) -> None:
             unexpected = set(kwargs) - set(free_field_names)
@@ -620,20 +632,12 @@ class PartialParametricFamily(ParametricFamily):
 
         def transform_to_base(self: Parametrization) -> Parametrization:
             """Substitute fixed values and delegate to the original parametrization."""
-            combined = {
-                **fixed_params,
-                **{f: getattr(self, f) for f in free_field_names},
-            }
-            original_instance = original_class(**combined)
-            return original_instance.transform_to_base_parametrization()
+            full_params = partial_family._to_full_parametrization(self)
+            return full_params.transform_to_base_parametrization()
 
         def validate(self: Parametrization) -> None:
             """Validate by combining fixed and free parameters, then delegating."""
-            combined = {
-                **fixed_params,
-                **{f: getattr(self, f) for f in free_field_names},
-            }
-            original_class(**combined).validate()
+            partial_family._to_full_parametrization(self).validate()
 
         def gradient_transform(self: Parametrization, base_grad: NumericArray) -> NumericArray:
             """Map a gradient from the base parametrization to free-parameter space.
@@ -642,15 +646,27 @@ class PartialParametricFamily(ParametricFamily):
             parametrization.  Components that correspond to fixed parameters are
             then discarded, keeping only the directions of the free parameters.
             """
-            combined = {
-                **fixed_params,
-                **{f: getattr(self, f) for f in free_field_names},
-            }
-            full_instance = original_class(**combined)
+            full_instance = partial_family._to_full_parametrization(self)
             full_grad = full_instance.gradient_transform(base_grad)
             all_field_names = list(all_fields.keys())
             free_indices = [i for i, name in enumerate(all_field_names) if name in free_field_names]
             return full_grad[..., free_indices]
+
+        def adapt_constraint(
+            original_constraint: ParametrizationConstraint,
+        ) -> ParametrizationConstraint:
+            def check(params: Parametrization) -> bool:
+                return original_constraint.check(partial_family._to_full_parametrization(params))
+
+            return ParametrizationConstraint(
+                description=original_constraint.description,
+                check=check,
+            )
+
+        adapted_constraints = [
+            adapt_constraint(constraint)
+            for constraint in getattr(original_class, "_constraints", [])
+        ]
 
         new_class = type(
             f"{original_class.__name__}Free",
@@ -662,6 +678,7 @@ class PartialParametricFamily(ParametricFamily):
                 "gradient_transform": gradient_transform,
                 "__dataclass_fields__": {name: all_fields[name] for name in free_field_names},
                 "__annotations__": {name: all_fields[name].type for name in free_field_names},
+                "_constraints": adapted_constraints,
             },
         )
         return new_class
@@ -728,7 +745,7 @@ class PartialParametricFamily(ParametricFamily):
         The view's own base is the lightweight class, but the true base is the
         original family's base. We always transform through the full parametrization.
         """
-        return parameters.transform_to_base_parametrization()
+        return self._base_family.to_base(self._to_full_parametrization(parameters))
 
     def _build_view_characteristics(self, base_family: ParametricFamily) -> dict[str, Any]:
         view_chars = {}
@@ -748,11 +765,7 @@ class PartialParametricFamily(ParametricFamily):
             provider: ParametricFamilyCharacteristic[Any, Any],
         ) -> ParametricFamilyCharacteristic[Any, Any]:
             def wrapped(params: Parametrization, *args: Any, **kwargs: Any) -> Any:
-                combined = {
-                    **self._fixed_params,
-                    **{f: getattr(params, f) for f in self.free_parameter_names},
-                }
-                full_params = self._param_class(**combined)
+                full_params = self._to_full_parametrization(params)
                 bound = ParametricFamily._bind_parametrization(provider, full_params)
                 return bound(*args, **kwargs)
 
