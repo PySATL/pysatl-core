@@ -4,6 +4,7 @@ multi-ecosystem-groups:
   dependencies:
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 1
     labels:
       - dependencies
 
@@ -12,14 +13,12 @@ updates:
     directory: "/"
     patterns: [ "*" ]
     multi-ecosystem-group: "dependencies"
-    open-pull-requests-limit: 1
     rebase-strategy: "auto"
 
   - package-ecosystem: "pip"
     directory: "/"
     patterns: [ "*" ]
     multi-ecosystem-group: "dependencies"
-    open-pull-requests-limit: 1
     rebase-strategy: "auto"
     versioning-strategy: "increase-if-necessary"
 
@@ -27,5 +26,4 @@ updates:
     directory: "/"
     patterns: [ "*" ]
     multi-ecosystem-group: "dependencies"
-    open-pull-requests-limit: 1
     rebase-strategy: "auto"
