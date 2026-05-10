@@ -3,20 +3,20 @@ Installation
 
 .. note::
 
-   PySATL Core is currently in an early alpha stage and is not published to
-   PyPI yet. After the first alpha release, the package will be installable with
-   ``pip install pysatl-core``.
+   PySATL Core is currently in an early alpha stage. The public API may change
+   between alpha releases.
 
 From PyPI
 ---------
 
-After the first release, install the package with:
+Install the package with:
 
 .. code-block:: bash
 
    pip install pysatl-core
 
-Until then, use a source checkout.
+Linux wheels are not published yet. On Linux, ``pip`` builds the package from
+the source distribution and requires a working C toolchain.
 
 Clone the repository
 --------------------
