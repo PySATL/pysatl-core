@@ -84,9 +84,9 @@ class TestMethodCharacteristicRequirementsMapping:
         """Every non-AUTO method has an entry in the requirements map."""
         concrete_methods = [m for m in UnuranMethod if m != UnuranMethod.AUTO]
         for method in concrete_methods:
-            assert (
-                method in METHOD_CHARACTERISTIC_REQUIREMENTS
-            ), f"Method {method} is missing from METHOD_CHARACTERISTIC_REQUIREMENTS"
+            assert method in METHOD_CHARACTERISTIC_REQUIREMENTS, (
+                f"Method {method} is missing from METHOD_CHARACTERISTIC_REQUIREMENTS"
+            )
 
     def test_pinv_requires_pdf(self) -> None:
         """PINV requires PDF as mandatory characteristic."""

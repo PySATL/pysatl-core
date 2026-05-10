@@ -631,8 +631,7 @@ class DefaultComputationStrategy:
             return plan
 
         raise RuntimeError(
-            "No conversion path from any characteristic in "
-            f"analytical_computations to '{state}'."
+            f"No conversion path from any characteristic in analytical_computations to '{state}'."
         )
 
     # ------------------------------------------------------------------ #

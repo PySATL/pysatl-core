@@ -7,7 +7,7 @@ UNU.RAN sampler:
 
 - ``UnuranSamplerInitializer`` — creates the UNU.RAN distribution object,
   registers distribution callbacks (PDF, CDF, PMF, …) and initialises
-  the generator for a pre-selected sampling method (PINV, NINV, DGT, …).
+  the generator for a preselected sampling method (PINV, NINV, DGT, …).
 - ``ensure_default_urng`` — registers a NumPy-backed uniform RNG as the
   UNU.RAN default URNG so that seeding and reproducibility work through
   the standard NumPy interface.

@@ -208,7 +208,7 @@ class Interval1D:
         if np.ndim(arr) == 0:
             return bool(result)
 
-        return cast(BoolArray, result)
+        return result
 
     def __contains__(self, x: object) -> bool:
         """Check if a single point is in the interval."""

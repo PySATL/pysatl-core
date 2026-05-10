@@ -155,9 +155,9 @@ class TestFitterDescriptor:
         from pysatl_core.distributions.computations.registry import fitter_registry
 
         for desc in fitter_registry().all_descriptors():
-            assert isinstance(
-                desc, FitterDescriptor
-            ), f"Descriptor '{desc.name}' should be a FitterDescriptor"
+            assert isinstance(desc, FitterDescriptor), (
+                f"Descriptor '{desc.name}' should be a FitterDescriptor"
+            )
 
     def test_builtin_descriptors_have_correct_option_kinds(self) -> None:
         """Verify that built-in descriptors use the correct option types."""

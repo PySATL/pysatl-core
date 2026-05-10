@@ -11,7 +11,7 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from pysatl_core.distributions.distribution import _KEEP, Distribution
 from pysatl_core.families.registry import ParametricFamilyRegister
@@ -192,4 +192,4 @@ class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
             The exact array shape depends on the distribution and
             the sampling strategy.
         """
-        return cast(NumericArray, self.sampling_strategy.sample(n, distr=self, **options))
+        return self.sampling_strategy.sample(n, distr=self, **options)

@@ -51,7 +51,7 @@ _COMPONENT_ROLE_PREFIX = "component_"
 
 def _component_role(index: int) -> ParentRole:
     """Build deterministic parent role for a mixture component."""
-    return cast(ParentRole, f"{_COMPONENT_ROLE_PREFIX}{index}")
+    return f"{_COMPONENT_ROLE_PREFIX}{index}"
 
 
 class FiniteMixtureDistribution(DerivedDistribution):
@@ -333,8 +333,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
 
         if self._discrete_points is None:
             raise RuntimeError(
-                "Discrete finite mixture requires ExplicitTableDiscreteSupport "
-                "for every component."
+                "Discrete finite mixture requires ExplicitTableDiscreteSupport for every component."
             )
 
         methods = [
