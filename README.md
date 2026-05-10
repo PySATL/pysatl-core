@@ -2,7 +2,7 @@
 
 [status-shield]: https://github.com/PySATL/pysatl-core/actions/workflows/ci.yml/badge.svg?branch=main&event=push
 [status-url]: https://github.com/PySATL/pysatl-core/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush
-[license-shield]: https://img.shields.io/github/license/PySATL/pysatl-core.svg?style=for-the-badge&color=blue
+[license-shield]: https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge
 [license-url]: LICENSE
 
 [![CI][status-shield]][status-url]
