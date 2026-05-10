@@ -310,7 +310,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             return FittedComputationMethod(
                 target="C",
                 sources=("A", "B"),
-                func=cast(Callable[[KwArg(Any)], float], c_func),
+                func=c_func,
             )
 
         hyper_method = FitterMethod(
@@ -323,8 +323,12 @@ class TestCharacteristicRegistry(DistributionTestBase):
         )
         reg.add_computation(hyper_method, label="ab_to_c")
 
-        a_func = cast(Callable[[KwArg(Any)], float], lambda **_kwargs: 2.0)
-        b_func = cast(Callable[[KwArg(Any)], float], lambda **_kwargs: 3.0)
+        def a_func(**_kwargs):
+            return 2.0
+
+        def b_func(**_kwargs):
+            return 3.0
+
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations={
@@ -390,7 +394,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             return FittedComputationMethod(
                 target="mean",
                 sources=("pdf",),
-                func=cast(Callable[[KwArg(Any)], float], lambda **_opts: 2.0),
+                func=lambda **_opts: 2.0,
             )
 
         def fit_pdf_to_second_moment(
@@ -399,7 +403,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             return FittedComputationMethod(
                 target="second_moment",
                 sources=("pdf",),
-                func=cast(Callable[[KwArg(Any)], float], lambda **_opts: 5.0),
+                func=lambda **_opts: 5.0,
             )
 
         def fit_mean_to_mean_sq(
@@ -409,10 +413,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             return FittedComputationMethod(
                 target="mean_sq",
                 sources=("mean",),
-                func=cast(
-                    Callable[[KwArg(Any)], float],
-                    lambda **_opts: float(mean_method() ** 2),
-                ),
+                func=lambda **_opts: float(mean_method() ** 2),
             )
 
         def fit_second_moment_and_mean_sq_to_var(
@@ -423,10 +424,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
             return FittedComputationMethod(
                 target="var",
                 sources=("second_moment", "mean_sq"),
-                func=cast(
-                    Callable[[KwArg(Any)], float],
-                    lambda **_opts: float(second_moment_method() - mean_sq_method()),
-                ),
+                func=lambda **_opts: float(second_moment_method() - mean_sq_method()),
             )
 
         reg.add_computation(

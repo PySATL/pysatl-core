@@ -602,7 +602,9 @@ class TestNonRegistryAndErrors:
         reg = CharacteristicRegistry()
         reg.add_characteristic("pdf", is_definitive=True)
 
-        custom_func = cast(Callable[[KwArg(Any)], float], lambda **_o: 42.0)
+        def custom_func(**_o):
+            return 42.0
+
         pdf_func = cast(Callable[[float, KwArg(Any)], float], lambda _x, **_o: 1.0)
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
@@ -683,7 +685,9 @@ class TestNonRegistryAndErrors:
         # Distribution provides only an unrelated, *non-registry* analytical
         # characteristic.  ``cdf`` is in the registry but has no source loop
         # to start from.
-        custom_func = cast(Callable[[KwArg(Any)], float], lambda **_o: 1.0)
+        def custom_func(**_o):
+            return 1.0
+
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations={
@@ -722,7 +726,7 @@ class TestHyperedgePlan:
                     lambda *_a, **_k: FittedComputationMethod(
                         target="B",
                         sources=("A",),
-                        func=cast(Callable[[KwArg(Any)], float], lambda **_o: 0.0),
+                        func=lambda **_o: 0.0,
                     ),
                 ),
             )
@@ -736,7 +740,7 @@ class TestHyperedgePlan:
                     lambda *_a, **_k: FittedComputationMethod(
                         target="A",
                         sources=("B",),
-                        func=cast(Callable[[KwArg(Any)], float], lambda **_o: 0.0),
+                        func=lambda **_o: 0.0,
                     ),
                 ),
             )
@@ -750,15 +754,19 @@ class TestHyperedgePlan:
                     lambda *_a, **_k: FittedComputationMethod(
                         target="C",
                         sources=("A", "B"),
-                        func=cast(Callable[[KwArg(Any)], float], lambda **_o: 5.0),
+                        func=lambda **_o: 5.0,
                     ),
                 ),
             ),
             label="ab_to_c",
         )
 
-        a_func = cast(Callable[[KwArg(Any)], float], lambda **_o: 1.0)
-        b_func = cast(Callable[[KwArg(Any)], float], lambda **_o: 2.0)
+        def a_func(**_o):
+            return 1.0
+
+        def b_func(**_o):
+            return 2.0
+
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
             analytical_computations={

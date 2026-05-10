@@ -291,8 +291,8 @@ class BinaryDistribution(DerivedDistribution, ABC):
         np.add.at(accumulated_masses, inverse, pair_weights)
 
         positive_mass_mask = accumulated_masses > 0.0
-        points = cast(NumericArray, unique_points[positive_mass_mask])
-        masses = cast(NumericArray, accumulated_masses[positive_mass_mask])
+        points = unique_points[positive_mass_mask]
+        masses = accumulated_masses[positive_mass_mask]
         total = float(np.sum(masses))
         if total <= 0.0:
             raise RuntimeError("Binary discrete transformation produced non-positive total mass.")

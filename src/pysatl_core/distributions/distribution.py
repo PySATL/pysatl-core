@@ -407,4 +407,4 @@ class Distribution(ABC):
             The exact array shape depends on the distribution and
             the sampling strategy.
         """
-        return cast(NumericArray, self.sampling_strategy.sample(n, distr=self, **options))
+        return self.sampling_strategy.sample(n, distr=self, **options)

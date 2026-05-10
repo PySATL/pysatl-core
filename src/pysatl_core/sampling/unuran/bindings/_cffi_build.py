@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from cffi import FFI  # type: ignore[import-untyped]
+from cffi import FFI
 
 MODULE_NAME = "pysatl_core.sampling.unuran.bindings._unuran_cffi"
 UNURAN_DIR_NAME = "unuran-pysatl"

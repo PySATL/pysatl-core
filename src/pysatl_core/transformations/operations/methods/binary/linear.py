@@ -157,7 +157,7 @@ def _make_cf(
         return left_value * right_value
 
     def _cf(data: NumericArray, **options: Any) -> ComplexArray:
-        return cast(ComplexArray, _map_scalar_complex(data, lambda t: _cf_scalar(t, **options)))
+        return _map_scalar_complex(data, lambda t: _cf_scalar(t, **options))
 
     return cast(ComputationFunc[NumericArray, ComplexArray], _cf)
 

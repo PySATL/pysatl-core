@@ -112,9 +112,9 @@ class TestContinuousPerformance:
         x = np.linspace(0.05, 0.95, 50)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert (
-            elapsed < 10.0
-        ), f"_fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        assert elapsed < 10.0, (
+            f"_fit_pdf_to_cdf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        )
 
     def test_pdf_to_cdf_segment_wise_scales_subquadratically(self) -> None:
         """Doubling the array size should NOT quadruple the time.
@@ -152,9 +152,9 @@ class TestContinuousPerformance:
         x = np.linspace(-5.0, 5.0, 100)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert (
-            elapsed < 5.0
-        ), f"_fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
+        assert elapsed < 5.0, (
+            f"_fit_cdf_to_pdf_1C with 100 points took {elapsed:.2f}s (expected < 5s)"
+        )
 
     def test_cdf_to_ppf_array_performance(self) -> None:
         """_fit_cdf_to_ppf_1C with 50 points should complete in < 10s."""
@@ -163,9 +163,9 @@ class TestContinuousPerformance:
         q = np.linspace(0.01, 0.99, 50)
 
         _, elapsed = _time_call(fitted.func, q)
-        assert (
-            elapsed < 10.0
-        ), f"_fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        assert elapsed < 10.0, (
+            f"_fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
+        )
 
     def test_pdf_to_cdf_sorted_vs_unsorted_similar_time(self) -> None:
         """Segment-wise integration should work well for both sorted and
@@ -215,9 +215,9 @@ class TestDiscretePerformance:
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert (
-            elapsed < 2.0
-        ), f"_fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        assert elapsed < 2.0, (
+            f"_fit_pmf_to_cdf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        )
 
     def test_pmf_to_cdf_scales_linearly(self) -> None:
         """Doubling query size should roughly double time, not quadruple."""
@@ -247,9 +247,9 @@ class TestDiscretePerformance:
         x = np.linspace(-1.0, 3.0, 1000)
 
         _, elapsed = _time_call(fitted.func, x)
-        assert (
-            elapsed < 2.0
-        ), f"_fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        assert elapsed < 2.0, (
+            f"_fit_cdf_to_pmf_1D with 1000 points took {elapsed:.2f}s (expected < 2s)"
+        )
 
     def test_cdf_to_ppf_moderate_array(self) -> None:
         """_fit_cdf_to_ppf_1D with 500 query points should be fast."""
@@ -258,9 +258,9 @@ class TestDiscretePerformance:
         q = np.linspace(0.01, 0.99, 500)
 
         _, elapsed = _time_call(fitted.func, q)
-        assert (
-            elapsed < 2.0
-        ), f"_fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
+        assert elapsed < 2.0, (
+            f"_fit_cdf_to_ppf_1D with 500 points took {elapsed:.2f}s (expected < 2s)"
+        )
 
 
 # ---------------------------------------------------------------------------

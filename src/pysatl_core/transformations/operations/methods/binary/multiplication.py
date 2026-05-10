@@ -161,10 +161,7 @@ def _make_cf(
             data: NumericArray,
             **options: Any,
         ) -> ComplexArray:
-            return cast(
-                ComplexArray,
-                _map_scalar_complex(data, lambda t: _cf_scalar_continuous(t, **options)),
-            )
+            return _map_scalar_complex(data, lambda t: _cf_scalar_continuous(t, **options))
 
         return cast(ComputationFunc[NumericArray, ComplexArray], _cf_continuous)
 
@@ -180,9 +177,7 @@ def _make_cf(
         return total
 
     def _cf_discrete(data: NumericArray, **options: Any) -> ComplexArray:
-        return cast(
-            ComplexArray, _map_scalar_complex(data, lambda t: _cf_scalar_discrete(t, **options))
-        )
+        return _map_scalar_complex(data, lambda t: _cf_scalar_discrete(t, **options))
 
     return cast(ComputationFunc[NumericArray, ComplexArray], _cf_discrete)
 
