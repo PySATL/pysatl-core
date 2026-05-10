@@ -11,8 +11,9 @@ import numpy as np
 import pytest
 
 from pysatl_core.distributions.strategies import DefaultComputationStrategy
+from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.families.parametric_family import ParametricFamily, PartialParametricFamily
-from pysatl_core.families.parametrizations import Parametrization
+from pysatl_core.families.parametrizations import Parametrization, constraint
 from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 from pysatl_core.types import (
     CharacteristicName,
@@ -175,6 +176,53 @@ class TestPartialParametricFamily(TestBaseFamily):
         )
         assert dist.sampling_strategy is sampling
         assert dist.computation_strategy is computation
+
+    def test_support_resolver_receives_full_original_parametrization(self) -> None:
+        def support(params: Parametrization) -> ContinuousSupport:
+            full_params = cast(TwoParam, params)
+            return ContinuousSupport(full_params.a, full_params.b)
+
+        fam = ParametricFamily(
+            name="SupportDependsOnParams",
+            distr_type=UnivariateContinuous,
+            distr_parametrizations=["base"],
+            distr_characteristics={
+                CharacteristicName.PDF: {"base": {"default": lambda p, x: p.a + p.b}},
+            },
+            support_by_parametrization=support,
+        )
+        fam.register_parametrization("base", TwoParam)
+
+        dist = fam.view(a=1.0).distribution(b=3.0)
+
+        assert dist.support == ContinuousSupport(1.0, 3.0)
+
+    def test_partial_distribution_preserves_adapted_constraints(self) -> None:
+        fam = ParametricFamily(
+            name="ConstrainedFamily",
+            distr_type=UnivariateContinuous,
+            distr_parametrizations=["base"],
+            distr_characteristics={
+                CharacteristicName.PDF: {"base": {"default": lambda p, x: p.a + p.b}},
+            },
+        )
+
+        @fam.parametrization(name="base")
+        class OrderedParams(Parametrization):
+            a: float
+            b: float
+
+            @constraint(description="a < b")
+            def check_order(self) -> bool:
+                return self.a < self.b
+
+        dist = fam.view(a=1.0).distribution(b=3.0)
+
+        assert [c.description for c in dist.parameters_constraints] == ["a < b"]
+        assert all(c.check(dist.parametrization) for c in dist.parameters_constraints)
+
+        with pytest.raises(ValueError, match='Constraint "a < b" does not hold'):
+            fam.view(a=3.0).distribution(b=1.0)
 
     # Chaining view
     def test_view_on_view_creates_new_view_until_complete(self) -> None:
