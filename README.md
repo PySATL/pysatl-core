@@ -14,8 +14,7 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 
 > **Project status**  
 > PySATL Core is currently in **early alpha**.  
-> It is not published to PyPI yet. After the first alpha release, the package
-> will be installable with `pip install pysatl-core`.
+> The public API may change between alpha releases.
 
 ---
 
@@ -51,13 +50,16 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
 
 ## Installation
 
-After the first PyPI release:
+Install from PyPI:
 
 ```bash
 pip install pysatl-core
 ```
 
-Until then, install from source.
+Linux wheels are not published yet. On Linux, `pip` builds the package from the
+source distribution and requires a working C toolchain.
+
+For development, install from source.
 
 Clone the repository:
 
