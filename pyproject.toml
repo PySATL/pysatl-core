@@ -1,6 +1,5 @@
 [build-system]
 build-backend = "poetry.core.masonry.api"
-
 requires = [
   "cffi>=1.16",
   "poetry-core>=1.9",
@@ -112,15 +111,12 @@ test-command = 'python -c "from pysatl_core.sampling.unuran.bindings import _unu
 target-version = "py312"
 line-length = 100
 exclude = [ "subprojects" ]
-
 format.line-ending = "lf"
-
 lint.select = [ "B", "C4", "E", "F", "I", "ISC", "PIE", "SIM", "TID", "UP" ]
 lint.ignore = [ "B008", "E203" ]
 lint.per-file-ignores."**/__init__.py" = [ "F403" ]
 lint.fixable = [ "ALL" ]
-lint.unfixable = [  ]
-
+lint.unfixable = []
 lint.isort.combine-as-imports = true
 lint.isort.force-single-line = false
 lint.isort.known-first-party = [ "pysatl_core" ]
@@ -129,22 +125,17 @@ lint.isort.order-by-type = true
 [tool.codespell]
 skip = "subprojects/**"
 
-[tool.pytest.ini_options]
-addopts = "-q --cov=pysatl_core --cov-report=term-missing"
-testpaths = [ "tests" ]
-
-[tool.coverage.run]
-source = [ "pysatl_core" ]
-branch = true
-parallel = true
-
-[tool.coverage.report]
-show_missing = true
-skip_covered = false
-exclude_lines = [
-  "pragma: no cover",
-  "if __name__ == .__main__.:",
+[tool.pyproject-fmt]
+expand_tables = [
+  "tool.coverage.report",
+  "tool.coverage.run",
+  "tool.poetry.build",
+  "tool.poetry.dependencies",
+  "tool.poetry.group.dev.dependencies",
+  "tool.poetry.group.docs.dependencies",
+  "tool.pytest.ini_options",
 ]
+skip_wrap_for_keys = [ "tool.cibuildwheel.test-command" ]
 
 [tool.mypy]
 files = [ "src", "tests" ]
@@ -165,3 +156,20 @@ disallow_untyped_defs = false
 check_untyped_defs = true
 warn_return_any = false
 implicit_reexport = true
+
+[tool.pytest.ini_options]
+addopts = "-q --cov=pysatl_core --cov-report=term-missing"
+testpaths = [ "tests" ]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
+
+[tool.coverage.run]
+source = [ "pysatl_core" ]
+branch = true
+parallel = true
