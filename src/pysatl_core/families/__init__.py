@@ -22,9 +22,12 @@ from .parametrizations import (
     parametrization,
 )
 from .exponential_family import (
-    ExponentialFamily,
-    ExponentialClassParametrization,
     ExponentialConjugateHyperparameters,
+    ExponentialFamily,
+    ExponentialFamilyParametrization,
+    NaturalExponentialFamily,
+    SpacePredicate,
+    SpacePredicateArray,
 )
 from .registry import ParametricFamilyRegister
 
@@ -40,8 +43,11 @@ __all__ = [
     # builtins
     *_builtins_all,
     "ExponentialFamily",
-    "ExponentialClassParametrization",
+    "ExponentialFamilyParametrization",
     "ExponentialConjugateHyperparameters",
+    "SpacePredicate",
+    "SpacePredicateArray",
+    "NaturalExponentialFamily",
 ]
 
 del _builtins_all
