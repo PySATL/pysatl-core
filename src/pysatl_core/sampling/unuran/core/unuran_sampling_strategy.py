@@ -94,6 +94,30 @@ class DefaultUnuranSamplingStrategy:
 
         return self._sampler.sample(n)
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> DefaultUnuranSamplingStrategy:
+        new = DefaultUnuranSamplingStrategy(config=self._config_value)
+        memo[id(self)] = new
+        return new
+
+    def invalidate(self) -> None:
+        """
+        Drop the cached UNURAN sampler.
+
+        The next call to :meth:`sample` will rebuild a fresh sampler from the
+        distribution's current characteristics. Use this when the underlying
+        distribution state has changed (e.g. an empirical method has been
+        swapped) and the existing UNURAN generator was built on stale data —
+        keeping it would silently produce samples from the old distribution.
+
+        Notes
+        -----
+        Releases the only strong reference held by the strategy. Any external
+        code that captured ``self._sampler`` directly will keep its old sampler
+        alive and continue sampling from the previous distribution; such
+        references must be re-acquired by the caller.
+        """
+        self._sampler = None
+
     @property
     def config(self) -> UnuranMethodConfig:
         """Method configuration."""

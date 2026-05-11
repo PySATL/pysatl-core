@@ -177,6 +177,45 @@ class TestSampleMethod:
 
         assert sampler_first is sampler_second
 
+    def test_invalidate_clears_cached_sampler(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """invalidate() drops the cached sampler so the next call rebuilds it."""
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        strategy = DefaultUnuranSamplingStrategy()
+        distr = _make_continuous_distr()
+
+        strategy.sample(2, distr)
+        assert strategy._sampler is not None
+
+        strategy.invalidate()
+        assert strategy._sampler is None
+
+    def test_invalidate_forces_new_sampler_on_next_sample(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After invalidate(), the next sample() builds a fresh sampler instance."""
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        strategy = DefaultUnuranSamplingStrategy()
+        distr = _make_continuous_distr()
+
+        strategy.sample(2, distr)
+        first_sampler = strategy._sampler
+
+        strategy.invalidate()
+        strategy.sample(2, distr)
+        second_sampler = strategy._sampler
+
+        assert first_sampler is not None
+        assert second_sampler is not None
+        assert first_sampler is not second_sampler
+
+    def test_invalidate_is_idempotent_when_no_sampler_cached(self) -> None:
+        """invalidate() on a fresh strategy with no sampler is a no-op and does not raise."""
+        strategy = DefaultUnuranSamplingStrategy()
+        assert strategy._sampler is None
+
+        strategy.invalidate()
+        assert strategy._sampler is None
+
     def test_falls_back_to_default_strategy_when_sampler_init_fails(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
