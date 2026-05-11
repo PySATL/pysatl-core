@@ -43,7 +43,6 @@ __all__ = [
     "ContinuousExponentialClassFamily",
     "ExponentialFamilyParametrization",
     "ExponentialConjugateHyperparameters",
-    # "CanonicalContinuousExponentialClassFamily",
 ]
 
 del _builtins_all

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+__author__ = "Vinogradov Ilya"
+__copyright__ = "Copyright (c) 2025 PySATL project"
+__license__ = "SPDX-License-Identifier: MIT"
+
+
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -25,11 +30,10 @@ from pysatl_core.types import (
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
-    from pysatl_core.types import Number, NumericArray
+    from pysatl_core.types import Number, NumberParameter, NumericArray
 
     type ParametrizedFunction = Callable[[Parametrization, Any], Any]
     type SupportArg = Callable[[Parametrization], Support | None] | None
-    type NumberParameter = Number | NumericArray
 
 
 @dataclass
@@ -77,6 +81,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
         support_by_parametrization: SupportArg = None,
+        base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
     ):
         self._sufficient = sufficient_statistics
         self._log_partition = log_partition
@@ -91,8 +96,8 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
         ] = {
             CharacteristicName.PDF: self.density,
-            CharacteristicName.MEAN: self._mean,
-            CharacteristicName.VAR: self._var,
+            CharacteristicName.MEAN_DEFAULT: self._mean,
+            CharacteristicName.VAR_DEFAULT: self._var,
         }
 
         ParametricFamily.__init__(
@@ -102,6 +107,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             distr_parametrizations=distr_parametrizations,
             distr_characteristics=distr_characteristics,
             support_by_parametrization=support_by_parametrization,
+            base_score=base_score,
         )
         parametrization(family=self, name="theta")(ExponentialFamilyParametrization)
 
@@ -176,7 +182,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             normalization_constant=lambda _: 1,
             support=self._parameter_space,
             sufficient_statistics_values=self._parameter_space,  # TODO: write convex hull for this
-            parameter_space=SupportByPredicate(conjugate_sufficient_accepts),  # type: ignore[arg-type]
+            parameter_space=SupportByPredicate(predicate=conjugate_sufficient_accepts),  # type: ignore[arg-type]
             name=self.name,
             distr_type=self._distr_type,
             distr_parametrizations=self.parametrization_names,
@@ -185,28 +191,28 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     def transform(
         self,
-        transform_function: Callable[[Any], Any],
+        transform_function: Callable[[NumberParameter], NumberParameter],
     ) -> ContinuousExponentialClassFamily:
-        def calculate_jacobian(x: Any) -> Any:
-            if type(x) is not list:
+        def calculate_jacobian(x: NumberParameter) -> NumberParameter:
+            if not isinstance(x, Iterable):
                 x = np.array([x])
 
             return np.abs(det(jacobian(transform_function, x).df))
 
-        def new_support(x: Any) -> bool:
+        def new_support(x: NumberParameter) -> bool:
             return transform_function(x) in self._support
 
-        def new_sufficient(x: Any) -> Any:
+        def new_sufficient(x: NumberParameter) -> NumberParameter:
             return self._sufficient(transform_function(x))
 
-        def new_normalization(x: Any) -> Any:
+        def new_normalization(x: NumberParameter) -> NumberParameter:
             return self._normalization(x) * calculate_jacobian(x)
 
         return ContinuousExponentialClassFamily(
             log_partition=self._log_partition,
             sufficient_statistics=new_sufficient,
             normalization_constant=new_normalization,
-            support=SupportByPredicate(new_support),
+            support=SupportByPredicate(predicate=new_support),
             parameter_space=self._parameter_space,
             sufficient_statistics_values=self._sufficient_statistics_values,
             name=f"Transformed{self._name}",

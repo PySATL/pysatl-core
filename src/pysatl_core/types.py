@@ -121,6 +121,9 @@ type ComplexArray = NDArray[np.complexfloating[Any]]
 type BoolArray = NDArray[np.bool_]
 """Type alias for boolean arrays."""
 
+type NumberParameter = Number | NumericArray
+"""Type alias for numeric or list parameter"""
+
 
 class ContinuousSupportShape1D(Enum):
     """
@@ -255,6 +258,12 @@ type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[
 class IntervalND:
     intervals: list[Interval1D]
 
+    @overload
+    def contains(self, x: Number) -> bool: ...
+
+    @overload
+    def contains(self, x: NumericArray) -> BoolArray: ...
+
     def contains(self, x: Number | NumericArray) -> bool | BoolArray:
         if not hasattr(x, "__iter__"):
             x = np.array([x])
@@ -335,6 +344,8 @@ class CharacteristicName(StrEnum):
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
+    MEAN_DEFAULT = "MEAN_DEFAULT"  # defined in class implementation of mean
+    VAR_DEFAULT = "VAR_DEFAULT"  # defined in class implementation of var
     LPDF = "lpdf"  # unimplemented in graph yet
     CF = "cf"  # unimplemented in graph yet
     SF = "sf"  # unimplemented in graph yet

@@ -27,7 +27,14 @@ from typing import (
 
 import numpy as np
 
-from pysatl_core.types import BoolArray, Interval1D, IntervalND, Number, NumericArray
+from pysatl_core.types import (
+    BoolArray,
+    Interval1D,
+    IntervalND,
+    Number,
+    NumberParameter,
+    NumericArray,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -56,7 +63,7 @@ class ContinuousSupport(Interval1D, Support):
     """
 
 
-class ContinuousNDSupport(IntervalND, Support):  # type: ignore[misc]
+class ContinuousNDSupport(IntervalND, Support):
     """
     Support for continuous distributions represented as an array of intervals.
 
@@ -446,17 +453,20 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     __iter__ = iter_points
 
 
-class SupportByPredicate:
-    def __init__(self, predicate: Callable[[NumericArray | Number], bool]):
-        self._predicate = predicate
+@dataclass(slots=True)
+class SupportByPredicate(Support):
+    predicate: Callable[[NumberParameter], bool]
 
-    def __contains__(self, item: NumericArray | Number) -> bool:
-        return self._predicate(item)
+    @overload
+    def contains(self, x: Number) -> bool: ...
+    @overload
+    def contains(self, x: NumericArray) -> BoolArray: ...
 
+    def contains(self, x: NumberParameter) -> bool | BoolArray:
+        return self.predicate(x)
 
-class SupportByIntervals(SupportByPredicate):
-    def __init__(self, support: ContinuousNDSupport):
-        SupportByPredicate.__init__(self, lambda x: x in support)
+    def __contains__(self, item: object) -> bool | BoolArray:
+        return self.contains(cast(NumberParameter, item))
 
 
 __all__ = [
@@ -465,7 +475,6 @@ __all__ = [
     "ContinuousSupport",
     "ContinuousNDSupport",
     "SupportByPredicate",
-    "SupportByIntervals",
     # Discrete support protocol and implementations
     "DiscreteSupport",
     "ExplicitTableDiscreteSupport",
