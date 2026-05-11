@@ -14,13 +14,6 @@ from .builtins import *  # noqa: UP029
 from .builtins import __all__ as _builtins_all
 from .configuration import configure_families_register
 from .distribution import ParametricFamilyDistribution
-from .parametric_family import ParametricFamily
-from .parametrizations import (
-    Parametrization,
-    ParametrizationConstraint,
-    constraint,
-    parametrization,
-)
 from .exponential_family import (
     ExponentialConjugateHyperparameters,
     ExponentialFamily,
@@ -28,6 +21,13 @@ from .exponential_family import (
     NaturalExponentialFamily,
     SpacePredicate,
     SpacePredicateArray,
+)
+from .parametric_family import ParametricFamily
+from .parametrizations import (
+    Parametrization,
+    ParametrizationConstraint,
+    constraint,
+    parametrization,
 )
 from .registry import ParametricFamilyRegister
 
