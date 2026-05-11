@@ -21,6 +21,11 @@ from .parametrizations import (
     constraint,
     parametrization,
 )
+from .exponential_family import (
+    ExponentialFamily,
+    ExponentialClassParametrization,
+    ExponentialConjugateHyperparameters,
+)
 from .registry import ParametricFamilyRegister
 
 __all__ = [
@@ -34,6 +39,9 @@ __all__ = [
     "configure_families_register",
     # builtins
     *_builtins_all,
+    "ExponentialFamily",
+    "ExponentialClassParametrization",
+    "ExponentialConjugateHyperparameters",
 ]
 
 del _builtins_all
