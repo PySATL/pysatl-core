@@ -268,6 +268,9 @@ class IntervalND:
         if not hasattr(x, "__iter__"):
             x = np.array([x])
 
+        x = np.array(x)
+        assert len(x) == len(self.intervals)
+
         return all(
             x_coordinate in interval
             for interval, x_coordinate in zip(self.intervals, x, strict=True)

@@ -1,4 +1,4 @@
-__author__ = "Leonid Elkin"
+__author__ = "Vinogradov Ilya"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 

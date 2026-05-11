@@ -1,9 +1,15 @@
+"""
+Exponential family distributions in continuous spaces.
+
+This module implements the continuous exponential family of probability distributions,
+their conjugate priors, posterior inference, and posterior predictive distributions.
+"""
+
 from __future__ import annotations
 
 __author__ = "Vinogradov Ilya"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
-
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -39,21 +45,48 @@ if TYPE_CHECKING:
 @dataclass
 class ExponentialFamilyParametrization(Parametrization):
     """
-    Standard parametrization of Exponential Family.
+    Standard parametrization of an exponential family distribution.
+
+    This parametrization uses the natural (canonical) parameter vector `theta`
+    The density is expressed as:
+        f(x|θ) = h(x) * exp(θᵀ T(x) - A(θ))
+
+    Attributes:
+        theta (NumberParameter): Natural parameter vector (can be a scalar or array)
     """
 
     theta: NumberParameter
 
     def transform_to_base_parametrization(self) -> ExponentialFamilyParametrization:
+        """Return the base parametrization (identity transform for canonical form)."""
         return self
 
 
 @dataclass
 class ExponentialConjugateHyperparameters(Parametrization):
+    """
+    Hyperparameters for the conjugate prior of an exponential family
+
+    For a prior of the form:
+        p(θ) ∝ exp(ν₀ᵀ T(θ) + n₀ A(θ))
+    the hyperparameters are:
+        effective_suff_stat_value = ν₀
+        effective_sample_size = n₀
+
+    Attributes:
+        effective_suff_stat_value (NumericArray): Pseudo‑sufficient statistic ν₀
+        effective_sample_size (Number): Pseudo‑sample size n₀ (a non‑negative scalar)
+    """
+
     effective_suff_stat_value: NumericArray
     effective_sample_size: Number
 
     def transform_to_base_parametrization(self) -> ExponentialFamilyParametrization:
+        """
+        Convert hyperparameters to a canonical parametrization.
+
+        The resulting parameter vector is [ν₀, n₀] concatenated.
+        """
         return ExponentialFamilyParametrization(
             np.append(self.effective_suff_stat_value, self.effective_sample_size)
         )
@@ -61,11 +94,27 @@ class ExponentialConjugateHyperparameters(Parametrization):
 
 class ContinuousExponentialClassFamily(ParametricFamily):
     """
-    Representation of exponential class with density = h(x) * exp(<n(t), T(x)> + A(t)),
-    where canonical parametrization is that, when n = t
+    Representation of a continuous exponential family distribution.
 
-    Usage of this class:
-    - you can use method transform_to_another to replace x to smth else, for example, into
+    The density is given by:
+        f(x|θ) = h(x) * exp(θᵀ T(x) - A(θ))
+
+    where:
+        - θ is the natural parameter,
+        - T(x) is the sufficient statistic vector,
+        - h(x) is the base measure (the `normalization_constant`),
+        - A(θ) is the log‑partition function.
+
+    This class supports:
+        - Canonical parametrization (θ) via `ExponentialFamilyParametrization`.
+        - Conjugate prior families.
+        - Posterior updates and posterior predictive distributions.
+        - Transformation of the random variable (change of variable with Jacobian).
+
+    The user must supply functions for the log‑partition `log_partition`,
+    sufficient statistics `sufficient_statistics`,
+    base measure `normalization_constant`, as well as the support of the distribution,
+    the natural parameter space and the range of the sufficient statistic.
     """
 
     def __init__(
@@ -83,6 +132,22 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         support_by_parametrization: SupportArg = None,
         base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
     ):
+        """
+        Initialize a continuous exponential family distribution.
+
+        Args:
+            log_partition: Function A(θ) – the log‑partition function.
+            sufficient_statistics: Function T(x) – the sufficient statistic vector.
+            normalization_constant: Function h(x) – the base measure.
+            support: Predicate defining the support of the distribution.
+            parameter_space: Predicate defining the natural parameter space.
+            sufficient_statistics_values: Predicate defining the range of T(x).
+            name: Name of the family.
+            distr_type: Type of distribution or a callable returning it.
+            distr_parametrizations: List of parametrization names this family supports.
+            support_by_parametrization: Callable that returns the support given a parametrization.
+            base_score: Optional base score function.
+        """
         self._sufficient = sufficient_statistics
         self._log_partition = log_partition
         self._normalization = normalization_constant
@@ -113,6 +178,16 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def log_density(self) -> ParametrizedFunction:
+        """
+        Log‑density function for the exponential family.
+
+        The function takes a parametrization (must be `ExponentialFamilyParametrization`)
+        and a point `x`, and returns log f(x|θ). Returns -inf for x outside the support.
+
+        Returns:
+            Callable[[Parametrization, NumberParameter], Number]
+        """
+
         def log_density_func(parametrization: Parametrization, x: NumberParameter) -> Number:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             parametrization = parametrization.transform_to_base_parametrization()
@@ -132,10 +207,28 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def density(self) -> ParametrizedFunction:
+        """
+        Density function (exponentiated log‑density).
+
+        Returns:
+            Callable[[Parametrization, NumberParameter], Number]
+        """
         return lambda parametrization, x: np.exp(self.log_density(parametrization, x))
 
     @property
     def conjugate_prior_family(self) -> ContinuousExponentialClassFamily:
+        """
+        Build the conjugate prior family for this exponential family.
+
+        The conjugate prior is an exponential family in the natural parameter θ,
+        with sufficient statistic [θ, A(θ)] and base measure 1. The resulting
+        family has its own [log_partition, sufficient_statistics, ...] such that
+        the posterior updates are given by adding the observed sufficient statistics.
+
+        Returns:
+            ContinuousExponentialClassFamily: The conjugate prior family.
+        """
+
         def conjugate_sufficient(
             theta: NumberParameter,
         ) -> NumberParameter:
@@ -193,6 +286,21 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         self,
         transform_function: Callable[[NumberParameter], NumberParameter],
     ) -> ContinuousExponentialClassFamily:
+        """
+        Transform the random variable by a monotonic, differentiable function.
+
+        The new density is obtained via the change‑of‑variable formula.
+        The sufficient statistic becomes T(transform⁻¹(x)) and the base measure
+        gains the Jacobian factor.
+
+        Args:
+            transform_function: Invertible, differentiable function g(x) such that
+                y = g(x). Must be defined on the original support.
+
+        Returns:
+            ContinuousExponentialClassFamily: A new family for the transformed variable.
+        """
+
         def calculate_jacobian(x: NumberParameter) -> NumberParameter:
             if not isinstance(x, Iterable):
                 x = np.array([x])
@@ -223,15 +331,15 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def _mean(self) -> ParametrizedFunction:
+        """Compute the mean E[X] by numerical integration over the density."""
+
         def mean_func(parametrization: Parametrization, x: Any) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             dimension_size = 1
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: (  # type: ignore[arg-type]
-                    np.dot(x, self.density(parametrization, x)) if x in self._support else 0
-                ),
+                lambda x: np.dot(x, self.density(parametrization, x)) if x in self._support else 0,
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
 
@@ -239,15 +347,15 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def _second_moment(self) -> ParametrizedFunction:
+        """Compute the second moment E[X²] by numerical integration."""
+
         def func(parametrization: Parametrization, x: Any) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             dimension_size = 1
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: (  # type: ignore[arg-type]
-                    x**2 * self.density(parametrization, x) if x in self._support else 0
-                ),
+                lambda x: x**2 * self.density(parametrization, x) if x in self._support else 0,
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
 
@@ -255,6 +363,8 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def _var(self) -> ParametrizedFunction:
+        """Compute the variance Var[X] = E[X²] - (E[X])²."""
+
         def func(parametrization: Parametrization, x: Any) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             return self._second_moment(parametrization, x) - self._mean(parametrization, x) ** 2
@@ -264,6 +374,22 @@ class ContinuousExponentialClassFamily(ParametricFamily):
     def posterior_hyperparameters(
         self, parametrizaiton: ExponentialConjugateHyperparameters, sample: list[Any]
     ) -> ExponentialConjugateHyperparameters:
+        """
+        Update the conjugate prior hyperparameters given observed data.
+
+        For a conjugate prior with hyperparameters (ν₀, n₀), the posterior
+        hyperparameters become:
+            ν = ν₀ + Σ_{i} T(x_i)
+            n = n₀ + N
+
+        Args:
+            parametrizaiton: Current conjugate hyperparameters.
+            sample: List of observations (each can be scalar or array).
+
+        Returns:
+            ExponentialConjugateHyperparameters:
+                Updated hyperparameters after incorporating the sample.
+        """
         posterior_effective_suff_stat_value = parametrizaiton.effective_suff_stat_value
         posterior_effective_sample_size = parametrizaiton.effective_sample_size
         if hasattr(sample, "__iter__") and not isinstance(sample, str):
@@ -283,6 +409,19 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     @property
     def posterior_predictive(self) -> ParametricFamily:
+        """
+        Construct the posterior predictive distribution.
+
+        For a conjugate prior, the posterior predictive density of a new observation x
+        given hyperparameters (ν, n) is:
+            p(x | ν, n) = h(x) * exp( A(ν) - A(ν + T(x)) )
+        where A(·) is the log‑partition function of the conjugate prior family.
+
+        Returns:
+            ParametricFamily: A family with parametrization `ExponentialConjugateHyperparameters`
+                and a `pdf` method implementing the posterior predictive density.
+        """
+
         def conjugate_log_partition(
             parametrization: ExponentialConjugateHyperparameters,
         ) -> NumberParameter:
