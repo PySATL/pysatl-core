@@ -14,13 +14,20 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import floor
-from typing import TYPE_CHECKING, Protocol, cast, overload, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Protocol,
+    cast,
+    overload,
+    runtime_checkable,
+)
 
 import numpy as np
 
-from pysatl_core.types import BoolArray, Interval1D, Number, NumericArray
+from pysatl_core.types import BoolArray, Interval1D, IntervalND, Number, NumericArray
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -46,6 +53,15 @@ class ContinuousSupport(Interval1D, Support):
 
     This class inherits from Interval1D and implements the Support protocol
     for continuous distributions defined on an interval [left, right].
+    """
+
+
+class ContinuousNDSupport(IntervalND, Support):  # type: ignore[misc]
+    """
+    Support for continuous distributions represented as an array of intervals.
+
+    This class inherits from IntervalND and implements the Support protocol
+    for continuous distributions defined on a list of intervals [left, right].
     """
 
 
@@ -430,10 +446,26 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     __iter__ = iter_points
 
 
+class SupportByPredicate:
+    def __init__(self, predicate: Callable[[NumericArray | Number], bool]):
+        self._predicate = predicate
+
+    def __contains__(self, item: NumericArray | Number) -> bool:
+        return self._predicate(item)
+
+
+class SupportByIntervals(SupportByPredicate):
+    def __init__(self, support: ContinuousNDSupport):
+        SupportByPredicate.__init__(self, lambda x: x in support)
+
+
 __all__ = [
     # Base support protocol
     "Support",
     "ContinuousSupport",
+    "ContinuousNDSupport",
+    "SupportByPredicate",
+    "SupportByIntervals",
     # Discrete support protocol and implementations
     "DiscreteSupport",
     "ExplicitTableDiscreteSupport",
