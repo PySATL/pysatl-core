@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import StrEnum
 from queue import Queue
 from typing import TYPE_CHECKING, cast
 
@@ -60,11 +61,77 @@ class TransformatedDensityEdge(RegistryEdge):
         return self._transform_function(argument)
 
 
+class BinaryOperationType(StrEnum):
+    ADD = "add"
+    SUB = "sub"
+    MUL = "multiply"
+    DIV = "divide"
+
+
+class FamilyBinaryOperationTransformationRecord:
+    """
+    Record for a bainray transformation between 2 families
+    It doesn't accept constraints on transformation, just for now
+    """
+
+    def __init__(
+        self,
+        left: str,
+        right: str,
+        result: str,
+        kind: BinaryOperationType,
+        parametrization_transformation: Callable[
+            [Parametrization, Parametrization], Parametrization
+        ],
+    ):
+        self._left = left
+        self._right = right
+        self._kind = kind
+        self._result = result
+        self._transformation = parametrization_transformation
+
+    def accepts(self, left: str, right: str, kind: BinaryOperationType) -> bool:
+        return (self._left, self._right, self._kind) == (left, right, kind)
+
+    def transform(
+        self, left_parametrization: Parametrization, right_parametrization: Parametrization
+    ) -> tuple[str, Parametrization]:
+        return self._result, self._transformation(left_parametrization, right_parametrization)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FamilyBinaryOperationTransformationRecord):
+            return False
+
+        return self.accepts(other._left, other._right, other._kind)
+
+    @property
+    def result(self) -> str:
+        return self._result
+
+    @property
+    def transformation(self) -> Callable[[Parametrization, Parametrization], Parametrization]:
+        return self._transformation
+
+    def __hash__(self) -> int:
+        return (
+            self._left.__hash__()
+            ^ self._right.__hash__()
+            ^ self._kind.__hash__()
+            ^ self._result.__hash__()
+        )
+
+
 class RegistryGraphTransformations:
+    """
+    Registry with transformations, such as transformation, when densitry equals or smth like this
+    TODO: find a way to merge ways between density and parametrization transformations
+    """
+
     _instance: ClassVar[RegistryGraphTransformations | None] = None
     _registered_families_temperature: dict[str, int]
     _registered_parametrzation_transformations: dict[str, list[TransformatedParametrizationEdge]]
     _registered_transformations: dict[str, list[TransformatedDensityEdge]]
+    _binary_transformations: list[FamilyBinaryOperationTransformationRecord]
 
     def __new__(cls) -> RegistryGraphTransformations:
         if cls._instance is None:
@@ -72,7 +139,43 @@ class RegistryGraphTransformations:
             cls._registered_parametrzation_transformations = {}
             cls._registered_families_temperature = {}
             cls._registered_transformations = {}
+            cls._binary_transformations = []
         return cls._instance
+
+    @classmethod
+    def find_binary_transform(
+        cls, left: str, right: str, operation: BinaryOperationType
+    ) -> None | FamilyBinaryOperationTransformationRecord:
+        self = cls()
+
+        for transformation in self._binary_transformations:
+            if transformation.accepts(left, right, operation):
+                return transformation
+
+        return None
+
+    @classmethod
+    def add_binary_transformation(
+        cls,
+        left: str,
+        right: str,
+        result: str,
+        operation: BinaryOperationType,
+        parametrization_transformation: Callable[
+            [Parametrization, Parametrization], Parametrization
+        ],
+    ) -> bool:
+        transformation = FamilyBinaryOperationTransformationRecord(
+            left, right, result, operation, parametrization_transformation
+        )
+        self = cls()
+
+        for registered_transformation in self._binary_transformations:
+            if transformation == registered_transformation:
+                return False
+
+        self._binary_transformations.append(transformation)
+        return True
 
     @classmethod
     def _run_bfs(

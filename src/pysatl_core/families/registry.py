@@ -9,7 +9,10 @@ application.
 from __future__ import annotations
 
 from pysatl_core.families.parametrizations import Parametrization
-from pysatl_core.families.registry_graph import RegistryGraphTransformations
+from pysatl_core.families.registry_graph import (
+    BinaryOperationType,
+    RegistryGraphTransformations,
+)
 
 __author__ = "Leonid Elkin, Mikhail Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
@@ -68,6 +71,41 @@ class ParametricFamilyRegister:
 
         family_name, transform_function = self._registry_graph.get_optimal_transoformation(name)
         return self.get(family_name), transform_function
+
+    @classmethod
+    def add_binary_transformation(
+        cls,
+        left: str,
+        right: str,
+        result: str,
+        operation: BinaryOperationType,
+        parametrization_transformation: Callable[
+            [Parametrization, Parametrization], Parametrization
+        ],
+    ) -> bool:
+        self = cls()
+        return self._registry_graph.add_binary_transformation(
+            left, right, result, operation, parametrization_transformation
+        )
+
+    @classmethod
+    def find_binary_transformation(
+        cls, left: str, right: str, operation: BinaryOperationType
+    ) -> (
+        None
+        | tuple[ParametricFamily, Callable[[Parametrization, Parametrization], Parametrization]]
+    ):
+        self = cls()
+        transformation = self._registry_graph.find_binary_transform(left, right, operation)
+
+        if transformation is None:
+            return transformation
+
+        family = self._registered_families.get(transformation.result, None)
+        if family is None:
+            return family
+
+        return family, transformation.transformation
 
     @classmethod
     def register_parametrization_transformation(
@@ -145,14 +183,14 @@ class ParametricFamilyRegister:
             If a family with the same name is already registered.
         """
         self = cls()
-        self.change_family_temperature(family.name, temperature)
+        self._change_family_temperature(family.name, temperature)
 
         if family.name in self._registered_families:
             raise ValueError(f"Family {family.name} already found in register")
         self._registered_families[family.name] = family
 
     @classmethod
-    def change_family_temperature(cls, family_name: str, new_temperature: int) -> None:
+    def _change_family_temperature(cls, family_name: str, new_temperature: int) -> None:
         self = cls()
         self._registry_graph.register_family_temperature(family_name, new_temperature)
 

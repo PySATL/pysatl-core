@@ -1,8 +1,12 @@
+from typing import cast
+
 import numpy as np
 from numpy.testing import assert_allclose
 
 from pysatl_core.families.configuration import configure_families_register
+from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization
+from pysatl_core.families.registry_graph import BinaryOperationType
 from pysatl_core.types import CharacteristicName, FamilyName, Number, NumericArray
 
 
@@ -43,7 +47,7 @@ def test_parametrization_optimization():
         transform_function_normal,
     )
 
-    registry.change_family_temperature(FamilyName.CONTINUOUS_UNIFORM, 129)
+    registry._change_family_temperature(FamilyName.CONTINUOUS_UNIFORM, 129)
 
     exponential = exponential_fam(lambda_=1.0)
     exponential_parametrization = exponential.parametrization
@@ -78,7 +82,7 @@ def test_density_optimization():
         FamilyName.LOGNORMAL, FamilyName.NORMAL, revert_function
     )
 
-    registry.change_family_temperature(FamilyName.LOGNORMAL, 129)
+    registry._change_family_temperature(FamilyName.LOGNORMAL, 129)
 
     lognormal_result = registry.get_optimal_density(FamilyName.NORMAL)
     if lognormal_result is None:
@@ -92,3 +96,36 @@ def test_density_optimization():
     assert_allclose(
         np.array([transform_function(xx) for xx in x]), np.array([transformation(xx) for xx in x])
     )
+
+
+def test_transformations():
+    registry = configure_families_register()
+    normal_fam = registry.get(FamilyName.NORMAL)
+
+    def transform_function(
+        left_parametrization: Parametrization, right_parametrization: Parametrization
+    ) -> Parametrization:
+        param_type = normal_fam.get_parametrization(normal_fam.base_parametrization_name)
+        return param_type(  # type: ignore[call-arg]
+            mu=left_parametrization.mu + right_parametrization.mu,  # type: ignore[attr-defined]
+            sigma=left_parametrization.sigma + right_parametrization.sigma,  # type: ignore[attr-defined]
+        )
+
+    registry.add_binary_transformation(
+        FamilyName.NORMAL,
+        FamilyName.NORMAL,
+        FamilyName.NORMAL,
+        BinaryOperationType.ADD,
+        transform_function,
+    )
+    distribution_one = normal_fam(mu=1, sigma=1)
+    distribution_two = normal_fam(mu=2, sigma=3)
+
+    distribution_add = cast(ParametricFamilyDistribution, distribution_one + distribution_two)
+    distribution_sub = distribution_one * distribution_two
+
+    assert distribution_add.parametrization.mu == 3  # type: ignore[attr-defined]
+    assert distribution_add.parametrization.sigma == 4  # type: ignore[attr-defined]
+
+    assert isinstance(distribution_add, ParametricFamilyDistribution)
+    assert not isinstance(distribution_sub, ParametricFamilyDistribution)

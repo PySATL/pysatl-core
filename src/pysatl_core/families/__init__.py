@@ -22,6 +22,7 @@ from .parametrizations import (
     parametrization,
 )
 from .registry import ParametricFamilyRegister
+from .registry_graph import BinaryOperationType
 
 __all__ = [
     "ParametricFamilyRegister",
@@ -32,6 +33,7 @@ __all__ = [
     "constraint",
     "parametrization",
     "configure_families_register",
+    "BinaryOperationType",
     # builtins
     *_builtins_all,
 ]
