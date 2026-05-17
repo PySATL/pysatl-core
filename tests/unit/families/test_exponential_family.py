@@ -3,7 +3,6 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import itertools
-from collections.abc import Iterable
 from typing import cast
 
 import numpy as np
@@ -16,7 +15,7 @@ from pysatl_core.families import (
     ContinuousExponentialClassFamily,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
-from pysatl_core.types import CharacteristicName, Interval1D, NumberParameter, UnivariateContinuous
+from pysatl_core.types import CharacteristicName, Interval1D, NumericArray, UnivariateContinuous
 
 
 def gamma_pdf(alpha: float, beta: float, x: float) -> float:
@@ -25,16 +24,14 @@ def gamma_pdf(alpha: float, beta: float, x: float) -> float:
 
 @pytest.fixture(scope="function")
 def conjugate_for_exponential() -> ContinuousExponentialClassFamily:
-    def transform_function(x: NumberParameter) -> NumberParameter:
-        if isinstance(x, Iterable):
-            return np.array([-x[0]])
+    def transform_function(x: NumericArray) -> NumericArray:
         return -x
 
     support_neg = SupportByPredicate(
-        predicate=lambda x: x in ContinuousNDSupport(intervals=[Interval1D(-np.inf, 0)])
+        predicate=lambda x: np.array([x]) in ContinuousNDSupport(intervals=[Interval1D(-np.inf, 0)])
     )
     support_pos = SupportByPredicate(
-        predicate=lambda x: x in ContinuousNDSupport(intervals=[Interval1D(0, np.inf)])
+        predicate=lambda x: np.array([x]) in ContinuousNDSupport(intervals=[Interval1D(0, np.inf)])
     )
     fam = ContinuousExponentialClassFamily(
         log_partition=lambda parametrization: np.log(-parametrization),

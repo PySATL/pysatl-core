@@ -121,9 +121,6 @@ type ComplexArray = NDArray[np.complexfloating[Any]]
 type BoolArray = NDArray[np.bool_]
 """Type alias for boolean arrays."""
 
-type NumberParameter = Number | NumericArray
-"""Type alias for numeric or list parameter"""
-
 
 class ContinuousSupportShape1D(Enum):
     """
@@ -258,27 +255,22 @@ type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[
 class IntervalND:
     intervals: list[Interval1D]
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
+    def contains(self, x: NumericArray) -> bool | BoolArray:
+        def contains_for_point(point: NumericArray) -> bool:
+            assert len(point) == len(self.intervals)
+            return all(
+                x_coordinate in interval
+                for interval, x_coordinate in zip(self.intervals, point, strict=True)
+            )
 
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
+        if len(x.shape) == 1:
+            return contains_for_point(x)
 
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
-        if not hasattr(x, "__iter__"):
-            x = np.array([x])
-
-        x = np.array(x)
-        assert len(x) == len(self.intervals)
-
-        return all(
-            x_coordinate in interval
-            for interval, x_coordinate in zip(self.intervals, x, strict=True)
-        )
+        return np.array([contains_for_point(point) for point in x])
 
     def __contains__(self, x: object) -> bool:
         """Check if a single point is in the interval."""
-        return bool(self.contains(cast(Number, x)))
+        return bool(self.contains(cast(NumericArray, x)))
 
 
 type GenericCharacteristicName = str

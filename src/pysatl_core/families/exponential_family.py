@@ -36,7 +36,7 @@ from pysatl_core.types import (
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
-    from pysatl_core.types import Number, NumberParameter, NumericArray
+    from pysatl_core.types import Number, NumericArray
 
     type ParametrizedFunction = Callable[[Parametrization, Any], Any]
     type SupportArg = Callable[[Parametrization], Support | None] | None
@@ -52,10 +52,10 @@ class ExponentialFamilyParametrization(Parametrization):
         f(x|θ) = h(x) * exp(θᵀ T(x) - A(θ))
 
     Attributes:
-        theta (NumberParameter): Natural parameter vector (can be a scalar or array)
+        theta (NumericArray): Natural parameter vector (can be a scalar or array)
     """
 
-    theta: NumberParameter
+    theta: NumericArray
 
     def transform_to_base_parametrization(self) -> ExponentialFamilyParametrization:
         """Return the base parametrization (identity transform for canonical form)."""
@@ -120,9 +120,9 @@ class ContinuousExponentialClassFamily(ParametricFamily):
     def __init__(
         self,
         *,
-        log_partition: Callable[[NumberParameter], NumberParameter],
-        sufficient_statistics: Callable[[NumberParameter], NumberParameter],
-        normalization_constant: Callable[[NumberParameter], NumberParameter],
+        log_partition: Callable[[NumericArray], NumericArray],
+        sufficient_statistics: Callable[[NumericArray], NumericArray],
+        normalization_constant: Callable[[NumericArray], Number],
         support: SupportByPredicate,
         parameter_space: SupportByPredicate,
         sufficient_statistics_values: SupportByPredicate,
@@ -185,13 +185,13 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         and a point `x`, and returns log f(x|θ). Returns -inf for x outside the support.
 
         Returns:
-            Callable[[Parametrization, NumberParameter], Number]
+            Callable[[Parametrization, NumericArray], Number]
         """
 
-        def log_density_func(parametrization: Parametrization, x: NumberParameter) -> Number:
+        def log_density_func(parametrization: Parametrization, x: NumericArray) -> Number:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             parametrization = parametrization.transform_to_base_parametrization()
-            if x not in self._support:
+            if np.array([x]) not in self._support:
                 return -np.inf
 
             theta = parametrization.theta
@@ -211,7 +211,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         Density function (exponentiated log‑density).
 
         Returns:
-            Callable[[Parametrization, NumberParameter], Number]
+            Callable[[Parametrization, NumericArray], Number]
         """
         return lambda parametrization, x: np.exp(self.log_density(parametrization, x))
 
@@ -230,8 +230,8 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         """
 
         def conjugate_sufficient(
-            theta: NumberParameter,
-        ) -> NumberParameter:
+            theta: NumericArray,
+        ) -> NumericArray:
             if not hasattr(theta, "__len__"):
                 theta = np.array([theta])
 
@@ -240,9 +240,9 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             return np.append(theta, self._log_partition(theta))
 
         def conjugate_log_partition(
-            parametrization: NumberParameter,
-        ) -> NumberParameter:
-            def pdf(theta: NumberParameter) -> NumberParameter:
+            parametrization: NumericArray,
+        ) -> NumericArray:
+            def pdf(theta: NumericArray) -> Number:
                 if not hasattr(theta, "__len__"):
                     theta = np.array([theta])
                 return cast(
@@ -259,7 +259,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
                 lambda x: pdf(x) if x in self._parameter_space else 0,  # type: ignore[arg-type]
                 [(float("-inf"), float("+inf"))],
             )[0]
-            return cast(np.float64, -np.log(all_value))
+            return np.array([cast(np.float64, -np.log(all_value))])
 
         def conjugate_sufficient_accepts(
             theta: NumericArray,
@@ -267,15 +267,17 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             xi = theta[:-1]
             nu = theta[-1]
 
-            return xi in self._sufficient_statistics_values and nu in ContinuousSupport(0, np.inf)
+            return xi in self._sufficient_statistics_values and np.array([nu]) in ContinuousSupport(
+                0, np.inf
+            )
 
         return ContinuousExponentialClassFamily(
             log_partition=conjugate_log_partition,
             sufficient_statistics=conjugate_sufficient,
             normalization_constant=lambda _: 1,
             support=self._parameter_space,
-            sufficient_statistics_values=self._parameter_space,  # TODO: write convex hull for this
-            parameter_space=SupportByPredicate(predicate=conjugate_sufficient_accepts),  # type: ignore[arg-type]
+            sufficient_statistics_values=self._parameter_space,
+            parameter_space=SupportByPredicate(predicate=conjugate_sufficient_accepts),
             name=self.name,
             distr_type=self._distr_type,
             distr_parametrizations=self.parametrization_names,
@@ -284,7 +286,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     def transform(
         self,
-        transform_function: Callable[[NumberParameter], NumberParameter],
+        transform_function: Callable[[NumericArray], NumericArray],
     ) -> ContinuousExponentialClassFamily:
         """
         Transform the random variable by a monotonic, differentiable function.
@@ -301,20 +303,20 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             ContinuousExponentialClassFamily: A new family for the transformed variable.
         """
 
-        def calculate_jacobian(x: NumberParameter) -> NumberParameter:
+        def calculate_jacobian(x: NumericArray) -> NumericArray:
             if not isinstance(x, Iterable):
                 x = np.array([x])
 
             return np.abs(det(jacobian(transform_function, x).df))
 
-        def new_support(x: NumberParameter) -> bool:
+        def new_support(x: NumericArray) -> bool:
             return transform_function(x) in self._support
 
-        def new_sufficient(x: NumberParameter) -> NumberParameter:
+        def new_sufficient(x: NumericArray) -> NumericArray:
             return self._sufficient(transform_function(x))
 
-        def new_normalization(x: NumberParameter) -> NumberParameter:
-            return self._normalization(x) * calculate_jacobian(x)
+        def new_normalization(x: NumericArray) -> Number:
+            return cast(np.float64, self._normalization(x) * calculate_jacobian(x))
 
         return ContinuousExponentialClassFamily(
             log_partition=self._log_partition,
@@ -339,7 +341,11 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: np.dot(x, self.density(parametrization, x)) if x in self._support else 0,
+                lambda x: (
+                    np.dot(x, self.density(parametrization, x))
+                    if np.array([x]) in self._support
+                    else 0
+                ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
 
@@ -355,7 +361,9 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             if hasattr(x, "__len__"):
                 dimension_size = len(x)
             return nquad(
-                lambda x: x**2 * self.density(parametrization, x) if x in self._support else 0,
+                lambda x: (
+                    x**2 * self.density(parametrization, x) if np.array([x]) in self._support else 0
+                ),
                 [(float("-inf"), float("inf"))] * dimension_size,
             )[0]
 
@@ -394,7 +402,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         posterior_effective_sample_size = parametrizaiton.effective_sample_size
         if hasattr(sample, "__iter__") and not isinstance(sample, str):
             posterior_effective_suff_stat_value += np.sum(
-                [self._sufficient(x) for x in sample],  # type: ignore[arg-type]
+                [self._sufficient(x) for x in sample],
                 axis=0,
             )
             posterior_effective_sample_size += len(sample)
@@ -424,13 +432,13 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
         def conjugate_log_partition(
             parametrization: ExponentialConjugateHyperparameters,
-        ) -> NumberParameter:
+        ) -> NumericArray:
             conjugate_value = self.conjugate_prior_family._log_partition(
                 parametrization.transform_to_base_parametrization().theta
             )
             return np.exp(conjugate_value)
 
-        def posterior_density(parametrization: Parametrization, x: NumberParameter) -> Number:
+        def posterior_density(parametrization: Parametrization, x: NumericArray) -> Number:
             parametrization = cast(ExponentialConjugateHyperparameters, parametrization)
             return cast(
                 np.float32,

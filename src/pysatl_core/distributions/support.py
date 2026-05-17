@@ -32,7 +32,6 @@ from pysatl_core.types import (
     Interval1D,
     IntervalND,
     Number,
-    NumberParameter,
     NumericArray,
 )
 
@@ -63,7 +62,8 @@ class ContinuousSupport(Interval1D, Support):
     """
 
 
-class ContinuousNDSupport(IntervalND, Support):
+# Support want to have Number as a parameter of contains, but we decided that we should avoid this
+class ContinuousNDSupport(IntervalND, Support):  # type: ignore[misc]
     """
     Support for continuous distributions represented as an array of intervals.
 
@@ -455,18 +455,18 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
 
 @dataclass(slots=True)
 class SupportByPredicate(Support):
-    predicate: Callable[[NumberParameter], bool]
+    predicate: Callable[[NumericArray], bool]
 
     @overload
     def contains(self, x: Number) -> bool: ...
     @overload
     def contains(self, x: NumericArray) -> BoolArray: ...
 
-    def contains(self, x: NumberParameter) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:  # type: ignore[misc]
         return self.predicate(x)
 
     def __contains__(self, item: object) -> bool | BoolArray:
-        return self.contains(cast(NumberParameter, item))
+        return self.contains(cast(NumericArray, item))
 
 
 __all__ = [
