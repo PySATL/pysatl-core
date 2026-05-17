@@ -385,20 +385,26 @@ class ParametricFamily:
 
         parameters = parametrization_class(**parameters_values)
         parameters.validate()
-        base_parameters = self.to_base(parameters)
         registry = ParametricFamilyRegister()
-        optimized_family = registry.get_optimal_family(self.name, parameters)
-        if optimized_family is not None:
-            edge, new_family = optimized_family
-            new_parametrization = edge.transform_parametrization(parameters)
 
-            return new_family.distribution(
-                parametrization_name=None,
+        optimal_result = registry.get_optimal_family(self.name, parameters)
+        if optimal_result is not None:
+            optimal_family, optimal_parametrization = optimal_result
+            distribution_type = optimal_family._distr_type(optimal_parametrization)
+            analytical_computations = optimal_family._build_analytical_computations(
+                optimal_parametrization
+            )
+            return ParametricFamilyDistribution(
+                family_name=optimal_family.name,
+                distribution_type=distribution_type,
+                analytical_computations=analytical_computations,
+                parametrization=optimal_parametrization,
+                support=optimal_family.support_resolver(optimal_parametrization),
                 sampling_strategy=sampling_strategy,
                 computation_strategy=computation_strategy,
-                **new_parametrization.parameters,
             )
 
+        base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
         analytical_computations = self._build_analytical_computations(parameters)
         return ParametricFamilyDistribution(
