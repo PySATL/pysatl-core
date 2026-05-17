@@ -8,10 +8,14 @@ application.
 
 from __future__ import annotations
 
+from pysatl_core.families.fixed_parametrization_edge import EdgeWithFixedParametrization
+from pysatl_core.families.parametrizations import Parametrization
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,13 +34,48 @@ class ParametricFamilyRegister:
 
     _instance: ClassVar[ParametricFamilyRegister | None] = None
     _registered_families: dict[str, ParametricFamily]
+    _registered_transformations: dict[str, list[EdgeWithFixedParametrization]]
 
     def __new__(cls) -> ParametricFamilyRegister:
         """Create or return the singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._registered_families = {}
+            cls._instance._registered_transformations = {}
         return cls._instance
+
+    @classmethod
+    def get_optimal_family(
+        cls, name: str, parametrization: Parametrization
+    ) -> None | tuple[EdgeWithFixedParametrization, ParametricFamily]:
+        self = cls()
+
+        for optimization_edge in self._registered_transformations.get(name, []):
+            if (
+                optimization_edge.tail_name in self._registered_families
+                and optimization_edge.is_transoform_possible(parametrization)
+            ):
+                return optimization_edge, self._registered_families[optimization_edge.tail_name]
+
+        return None
+
+    @classmethod
+    def add_optimization_edge(
+        cls,
+        head_name: str,
+        tail_name: str,
+        transform_constraint: Callable[[Parametrization], bool],
+        transform_function: Callable[[Parametrization], Parametrization],
+    ) -> bool:
+        self = cls()
+
+        if head_name in self._registered_families:
+            self._registered_transformations.setdefault(head_name, []).append(
+                EdgeWithFixedParametrization(tail_name, transform_constraint, transform_function)
+            )
+            return True
+
+        return False
 
     @classmethod
     def get(cls, name: str) -> ParametricFamily:
