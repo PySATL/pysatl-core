@@ -8,16 +8,24 @@ application.
 
 from __future__ import annotations
 
+from pysatl_core.families.parametrizations import Parametrization
+from pysatl_core.families.registry_graph import (
+    BinaryOperationType,
+    RegistryGraphTransformations,
+)
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov, Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import ClassVar
 
     from pysatl_core.families.parametric_family import ParametricFamily
+    from pysatl_core.types import Number, NumericArray
 
 
 class ParametricFamilyRegister:
@@ -30,13 +38,109 @@ class ParametricFamilyRegister:
 
     _instance: ClassVar[ParametricFamilyRegister | None] = None
     _registered_families: dict[str, ParametricFamily]
+    _registry_graph: RegistryGraphTransformations
 
     def __new__(cls) -> ParametricFamilyRegister:
         """Create or return the singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._registered_families = {}
+            cls._instance._registry_graph = RegistryGraphTransformations()
         return cls._instance
+
+    @classmethod
+    def get_optimal_family(
+        cls, name: str, parametrization: Parametrization
+    ) -> tuple[ParametricFamily, Parametrization] | None:
+        self = cls()
+        if name not in self._registered_families:
+            return None
+
+        family_name, new_parametrization = self._registry_graph.get_optimal_parametrization(
+            name, parametrization
+        )
+        return self.get(family_name), new_parametrization
+
+    @classmethod
+    def get_optimal_density(
+        cls, name: str
+    ) -> None | tuple[ParametricFamily, Callable[[Number | NumericArray], Number | NumericArray]]:
+        self = cls()
+        if name not in self._registered_families:
+            return None
+
+        family_name, transform_function = self._registry_graph.get_optimal_transoformation(name)
+        return self.get(family_name), transform_function
+
+    @classmethod
+    def add_binary_transformation(
+        cls,
+        left: str,
+        right: str,
+        result: str,
+        operation: BinaryOperationType,
+        parametrization_transformation: Callable[
+            [Parametrization, Parametrization], Parametrization
+        ],
+    ) -> bool:
+        self = cls()
+        return self._registry_graph.add_binary_transformation(
+            left, right, result, operation, parametrization_transformation
+        )
+
+    @classmethod
+    def find_binary_transformation(
+        cls, left: str, right: str, operation: BinaryOperationType
+    ) -> (
+        None
+        | tuple[ParametricFamily, Callable[[Parametrization, Parametrization], Parametrization]]
+    ):
+        self = cls()
+        transformation = self._registry_graph.find_binary_transform(left, right, operation)
+
+        if transformation is None:
+            return transformation
+
+        family = self._registered_families.get(transformation.result, None)
+        if family is None:
+            return family
+
+        return family, transformation.transformation
+
+    @classmethod
+    def register_parametrization_transformation(
+        cls,
+        head_name: str,
+        tail_name: str,
+        transform_constraint: Callable[[Parametrization], bool],
+        transform_function: Callable[[Parametrization], Parametrization],
+    ) -> bool:
+        self = cls()
+
+        if head_name in self._registered_families and tail_name in self._registered_families:
+            self._registry_graph.register_parametrization_transformation(
+                head_name, tail_name, transform_constraint, transform_function
+            )
+            return True
+
+        return False
+
+    @classmethod
+    def register_density_transformation(
+        cls,
+        head_name: str,
+        tail_name: str,
+        transform_function: Callable[[Number | NumericArray], Number | NumericArray],
+    ) -> bool:
+        self = cls()
+
+        if head_name in self._registered_families and tail_name in self._registered_families:
+            self._registry_graph.register_density_transformation(
+                head_name, tail_name, transform_function
+            )
+            return True
+
+        return False
 
     @classmethod
     def get(cls, name: str) -> ParametricFamily:
@@ -64,7 +168,7 @@ class ParametricFamilyRegister:
         return self._registered_families[name]
 
     @classmethod
-    def register(cls, family: ParametricFamily) -> None:
+    def register(cls, family: ParametricFamily, temperature: int = 128) -> None:
         """
         Register a new parametric family.
 
@@ -79,9 +183,16 @@ class ParametricFamilyRegister:
             If a family with the same name is already registered.
         """
         self = cls()
+        self._change_family_temperature(family.name, temperature)
+
         if family.name in self._registered_families:
             raise ValueError(f"Family {family.name} already found in register")
         self._registered_families[family.name] = family
+
+    @classmethod
+    def _change_family_temperature(cls, family_name: str, new_temperature: int) -> None:
+        self = cls()
+        self._registry_graph.register_family_temperature(family_name, new_temperature)
 
     @classmethod
     def contains(cls, name: str) -> bool:

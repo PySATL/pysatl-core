@@ -7,10 +7,15 @@ created from parametric families.
 
 from __future__ import annotations
 
+import dataclasses
+
+from pysatl_core.families.registry_graph import BinaryOperationType
+
 __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from types import NotImplementedType
 from typing import TYPE_CHECKING
 
 from pysatl_core.distributions.distribution import _KEEP, Distribution
@@ -193,3 +198,112 @@ class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
             the sampling strategy.
         """
         return self.sampling_strategy.sample(n, distr=self, **options)
+
+    def _try_to_transform_with_optimization(
+        self, other: ParametricFamilyDistribution, kind: BinaryOperationType
+    ) -> None | ParametricFamilyDistribution:
+        registry = ParametricFamilyRegister()
+        transform_result = registry.find_binary_transformation(
+            self.family_name, other.family_name, kind
+        )
+        if transform_result is None:
+            return None
+
+        family, transform_parametrization = transform_result
+        new_parametrization = transform_parametrization(
+            self.parametrization.transform_to_base_parametrization(),
+            other.parametrization.transform_to_base_parametrization(),
+        )
+        return family(new_parametrization.name, **dataclasses.asdict(new_parametrization))  # type:ignore[call-overload]
+
+    def __add__(
+        self, other: object
+    ) -> ParametricFamilyDistribution | Distribution | NotImplementedType:
+        """Return ``self + other`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = self._try_to_transform_with_optimization(
+                other, BinaryOperationType.ADD
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__add__(self, other)
+
+    def __radd__(
+        self, other: object
+    ) -> ParametricFamilyDistribution | Distribution | NotImplementedType:
+        """Return ``other + self`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = other._try_to_transform_with_optimization(
+                self, BinaryOperationType.ADD
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__radd__(self, other)
+
+    def __sub__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``self - other`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = self._try_to_transform_with_optimization(
+                other, BinaryOperationType.SUB
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__sub__(self, other)
+
+    def __rsub__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``other - self`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = other._try_to_transform_with_optimization(
+                self, BinaryOperationType.SUB
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__rsub__(self, other)
+
+    def __mul__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``self * other`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = self._try_to_transform_with_optimization(
+                other, BinaryOperationType.MUL
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__mul__(self, other)
+
+    def __rmul__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``other * self`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = other._try_to_transform_with_optimization(
+                self, BinaryOperationType.MUL
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__rmul__(self, other)
+
+    def __truediv__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``self / other`` for scalar or distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = self._try_to_transform_with_optimization(
+                other, BinaryOperationType.DIV
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__truediv__(self, other)
+
+    def __rtruediv__(self, other: object) -> Distribution | NotImplementedType:
+        """Return ``other / self`` for distribution operands."""
+        if isinstance(other, ParametricFamilyDistribution):
+            transformation_result = other._try_to_transform_with_optimization(
+                self, BinaryOperationType.DIV
+            )
+            if transformation_result is not None:
+                return transformation_result
+
+        return TransformationOperatorsMixin.__rtruediv__(self, other)

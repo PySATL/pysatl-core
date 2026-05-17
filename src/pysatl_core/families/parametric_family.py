@@ -23,6 +23,7 @@ import numpy as np
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization, ParametrizationConstraint
+from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.types import (
     DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
     ComputationFunc,
@@ -384,6 +385,25 @@ class ParametricFamily:
 
         parameters = parametrization_class(**parameters_values)
         parameters.validate()
+        registry = ParametricFamilyRegister()
+
+        optimal_result = registry.get_optimal_family(self.name, parameters)
+        if optimal_result is not None:
+            optimal_family, optimal_parametrization = optimal_result
+            distribution_type = optimal_family._distr_type(optimal_parametrization)
+            analytical_computations = optimal_family._build_analytical_computations(
+                optimal_parametrization
+            )
+            return ParametricFamilyDistribution(
+                family_name=optimal_family.name,
+                distribution_type=distribution_type,
+                analytical_computations=analytical_computations,
+                parametrization=optimal_parametrization,
+                support=optimal_family.support_resolver(optimal_parametrization),
+                sampling_strategy=sampling_strategy,
+                computation_strategy=computation_strategy,
+            )
+
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
         analytical_computations = self._build_analytical_computations(parameters)
