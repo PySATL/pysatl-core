@@ -233,9 +233,6 @@ def configure_exponential_family() -> None:
         The derivative with respect to λ is:
             ∂/∂λ log f = 1/λ - x   (for x ≥ 0).
 
-        For points x < 0 the density is zero; we return 0 for numerical stability
-        (though the score is technically undefined there).
-
         Parameters
         ----------
         parameters : Parametrization
@@ -248,12 +245,21 @@ def configure_exponential_family() -> None:
         NumericArray
             Gradient array of shape (..., 1) where the last axis corresponds to
             d(log f)/d(lambda_).
+
+        Raises
+        ------
+        ValueError
+            If any element of x is negative or non‑finite (inf or nan),
+            i.e., outside the support [0, ∞).
         """
         params = cast(_Rate, parameters)
         lam = params.lambda_
-        inside = x >= 0
-        grad = np.where(inside, 1.0 / lam - x, 0.0)
-        return grad[..., np.newaxis]  # shape (..., 1)
+        if np.any(x < 0) or np.any(~np.isfinite(x)):
+            raise ValueError(
+                f"Score is undefined for x < 0 or non‑finite x (outside support). Got x = {x}"
+            )
+        grad = 1.0 / lam - x
+        return grad[..., np.newaxis]
 
     Exponential = ParametricFamily(
         name=FamilyName.EXPONENTIAL,

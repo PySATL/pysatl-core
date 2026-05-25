@@ -438,6 +438,13 @@ class ParametricFamily:
         NumericArray
             Gradient with respect to the parameters of the given parametrization.
             Shape is (..., d), where d is the number of parameters of the parametrization.
+
+        Raises
+        ------
+        ValueError
+            If this family does not provide a score implementation. Family-specific
+            score implementations may also raise ValueError when the score is undefined
+            for the supplied evaluation points, such as points outside support.
         """
         if self._base_score is None:
             raise ValueError(
