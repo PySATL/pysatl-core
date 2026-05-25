@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from math import inf
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.computations.computation import (
@@ -179,13 +179,7 @@ class Interval1D:
         if self.right == inf and self.right_closed:
             object.__setattr__(self, "right_closed", False)
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are contained in the interval.
 
@@ -209,10 +203,6 @@ class Interval1D:
             return bool(result)
 
         return result
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a single point is in the interval."""
-        return bool(self.contains(cast(Number, x)))
 
     @property
     def is_empty(self) -> bool:
@@ -259,7 +249,7 @@ class IntervalND:
         def contains_for_point(point: NumericArray) -> bool:
             assert len(point) == len(self.intervals)
             return all(
-                x_coordinate in interval
+                bool(interval.contains(np.asarray(x_coordinate)))
                 for interval, x_coordinate in zip(self.intervals, point, strict=True)
             )
 
@@ -267,10 +257,6 @@ class IntervalND:
             return contains_for_point(x)
 
         return np.array([contains_for_point(point) for point in x])
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a single point is in the interval."""
-        return bool(self.contains(cast(NumericArray, x)))
 
 
 type GenericCharacteristicName = str
@@ -339,8 +325,6 @@ class CharacteristicName(StrEnum):
     CDF = "cdf"
     PPF = "ppf"
     PMF = "pmf"
-    MEAN_DEFAULT = "MEAN_DEFAULT"  # defined in class implementation of mean
-    VAR_DEFAULT = "VAR_DEFAULT"  # defined in class implementation of var
     LPDF = "lpdf"  # unimplemented in graph yet
     CF = "cf"  # unimplemented in graph yet
     SF = "sf"  # unimplemented in graph yet

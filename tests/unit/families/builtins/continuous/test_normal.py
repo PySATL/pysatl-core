@@ -226,9 +226,9 @@ class TestNormalFamily(BaseDistributionTest):
         assert not dist.support.left_closed
         assert not dist.support.right_closed
 
-        assert dist.support.contains(0) is True
-        assert dist.support.contains(float("inf")) is False
-        assert dist.support.contains(float("-inf")) is False
+        assert dist.support.contains(np.asarray(0)) is True
+        assert dist.support.contains(np.asarray(float("inf"))) is False
+        assert dist.support.contains(np.asarray(float("-inf"))) is False
 
         test_points = np.array([-500, 0, 5])
         results = dist.support.contains(test_points)

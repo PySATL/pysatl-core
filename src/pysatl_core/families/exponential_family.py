@@ -22,23 +22,26 @@ from scipy.linalg import det
 
 from pysatl_core.distributions.support import (
     ContinuousSupport,
-    SupportByPredicate,
+    PredicateSupport,
 )
 from pysatl_core.families.parametric_family import ParametricFamily
-from pysatl_core.families.parametrizations import Parametrization, parametrization
+from pysatl_core.families.parametrizations import Parametrization, constraint, parametrization
 from pysatl_core.types import (
     CharacteristicName,
     DistributionType,
-    GenericCharacteristicName,
+    Number,
+    NumericArray,
     ParametrizationName,
     UnivariateContinuous,
 )
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.support import Support
-    from pysatl_core.types import Number, NumericArray
+    from pysatl_core.families.parametric_family import (
+        CharacteristicsMap,
+        ParametricFamilyCharacteristic,
+    )
 
-    type ParametrizedFunction = Callable[[Parametrization, Any], Any]
     type SupportArg = Callable[[Parametrization], Support | None] | None
 
 
@@ -97,7 +100,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
     Representation of a continuous exponential family distribution.
 
     The density is given by:
-        f(x|θ) = h(x) * exp(θᵀ T(x) - A(θ))
+        f(x|θ) = h(x) * exp(θᵀ T(x) + A(θ))
 
     where:
         - θ is the natural parameter,
@@ -123,12 +126,13 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         log_partition: Callable[[NumericArray], NumericArray],
         sufficient_statistics: Callable[[NumericArray], NumericArray],
         normalization_constant: Callable[[NumericArray], Number],
-        support: SupportByPredicate,
-        parameter_space: SupportByPredicate,
-        sufficient_statistics_values: SupportByPredicate,
-        name: str = "ExponentialFamily",
+        support: Support,
+        parameter_space: Support,
+        sufficient_statistics_values: Support,
+        name: str,
         distr_type: DistributionType | Callable[[Parametrization], DistributionType],
         distr_parametrizations: list[ParametrizationName],
+        distr_characteristics: CharacteristicsMap | None = None,
         support_by_parametrization: SupportArg = None,
         base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
     ):
@@ -145,6 +149,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             name: Name of the family.
             distr_type: Type of distribution or a callable returning it.
             distr_parametrizations: List of parametrization names this family supports.
+            distr_characteristics: Additional analytical characteristics to register.
             support_by_parametrization: Callable that returns the support given a parametrization.
             base_score: Optional base score function.
         """
@@ -156,28 +161,33 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         self._parameter_space = parameter_space
         self._sufficient_statistics_values = sufficient_statistics_values
 
-        distr_characteristics: dict[
-            GenericCharacteristicName,
-            dict[ParametrizationName, ParametrizedFunction] | ParametrizedFunction,
-        ] = {
+        family_characteristics: CharacteristicsMap = {
             CharacteristicName.PDF: self.density,
-            CharacteristicName.MEAN_DEFAULT: self._mean,
-            CharacteristicName.VAR_DEFAULT: self._var,
+            CharacteristicName.MEAN: self._mean,
+            CharacteristicName.VAR: self._var,
         }
+        merged_characteristics = dict(distr_characteristics or {})
+        merged_characteristics.update(family_characteristics)
 
         ParametricFamily.__init__(
             self,
             name=name,
             distr_type=distr_type,
             distr_parametrizations=distr_parametrizations,
-            distr_characteristics=distr_characteristics,
+            distr_characteristics=merged_characteristics,
             support_by_parametrization=support_by_parametrization,
             base_score=base_score,
         )
-        parametrization(family=self, name="theta")(ExponentialFamilyParametrization)
+
+        @parametrization(family=self, name="theta")
+        class ThetaParametrization(ExponentialFamilyParametrization):
+            @constraint(description="theta belongs to parameter_space")
+            def check_theta_in_parameter_space(self) -> bool:
+                theta = np.atleast_1d(np.asarray(self.theta, dtype=float))
+                return bool(self.__family__._parameter_space.contains(theta))  # type: ignore[attr-defined]
 
     @property
-    def log_density(self) -> ParametrizedFunction:
+    def log_density(self) -> ParametricFamilyCharacteristic[NumericArray, Number]:
         """
         Log‑density function for the exponential family.
 
@@ -191,7 +201,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         def log_density_func(parametrization: Parametrization, x: NumericArray) -> Number:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
             parametrization = parametrization.transform_to_base_parametrization()
-            if np.array([x]) not in self._support:
+            if not self._support.contains(np.array([x])):
                 return -np.inf
 
             theta = parametrization.theta
@@ -206,14 +216,19 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         return log_density_func
 
     @property
-    def density(self) -> ParametrizedFunction:
+    def density(self) -> ParametricFamilyCharacteristic[NumericArray, Number]:
         """
         Density function (exponentiated log‑density).
 
         Returns:
             Callable[[Parametrization, NumericArray], Number]
         """
-        return lambda parametrization, x: np.exp(self.log_density(parametrization, x))
+        log_density = cast(Callable[[Parametrization, NumericArray], Number], self.log_density)
+
+        def density_func(parametrization: Parametrization, x: NumericArray) -> Number:
+            return cast(Number, np.exp(log_density(parametrization, x)))
+
+        return density_func
 
     @property
     def conjugate_prior_family(self) -> ContinuousExponentialClassFamily:
@@ -235,7 +250,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             if not hasattr(theta, "__len__"):
                 theta = np.array([theta])
 
-            if theta not in self._parameter_space:
+            if not self._parameter_space.contains(theta):
                 return np.full(len(theta) + 1, float("-inf"))
             return np.append(theta, self._log_partition(theta))
 
@@ -255,10 +270,13 @@ class ContinuousExponentialClassFamily(ParametricFamily):
                     ).item(),
                 )
 
-            all_value = nquad(
-                lambda x: pdf(x) if x in self._parameter_space else 0,  # type: ignore[arg-type]
-                [(float("-inf"), float("+inf"))],
-            )[0]
+            def integrand(x: float) -> float:
+                theta = np.asarray([x], dtype=float)
+                if not self._parameter_space.contains(theta):
+                    return 0.0
+                return float(pdf(theta))
+
+            all_value = nquad(integrand, [(float("-inf"), float("+inf"))])[0]
             return np.array([cast(np.float64, -np.log(all_value))])
 
         def conjugate_sufficient_accepts(
@@ -267,8 +285,8 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             xi = theta[:-1]
             nu = theta[-1]
 
-            return xi in self._sufficient_statistics_values and np.array([nu]) in ContinuousSupport(
-                0, np.inf
+            return bool(self._sufficient_statistics_values.contains(xi)) and bool(
+                ContinuousSupport(0, np.inf).contains(np.array([nu]))
             )
 
         return ContinuousExponentialClassFamily(
@@ -277,7 +295,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             normalization_constant=lambda _: 1,
             support=self._parameter_space,
             sufficient_statistics_values=self._parameter_space,
-            parameter_space=SupportByPredicate(predicate=conjugate_sufficient_accepts),
+            parameter_space=PredicateSupport(predicate=conjugate_sufficient_accepts),
             name=self.name,
             distr_type=self._distr_type,
             distr_parametrizations=self.parametrization_names,
@@ -292,12 +310,12 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         Transform the random variable by a monotonic, differentiable function.
 
         The new density is obtained via the change‑of‑variable formula.
-        The sufficient statistic becomes T(transform⁻¹(x)) and the base measure
+        The sufficient statistic becomes T(transform(x)) and the base measure
         gains the Jacobian factor.
 
         Args:
-            transform_function: Invertible, differentiable function g(x) such that
-                y = g(x). Must be defined on the original support.
+            transform_function: Invertible, differentiable function g(y) such that
+                x = g(y). Must be defined on the original support.
 
         Returns:
             ContinuousExponentialClassFamily: A new family for the transformed variable.
@@ -305,12 +323,14 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
         def calculate_jacobian(x: NumericArray) -> NumericArray:
             if not isinstance(x, Iterable):
-                x = np.array([x])
+                x = np.array([x], dtype=float)
+            else:
+                x = np.atleast_1d(np.asarray(x, dtype=float))
 
             return np.abs(det(jacobian(transform_function, x).df))
 
         def new_support(x: NumericArray) -> bool:
-            return transform_function(x) in self._support
+            return bool(self._support.contains(transform_function(x)))
 
         def new_sufficient(x: NumericArray) -> NumericArray:
             return self._sufficient(transform_function(x))
@@ -322,7 +342,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             log_partition=self._log_partition,
             sufficient_statistics=new_sufficient,
             normalization_constant=new_normalization,
-            support=SupportByPredicate(predicate=new_support),
+            support=PredicateSupport(predicate=new_support),
             parameter_space=self._parameter_space,
             sufficient_statistics_values=self._sufficient_statistics_values,
             name=f"Transformed{self._name}",
@@ -332,50 +352,50 @@ class ContinuousExponentialClassFamily(ParametricFamily):
         )
 
     @property
-    def _mean(self) -> ParametrizedFunction:
+    def _mean(self) -> ParametricFamilyCharacteristic[Any, Any]:
         """Compute the mean E[X] by numerical integration over the density."""
 
-        def mean_func(parametrization: Parametrization, x: Any) -> Any:
+        def mean_func(parametrization: Parametrization) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            dimension_size = 1
-            if hasattr(x, "__len__"):
-                dimension_size = len(x)
+            density = cast(Callable[[Parametrization, NumericArray], Number], self.density)
             return nquad(
                 lambda x: (
-                    np.dot(x, self.density(parametrization, x))
-                    if np.array([x]) in self._support
+                    np.dot(x, density(parametrization, x))
+                    if self._support.contains(np.array([x]))
                     else 0
                 ),
-                [(float("-inf"), float("inf"))] * dimension_size,
+                [(float("-inf"), float("inf"))],
             )[0]
 
         return mean_func
 
     @property
-    def _second_moment(self) -> ParametrizedFunction:
+    def _second_moment(self) -> ParametricFamilyCharacteristic[Any, Any]:
         """Compute the second moment E[X²] by numerical integration."""
 
-        def func(parametrization: Parametrization, x: Any) -> Any:
+        def func(parametrization: Parametrization) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            dimension_size = 1
-            if hasattr(x, "__len__"):
-                dimension_size = len(x)
+            density = cast(Callable[[Parametrization, NumericArray], Number], self.density)
             return nquad(
                 lambda x: (
-                    x**2 * self.density(parametrization, x) if np.array([x]) in self._support else 0
+                    x**2 * density(parametrization, x)
+                    if self._support.contains(np.array([x]))
+                    else 0
                 ),
-                [(float("-inf"), float("inf"))] * dimension_size,
+                [(float("-inf"), float("inf"))],
             )[0]
 
         return func
 
     @property
-    def _var(self) -> ParametrizedFunction:
+    def _var(self) -> ParametricFamilyCharacteristic[Any, Any]:
         """Compute the variance Var[X] = E[X²] - (E[X])²."""
 
-        def func(parametrization: Parametrization, x: Any) -> Any:
+        def func(parametrization: Parametrization) -> Any:
             parametrization = cast(ExponentialFamilyParametrization, parametrization)
-            return self._second_moment(parametrization, x) - self._mean(parametrization, x) ** 2
+            second_moment = cast(Callable[[Parametrization], Any], self._second_moment)
+            mean = cast(Callable[[Parametrization], Any], self._mean)
+            return second_moment(parametrization) - mean(parametrization) ** 2
 
         return func
 
@@ -398,17 +418,20 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             ExponentialConjugateHyperparameters:
                 Updated hyperparameters after incorporating the sample.
         """
-        posterior_effective_suff_stat_value = parametrizaiton.effective_suff_stat_value
-        posterior_effective_sample_size = parametrizaiton.effective_sample_size
+
         if hasattr(sample, "__iter__") and not isinstance(sample, str):
-            posterior_effective_suff_stat_value += np.sum(
+            posterior_effective_suff_stat_value = np.array(
+                parametrizaiton.effective_suff_stat_value
+            ) + np.sum(
                 [self._sufficient(x) for x in sample],
                 axis=0,
             )
-            posterior_effective_sample_size += len(sample)
+            posterior_effective_sample_size = parametrizaiton.effective_sample_size + len(sample)
         else:
-            posterior_effective_suff_stat_value += self._sufficient(sample)  # type: ignore[arg-type]
-            posterior_effective_sample_size += 1
+            posterior_effective_suff_stat_value = np.array(
+                parametrizaiton.effective_suff_stat_value,
+            ) + np.asarray(self._sufficient(sample))  # type: ignore[arg-type]
+            posterior_effective_sample_size = parametrizaiton.effective_sample_size + 1
 
         return ExponentialConjugateHyperparameters(
             effective_suff_stat_value=posterior_effective_suff_stat_value,
@@ -445,9 +468,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
                 self._normalization(x)
                 * conjugate_log_partition(parametrization)
                 / conjugate_log_partition(
-                    self.posterior_hyperparameters(
-                        parametrizaiton=parametrization, sample=[self._sufficient(x)]
-                    )
+                    self.posterior_hyperparameters(parametrizaiton=parametrization, sample=[x])
                 ),
             )
 

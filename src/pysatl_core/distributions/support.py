@@ -21,7 +21,6 @@ from typing import (
     TYPE_CHECKING,
     Protocol,
     cast,
-    overload,
     runtime_checkable,
 )
 
@@ -47,10 +46,7 @@ class Support(Protocol):
     Support defines the set of values where a distribution is defined.
     """
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
+    def contains(self, x: NumericArray) -> bool | BoolArray: ...
 
 
 class ContinuousSupport(Interval1D, Support):
@@ -62,8 +58,7 @@ class ContinuousSupport(Interval1D, Support):
     """
 
 
-# Support want to have Number as a parameter of contains, but we decided that we should avoid this
-class ContinuousNDSupport(IntervalND, Support):  # type: ignore[misc]
+class ContinuousNDSupport(IntervalND, Support):
     """
     Support for continuous distributions represented as an array of intervals.
 
@@ -151,12 +146,7 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
 
         self._points = arr[unique_mask]
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are in the support.
 
@@ -184,10 +174,6 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
         if np.ndim(arr) == 0:
             return bool(result)
         return cast(BoolArray, result)
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a point is in the support."""
-        return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[Number]:
         """Iterate through all points in the support."""
@@ -275,12 +261,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         if self.modulus <= 0:
             raise ValueError("modulus must be a positive integer.")
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are in the integer lattice support.
 
@@ -305,10 +286,6 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         if np.ndim(xf) == 0:
             return bool(result)
         return cast(BoolArray, result)
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a point is in the integer lattice support."""
-        return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[int]:
         """
@@ -453,20 +430,12 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     __iter__ = iter_points
 
 
-@dataclass(slots=True)
-class SupportByPredicate(Support):
-    predicate: Callable[[NumericArray], bool]
+@dataclass(frozen=True, slots=True)
+class PredicateSupport(Support):
+    predicate: Callable[[NumericArray], bool | BoolArray]
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: NumericArray) -> bool | BoolArray:  # type: ignore[misc]
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         return self.predicate(x)
-
-    def __contains__(self, item: object) -> bool | BoolArray:
-        return self.contains(cast(NumericArray, item))
 
 
 __all__ = [
@@ -474,7 +443,7 @@ __all__ = [
     "Support",
     "ContinuousSupport",
     "ContinuousNDSupport",
-    "SupportByPredicate",
+    "PredicateSupport",
     # Discrete support protocol and implementations
     "DiscreteSupport",
     "ExplicitTableDiscreteSupport",
