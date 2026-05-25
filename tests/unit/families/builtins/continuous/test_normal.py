@@ -352,6 +352,14 @@ class TestNormalFamily(BaseDistributionTest):
         assert grad.dtype == float
         assert not np.any(np.isnan(grad))
 
+    @pytest.mark.parametrize("bad_x", [np.inf, -np.inf, np.nan])
+    def test_score_raises_for_nonfinite_x(self, bad_x):
+        """Test that SCORE raises ValueError for non-finite x (inf, nan)."""
+        mu, sigma = 2.0, 1.5
+        dist = self.normal_family(mu=mu, sigma=sigma)
+        with pytest.raises(ValueError, match="Score is undefined for non‑finite x"):
+            dist.family.score(dist.parametrization, np.array([bad_x]))
+
 
 class TestNormalFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions."""

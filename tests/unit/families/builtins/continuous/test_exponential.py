@@ -273,6 +273,21 @@ class TestExponentialFamily(BaseDistributionTest):
         assert grad.shape == (len(x), 1)
         assert grad.dtype == float
 
+    @pytest.mark.parametrize("bad_x", [np.inf, -np.inf, np.nan])
+    def test_score_raises_for_nonfinite_x(self, bad_x):
+        """Test that SCORE raises ValueError for non-finite x (inf, nan)."""
+        lam = 0.5
+        dist = self.exponential_family(lambda_=lam)
+        with pytest.raises(ValueError, match="Score is undefined for x < 0 or non‑finite x"):
+            dist.family.score(dist.parametrization, np.array([bad_x]))
+
+    def test_score_raises_for_x_outside_support(self):
+        lam = 0.5
+        dist = self.exponential_family(lambda_=lam)
+        x_bad = np.array([-0.1, -1.0])
+        with pytest.raises(ValueError, match="Score is undefined for x < 0"):
+            dist.family.score(dist.parametrization, x_bad)
+
 
 class TestExponentialFamilyEdgeCases(BaseDistributionTest):
     """Test edge cases and error conditions for exponential distribution."""

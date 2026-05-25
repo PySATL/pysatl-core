@@ -251,13 +251,21 @@ def configure_normal_family() -> None:
         -------
         NumericArray
             Gradient array of shape (..., 2).
+
+        Raises
+        ------
+        ValueError
+            If any element of x is non‑finite (inf or nan), i.e., outside the
+            real support of the normal distribution.
         """
         params = cast(_MeanStd, parameters)
         mu = params.mu
         sigma = params.sigma
 
-        z = (x - mu) / sigma
+        if np.any(~np.isfinite(x)):
+            raise ValueError(f"Score is undefined for non‑finite x (outside support). Got x = {x}")
 
+        z = (x - mu) / sigma
         grad_mu = z / sigma
         grad_sigma = (z * z - 1) / sigma
         return np.stack([grad_mu, grad_sigma], axis=-1)

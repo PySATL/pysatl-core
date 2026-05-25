@@ -272,8 +272,7 @@ def configure_uniform_family() -> None:
             ∂/∂a log f =  1/(b - a)
             ∂/∂b log f = -1/(b - a)
 
-        For points outside the support, the gradient is set to 0 (since density is zero,
-        but the score is typically considered undefined; we return 0 for numerical safety).
+        For points outside the support or non‑finite (inf, nan), raises ValueError.
 
         Parameters
         ----------
@@ -287,15 +286,26 @@ def configure_uniform_family() -> None:
         NumericArray
             Gradient array of shape (..., 2) where last axis corresponds to
             [d(log f)/d(lower_bound), d(log f)/d(upper_bound)].
+
+        Raises
+        ------
+        ValueError
+            If any element of x lies outside [lower_bound, upper_bound]
+            or is non‑finite (inf or nan).
         """
         params = cast(_Standard, parameters)
         a = params.lower_bound
         b = params.upper_bound
-        width = b - a
 
-        inside = (x >= a) & (x <= b)
-        grad_a = np.where(inside, 1.0 / width, 0.0)
-        grad_b = np.where(inside, -1.0 / width, 0.0)
+        # Reject non‑finite values before support check
+        if np.any(~np.isfinite(x)):
+            raise ValueError(f"Score is undefined for non‑finite x (outside support). Got x = {x}")
+        if np.any((x < a) | (x > b)):
+            raise ValueError(f"Score is undefined for x outside support [{a}, {b}]. Got x = {x}")
+
+        width = b - a
+        grad_a = np.full_like(x, 1.0 / width, dtype=np.float64)
+        grad_b = np.full_like(x, -1.0 / width, dtype=np.float64)
         return np.stack([grad_a, grad_b], axis=-1)
 
     Uniform = ParametricFamily(

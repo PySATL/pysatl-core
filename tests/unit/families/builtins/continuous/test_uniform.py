@@ -248,14 +248,11 @@ class TestUniformFamily(BaseDistributionTest):
         """Test SCORE for standard parametrization against analytical formula."""
         a, b = 2.0, 5.0
         dist = self.uniform_family(lower_bound=a, upper_bound=b)
-        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        x = np.array([2.0, 3.5, 5.0])
         grad = dist.family.score(dist.parametrization, x)
 
         width = b - a
-        inside = (x >= a) & (x <= b)
-        expected = np.stack(
-            [np.where(inside, 1.0 / width, 0.0), np.where(inside, -1.0 / width, 0.0)], axis=-1
-        )
+        expected = np.tile([1.0 / width, -1.0 / width], (len(x), 1))
 
         np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
 
@@ -263,17 +260,16 @@ class TestUniformFamily(BaseDistributionTest):
         """Test SCORE for meanWidth parametrization via chain rule."""
         mean, width = 3.5, 3.0  # corresponds to a=2, b=5
         dist = self.uniform_family(parametrization_name="meanWidth", mean=mean, width=width)
-        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        x = np.array([2.0, 3.5, 5.0])
         grad = dist.family.score(dist.parametrization, x)
 
-        a, b = 2.0, 5.0
-        inside = (x >= a) & (x <= b)
-        base_grad_a = np.where(inside, 1.0 / 3.0, 0.0)
-        base_grad_b = np.where(inside, -1.0 / 3.0, 0.0)
+        _a, _b = 2.0, 5.0
+        base_grad_a = 1.0 / 3.0
+        base_grad_b = -1.0 / 3.0
         # Transform to (mean, width)
         expected_mean = 0.5 * (base_grad_a + base_grad_b)
         expected_width = -base_grad_a + base_grad_b
-        expected = np.stack([expected_mean, expected_width], axis=-1)
+        expected = np.tile([expected_mean, expected_width], (len(x), 1))
 
         np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
 
@@ -283,17 +279,16 @@ class TestUniformFamily(BaseDistributionTest):
         dist = self.uniform_family(
             parametrization_name="minRange", minimum=minimum, range_val=range_val
         )
-        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        x = np.array([2.0, 3.5, 5.0])
         grad = dist.family.score(dist.parametrization, x)
 
-        a, b = 2.0, 5.0
-        inside = (x >= a) & (x <= b)
-        base_grad_a = np.where(inside, 1.0 / 3.0, 0.0)
-        base_grad_b = np.where(inside, -1.0 / 3.0, 0.0)
+        _a, _b = 2.0, 5.0
+        base_grad_a = 1.0 / 3.0
+        base_grad_b = -1.0 / 3.0
         # Transform to (minimum, range_val)
         expected_min = base_grad_a
         expected_range = -base_grad_a + base_grad_b
-        expected = np.stack([expected_min, expected_range], axis=-1)
+        expected = np.tile([expected_min, expected_range], (len(x), 1))
 
         np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
 
@@ -317,6 +312,17 @@ class TestUniformFamily(BaseDistributionTest):
         np.testing.assert_allclose(grad[0, 0], grad_a_num, rtol=1e-5)
         np.testing.assert_allclose(grad[0, 1], grad_b_num, rtol=1e-5)
 
+    def test_score_with_integer_x(self):
+        """Test that SCORE returns float gradient even for integer x."""
+        a, b = 2.0, 5.0
+        dist = self.uniform_family(lower_bound=a, upper_bound=b)
+        x_int = np.array([2, 3, 4, 5], dtype=int)
+        grad = dist.family.score(dist.parametrization, x_int)
+        assert grad.dtype == np.float64
+        width = b - a
+        expected = np.full((len(x_int), 2), [1.0 / width, -1.0 / width], dtype=np.float64)
+        np.testing.assert_allclose(grad, expected, rtol=self.CALCULATION_PRECISION)
+
     @pytest.mark.parametrize(
         "parametrization_name, params",
         [
@@ -327,11 +333,26 @@ class TestUniformFamily(BaseDistributionTest):
     )
     def test_score_shape(self, parametrization_name, params):
         """Test SCORE shape for all uniform parametrizations."""
-        x = np.array([1.0, 2.0, 3.5, 5.0, 6.0])
+        x = np.array([2.0, 3.5, 5.0])
         dist = self.uniform_family(parametrization_name=parametrization_name, **params)
         grad = dist.family.score(dist.parametrization, x)
         assert grad.shape == (len(x), 2)
         assert grad.dtype == float
+
+    @pytest.mark.parametrize("bad_x", [np.inf, -np.inf, np.nan])
+    def test_score_raises_for_nonfinite_x(self, bad_x):
+        """Test that SCORE raises ValueError for non-finite x (inf, nan)."""
+        a, b = 2.0, 5.0
+        dist = self.uniform_family(lower_bound=a, upper_bound=b)
+        with pytest.raises(ValueError, match="Score is undefined for non‑finite x"):
+            dist.family.score(dist.parametrization, np.array([bad_x]))
+
+    def test_score_raises_for_x_outside_support(self):
+        a, b = 2.0, 5.0
+        dist = self.uniform_family(lower_bound=a, upper_bound=b)
+        x_bad = np.array([1.0, 6.0])
+        with pytest.raises(ValueError, match="Score is undefined for x outside support"):
+            dist.family.score(dist.parametrization, x_bad)
 
 
 class TestUniformFamilyEdgeCases(BaseDistributionTest):
