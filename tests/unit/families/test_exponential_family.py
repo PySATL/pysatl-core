@@ -12,7 +12,10 @@ import pytest
 import scipy
 from numpy.testing import assert_allclose
 
-from pysatl_core.distributions.support import ContinuousNDSupport, PredicateSupport
+from pysatl_core.distributions.support import (
+    ContinuousNDSupport,
+    PredicateSupport,
+)
 from pysatl_core.families import (
     ContinuousExponentialClassFamily,
     ExponentialConjugateHyperparameters,
@@ -40,7 +43,9 @@ def exponential_log_partition(parametrization):
     return np.log(-parametrization)
 
 
-def _make_exponential_family() -> ContinuousExponentialClassFamily:
+def _make_exponential_family(
+    normalization_constant: Callable[[NumericArray], Number] = lambda _: 1,
+) -> ContinuousExponentialClassFamily:
     support_neg = PredicateSupport(
         predicate=lambda x: bool(
             ContinuousNDSupport(
@@ -59,7 +64,7 @@ def _make_exponential_family() -> ContinuousExponentialClassFamily:
         name="ExponentialFamily",
         log_partition=exponential_log_partition,
         sufficient_statistics=lambda x: x,
-        normalization_constant=lambda _: 1,
+        normalization_constant=normalization_constant,
         parameter_space=support_neg,
         sufficient_statistics_values=support_pos,
         support=support_pos,
@@ -182,6 +187,26 @@ def test_transform_with_negation_moves_support_and_preserves_density(
     assert transformed_log_density(params, np.asarray(2.0)) == -np.inf
 
 
+def test_transform_evaluates_base_measure_at_inverse_image() -> None:
+    family = _make_exponential_family(
+        normalization_constant=lambda x: cast(Number, np.asarray(x).item())
+    )
+    transformed = family.transform(lambda y: 2 * y)
+    params = ExponentialFamilyParametrization(theta=np.array([-1.5]))
+    transformed_log_density = cast(
+        Callable[[ExponentialFamilyParametrization, NumericArray], Number],
+        transformed.log_density,
+    )
+    log_density = cast(
+        Callable[[ExponentialFamilyParametrization, NumericArray], Number],
+        family.log_density,
+    )
+
+    assert transformed_log_density(params, np.asarray(1.0)) == pytest.approx(
+        log_density(params, np.asarray(2.0)) + np.log(2.0)
+    )
+
+
 def test_posterior_hyperparameters_updates_sample_without_mutating_input(
     exponential_family: ContinuousExponentialClassFamily,
 ) -> None:
@@ -206,8 +231,7 @@ def test_posterior_hyperparameters_accepts_single_observation(
         effective_sample_size=2.0,
     )
 
-    posterior = exponential_family.posterior_hyperparameters(prior, sample=0.5)  # type: ignore[arg-type]
-
+    posterior = exponential_family.posterior_hyperparameters(prior, sample=0.5)
     assert_allclose(posterior.effective_suff_stat_value, np.array([3.5]))
     assert posterior.effective_sample_size == 3.0
 
@@ -238,12 +262,27 @@ def test_posterior_predictive_matches_lomax_density(
         effective_sample_size=nu,
     )
     pdf = predictive.computation_strategy.query_method("pdf", distr=predictive)
-    x_values = np.array([0.0, 0.5, 1.5, 3.0, 6.0])
+    x_values = np.array([0.25, 0.5, 1.5, 3.0, 6.0])
 
     actual = np.asarray([pdf(x) for x in x_values], dtype=float).reshape(-1)
     expected = np.asarray([lomax_pdf(shape=nu + 1, scale=xi, x=x) for x in x_values])
 
     assert_allclose(actual, expected, rtol=1e-6)
+
+
+def test_posterior_predictive_preserves_observation_support(
+    exponential_family: ContinuousExponentialClassFamily,
+) -> None:
+    predictive = exponential_family.posterior_predictive.distribution(
+        parametrization_name="posterior",
+        effective_suff_stat_value=np.array([3.0]),
+        effective_sample_size=2.0,
+    )
+    pdf = predictive.computation_strategy.query_method("pdf", distr=predictive)
+
+    assert predictive.support is not None
+    assert not predictive.support.contains(np.array(-0.5))
+    assert pdf(-0.5) == 0.0
 
 
 @pytest.mark.parametrize(
