@@ -340,7 +340,7 @@ class ContinuousExponentialClassFamily(ParametricFamily):
 
     def transform(
         self,
-        transform_function: Callable[[NumericArray], NumericArray],
+        inverse_transform_function: Callable[[NumericArray], NumericArray],
     ) -> ContinuousExponentialClassFamily:
         """
         Transform the random variable by a monotonic, differentiable function.
@@ -368,18 +368,18 @@ class ContinuousExponentialClassFamily(ParametricFamily):
             else:
                 x = np.atleast_1d(np.asarray(x, dtype=float))
 
-            return np.abs(det(jacobian(transform_function, x).df))
+            return np.abs(det(jacobian(inverse_transform_function, x).df))
 
         def new_support(x: NumericArray) -> bool:
-            return bool(self._support.contains(np.asarray(transform_function(x))))
+            return bool(self._support.contains(np.asarray(inverse_transform_function(x))))
 
         def new_sufficient(x: NumericArray) -> NumericArray:
-            return self._sufficient(transform_function(x))
+            return self._sufficient(inverse_transform_function(x))
 
         def new_normalization(x: NumericArray) -> Number:
             return cast(
                 np.float64,
-                self._normalization(transform_function(x)) * calculate_jacobian(x),
+                self._normalization(inverse_transform_function(x)) * calculate_jacobian(x),
             )
 
         return ContinuousExponentialClassFamily(
