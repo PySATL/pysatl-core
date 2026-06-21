@@ -413,6 +413,7 @@ class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
     EXPONENTIAL = "Exponential"
+    PARETO = "Pareto"
 
 
 # ============================================================================

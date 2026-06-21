@@ -40,6 +40,7 @@ class TestConfiguration:
         expected_families = {
             FamilyName.NORMAL,
             FamilyName.CONTINUOUS_UNIFORM,
+            FamilyName.PARETO,
         }
 
         registered_families = set(self.registry._registered_families.keys())
@@ -78,4 +79,5 @@ class TestConfiguration:
         assert isinstance(families_list, list)
         assert FamilyName.NORMAL in families_list
         assert FamilyName.CONTINUOUS_UNIFORM in families_list
+        assert FamilyName.PARETO in families_list
         assert "NonExistentFamily" not in families_list
