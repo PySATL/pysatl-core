@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from math import inf
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.computations.computation import (
@@ -179,13 +179,7 @@ class Interval1D:
         if self.right == inf and self.right_closed:
             object.__setattr__(self, "right_closed", False)
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are contained in the interval.
 
@@ -209,10 +203,6 @@ class Interval1D:
             return bool(result)
 
         return result
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a single point is in the interval."""
-        return bool(self.contains(cast(Number, x)))
 
     @property
     def is_empty(self) -> bool:
@@ -249,6 +239,25 @@ class Interval1D:
 
 type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
 """Type alias for a distribution computation method (analytical or fitted)."""
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalND:
+    intervals: list[Interval1D]
+
+    def contains(self, x: NumericArray) -> bool | BoolArray:
+        def contains_for_point(point: NumericArray) -> bool:
+            assert len(point) == len(self.intervals)
+            return all(
+                bool(interval.contains(np.asarray(x_coordinate)))
+                for interval, x_coordinate in zip(self.intervals, point, strict=True)
+            )
+
+        if len(x.shape) == 1:
+            return contains_for_point(x)
+
+        return np.array([contains_for_point(point) for point in x])
+
 
 type GenericCharacteristicName = str
 """Type alias for characteristic names (e.g., 'pdf', 'cdf')."""
@@ -404,6 +413,7 @@ class FamilyName(StrEnum):
     NORMAL = "Normal"
     CONTINUOUS_UNIFORM = "ContinuousUniform"
     EXPONENTIAL = "Exponential"
+    PARETO = "Pareto"
 
 
 # ============================================================================
@@ -465,6 +475,7 @@ __all__ = [
     "TransformationMethodSpecsMap",
     "DistributionType",
     "Interval1D",
+    "IntervalND",
     "ContinuousSupportShape1D",
     "BoolArray",
     "NumPyNumber",

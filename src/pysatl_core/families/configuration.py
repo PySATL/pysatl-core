@@ -26,6 +26,7 @@ from functools import lru_cache
 from pysatl_core.families.builtins import (
     configure_exponential_family,
     configure_normal_family,
+    configure_pareto_family,
     configure_uniform_family,
 )
 from pysatl_core.families.registry import ParametricFamilyRegister
@@ -46,6 +47,7 @@ def configure_families_register() -> ParametricFamilyRegister:
         The global registry of parametric families.
     """
     configure_exponential_family()
+    configure_pareto_family()
     configure_uniform_family()
     configure_normal_family()
     return ParametricFamilyRegister()

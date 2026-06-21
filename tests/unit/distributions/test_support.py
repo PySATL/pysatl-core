@@ -40,16 +40,14 @@ class TestContinuousSupport:
         ],
     )
     def test_continuous_support_contains_scalar(self, point, expected_result):
-        assert (point in self.support_example) is expected_result
-        assert self.support_example.contains(point) is expected_result
+        assert self.support_example.contains(np.asarray(point)) is expected_result
 
     @pytest.mark.parametrize("infinity", [-inf, inf])
     def test_continuous_support_doesnt_contain_inf(self, infinity):
         # inf isn't considered as a number
         # but as a limit so support doesn't contain it even if it's a real line
         support = ContinuousSupport()
-        assert infinity not in support
-        assert support.contains(infinity) is False
+        assert support.contains(np.asarray(infinity)) is False
 
     @pytest.mark.parametrize(
         "points,expected_result",
@@ -59,7 +57,6 @@ class TestContinuousSupport:
         ],
     )
     def test_continuous_support_contains_array(self, points, expected_result):
-        # np.array doesn't have `in`(__contains__) syntax
         result = self.support_example.contains(points)
         assert isinstance(result, np.ndarray)
         assert result.tolist() == expected_result
@@ -104,8 +101,7 @@ class TestExplicitTableDiscreteSupport:
         ],
     )
     def test_contains_scalar(self, point, expected_result):
-        assert (point in self.support_example) is expected_result
-        assert self.support_example.contains(point) is expected_result
+        assert self.support_example.contains(np.asarray(point)) is expected_result
 
     @pytest.mark.parametrize(
         "points, expected_result",
@@ -113,7 +109,7 @@ class TestExplicitTableDiscreteSupport:
             (np.array([0, 1, 2, 3, 4, 5]), [False, True, True, True, False, True]),
             (np.array([]), []),
             (np.array([1.0, 1.5, 2.0, 2.5]), [True, False, True, False]),
-            ([0, 1, 2, 3, 4, 5], [False, True, True, True, False, True]),
+            (np.array([0, 1, 2, 3, 4, 5]), [False, True, True, True, False, True]),
         ],
     )
     def test_contains_array(self, points, expected_result):
@@ -196,8 +192,7 @@ class TestIntegerLatticeDiscreteSupport:
     )
     def test_contains_scalar(self, support_name, point, expected_result):
         support = self.support_examples[support_name]
-        assert (point in support) is expected_result
-        assert support.contains(point) is expected_result
+        assert support.contains(np.asarray(point)) is expected_result
 
     @pytest.mark.parametrize(
         "support_name, points, expected_result",

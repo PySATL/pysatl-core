@@ -206,10 +206,10 @@ class TestExponentialFamily(BaseDistributionTest):
         assert not dist.support.right_closed
 
         # Test containment
-        assert dist.support.contains(0.0) is True
-        assert dist.support.contains(1.0) is True
-        assert dist.support.contains(-0.1) is False
-        assert dist.support.contains(float("inf")) is False
+        assert dist.support.contains(np.asarray(0.0)) is True
+        assert dist.support.contains(np.asarray(1.0)) is True
+        assert dist.support.contains(np.asarray(-0.1)) is False
+        assert dist.support.contains(np.asarray(float("inf"))) is False
 
         # Test array
         test_points = np.array([-0.1, 0.0, 1.0, 10.0])

@@ -14,13 +14,25 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import floor
-from typing import TYPE_CHECKING, Protocol, cast, overload, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Protocol,
+    cast,
+    runtime_checkable,
+)
 
 import numpy as np
 
-from pysatl_core.types import BoolArray, Interval1D, Number, NumericArray
+from pysatl_core.types import (
+    BoolArray,
+    Interval1D,
+    IntervalND,
+    Number,
+    NumericArray,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -34,10 +46,7 @@ class Support(Protocol):
     Support defines the set of values where a distribution is defined.
     """
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
+    def contains(self, x: NumericArray) -> bool | BoolArray: ...
 
 
 class ContinuousSupport(Interval1D, Support):
@@ -46,6 +55,15 @@ class ContinuousSupport(Interval1D, Support):
 
     This class inherits from Interval1D and implements the Support protocol
     for continuous distributions defined on an interval [left, right].
+    """
+
+
+class ContinuousNDSupport(IntervalND, Support):
+    """
+    Support for continuous distributions represented as an array of intervals.
+
+    This class inherits from IntervalND and implements the Support protocol
+    for continuous distributions defined on a list of intervals [left, right].
     """
 
 
@@ -128,12 +146,7 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
 
         self._points = arr[unique_mask]
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are in the support.
 
@@ -161,10 +174,6 @@ class ExplicitTableDiscreteSupport(DiscreteSupport):
         if np.ndim(arr) == 0:
             return bool(result)
         return cast(BoolArray, result)
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a point is in the support."""
-        return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[Number]:
         """Iterate through all points in the support."""
@@ -252,12 +261,7 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         if self.modulus <= 0:
             raise ValueError("modulus must be a positive integer.")
 
-    @overload
-    def contains(self, x: Number) -> bool: ...
-    @overload
-    def contains(self, x: NumericArray) -> BoolArray: ...
-
-    def contains(self, x: Number | NumericArray) -> bool | BoolArray:
+    def contains(self, x: NumericArray) -> bool | BoolArray:
         """
         Check if point(s) are in the integer lattice support.
 
@@ -282,10 +286,6 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
         if np.ndim(xf) == 0:
             return bool(result)
         return cast(BoolArray, result)
-
-    def __contains__(self, x: object) -> bool:
-        """Check if a point is in the integer lattice support."""
-        return bool(self.contains(cast(Number, x)))
 
     def iter_points(self) -> Iterator[int]:
         """
@@ -430,10 +430,20 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
     __iter__ = iter_points
 
 
+@dataclass(frozen=True, slots=True)
+class PredicateSupport(Support):
+    predicate: Callable[[NumericArray], bool | BoolArray]
+
+    def contains(self, x: NumericArray) -> bool | BoolArray:
+        return self.predicate(x)
+
+
 __all__ = [
     # Base support protocol
     "Support",
     "ContinuousSupport",
+    "ContinuousNDSupport",
+    "PredicateSupport",
     # Discrete support protocol and implementations
     "DiscreteSupport",
     "ExplicitTableDiscreteSupport",

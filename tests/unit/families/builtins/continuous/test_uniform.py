@@ -230,11 +230,11 @@ class TestUniformFamily(BaseDistributionTest):
         assert dist.support.right_closed
 
         # Test containment
-        assert dist.support.contains(2.0) is True
-        assert dist.support.contains(5.0) is True
-        assert dist.support.contains(3.5) is True
-        assert dist.support.contains(1.9) is False
-        assert dist.support.contains(5.1) is False
+        assert dist.support.contains(np.asarray(2.0)) is True
+        assert dist.support.contains(np.asarray(5.0)) is True
+        assert dist.support.contains(np.asarray(3.5)) is True
+        assert dist.support.contains(np.asarray(1.9)) is False
+        assert dist.support.contains(np.asarray(5.1)) is False
 
         # Test array
         test_points = np.array([1.9, 2.0, 3.5, 5.0, 5.1])
