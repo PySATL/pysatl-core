@@ -25,6 +25,7 @@ from functools import lru_cache
 
 from pysatl_core.families.builtins import (
     configure_exponential_family,
+    configure_gamma_family,
     configure_normal_family,
     configure_uniform_family,
 )
@@ -48,6 +49,7 @@ def configure_families_register() -> ParametricFamilyRegister:
     configure_exponential_family()
     configure_uniform_family()
     configure_normal_family()
+    configure_gamma_family()
     return ParametricFamilyRegister()
 
 
