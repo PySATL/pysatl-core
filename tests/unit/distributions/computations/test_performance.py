@@ -184,8 +184,8 @@ class TestContinuousPerformance:
         r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)  # type: ignore[call-arg,type-var]
         r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)  # type: ignore[call-arg,type-var]
         np.testing.assert_allclose(
-            np.sort(r_sorted),
-            np.sort(r_shuffled),
+            np.sort(r_sorted),  # type: ignore[arg-type]
+            np.sort(r_shuffled),  # type: ignore[arg-type]
             atol=1e-8,
         )
 

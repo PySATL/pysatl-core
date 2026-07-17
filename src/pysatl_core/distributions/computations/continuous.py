@@ -395,7 +395,8 @@ def _fit_ppf_to_cdf_1C(
                     )
                     return 0.0 if xi <= left_bound else 1.0
 
-            result[interior] = np.clip(np.frompyfunc(_single, 1, 1)(x_in).astype(float), 0.0, 1.0)
+            solved = np.fromiter((_single(float(xi)) for xi in x_in), dtype=float, count=x_in.size)
+            result[interior] = np.clip(solved, 0.0, 1.0)
 
         return result
 
