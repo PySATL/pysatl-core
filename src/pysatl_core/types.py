@@ -14,12 +14,6 @@ from enum import Enum, StrEnum, auto
 from math import inf
 from typing import TYPE_CHECKING, Any, cast, overload
 
-if TYPE_CHECKING:
-    from pysatl_core.distributions.computations.computation import (
-        AnalyticalComputation,
-        FittedComputationMethod,
-    )
-
 import numpy as np
 from mypy_extensions import KwArg
 from numpy.typing import NDArray
@@ -247,7 +241,10 @@ class Interval1D:
         return ContinuousSupportShape1D.BOUNDED_INTERVAL
 
 
-type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
+if TYPE_CHECKING:
+    type Method[In, Out] = AnalyticalComputation[In, Out] | FittedComputationMethod[In, Out]
+else:
+    type Method[In, Out] = Any
 """Type alias for a distribution computation method (analytical or fitted)."""
 
 type GenericCharacteristicName = str
@@ -277,7 +274,10 @@ implementations may or may not accept them, and wrappers typically forward
 type ParentRole = str
 """Type alias for logical roles of parent distributions in a transformation."""
 
-type FitterFunc = Callable[..., FittedComputationMethod[NumericArray, NumericArray]]
+if TYPE_CHECKING:
+    type FitterFunc = Callable[..., FittedComputationMethod[NumericArray, NumericArray]]
+else:
+    type FitterFunc = Callable[..., Any]
 """Callable that fits a computation method to a distribution.
 
 A fitter performs expensive precomputation (e.g. numerical integration,

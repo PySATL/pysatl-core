@@ -198,10 +198,14 @@ class EvaluatorMethod:
 type ComputationMethodUnion = FitterMethod | EvaluatorMethod
 """Union type for computation methods (fitter or evaluator)."""
 
-type Fitter[In, Out] = Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
-type Evaluator[In, Out] = (
-    Callable[[Distribution, KwArg(Any)], Out] | Callable[[Distribution, In, KwArg(Any)], Out]
-)
+if TYPE_CHECKING:
+    type Fitter[In, Out] = Callable[[Distribution, KwArg(Any)], FittedComputationMethod[In, Out]]
+    type Evaluator[In, Out] = (
+        Callable[[Distribution, KwArg(Any)], Out] | Callable[[Distribution, In, KwArg(Any)], Out]
+    )
+else:
+    type Fitter[In, Out] = Callable[..., Any]
+    type Evaluator[In, Out] = Callable[..., Any]
 
 
 @runtime_checkable
