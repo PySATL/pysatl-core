@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
 _CONTINUOUS_1D_TAGS: frozenset[str] = frozenset({"continuous", "univariate"})
 _DISCRETE_1D_TAGS: frozenset[str] = frozenset({"discrete", "univariate"})
+_TABULATED_1D_TAGS: frozenset[str] = frozenset({"continuous", "univariate", "tabulated"})
 
 
 def _add_edges(
@@ -138,6 +139,30 @@ def _configure(reg: CharacteristicRegistry) -> None:
         distribution_instance_feature_constraints={
             "support": NonNullConstraint(),
         },
+    )
+
+    # Specialised CDF -> PPF for distributions that can declare a finite
+    # tabulation domain (e.g. empirical/KDE-backed ones): tabulate the CDF
+    # once and invert it monotonically instead of running a root search per
+    # quantile.  Registered *before* the general-purpose edge under the same
+    # label: RegistryView keeps the first variant whose constraint admits the
+    # distribution, so anything without a 'tabulation_domain' falls through
+    # to the bisection fitter below.
+    edge_tabulated_dim1 = GraphPrimitiveConstraint(
+        distribution_type_feature_constraints={
+            "kind": kind_continuous,
+            "dimension": dim1_constraint,
+        },
+        distribution_instance_feature_constraints={
+            "tabulation_domain": NonNullConstraint(),
+        },
+    )
+
+    _add_edges(
+        reg,
+        pairs=((CharacteristicName.CDF, CharacteristicName.PPF),),
+        tags=_TABULATED_1D_TAGS,
+        constraint=edge_tabulated_dim1,
     )
 
     _add_edges(
