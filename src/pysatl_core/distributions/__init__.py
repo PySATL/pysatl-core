@@ -20,6 +20,13 @@ from .computations.computation import (
     FitterMethod,
 )
 from .distribution import Distribution
+from .empirical import (
+    EmpiricalComputationStrategy,
+    EmpiricalDistribution,
+    EmpiricalMethod,
+    FittedEmpirical,
+    ScipyGaussianKde,
+)
 from .registry import *
 from .registry import __all__ as _registry_all
 from .strategies import (
@@ -39,6 +46,12 @@ __all__ = [
     "EvaluatorMethod",
     # distribution
     "Distribution",
+    # empirical
+    "EmpiricalComputationStrategy",
+    "EmpiricalDistribution",
+    "EmpiricalMethod",
+    "FittedEmpirical",
+    "ScipyGaussianKde",
     # strategies
     "ComputationStrategy",
     "DefaultComputationStrategy",
