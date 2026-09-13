@@ -260,6 +260,23 @@ def configure_gamma_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        param_bounds={"k": (0, None), "theta": (0, None)},
+        # TODO(mle): no closed-form MLE is declared for the gamma family, so it
+        # is fitted numerically (L-BFGS-B with the analytical gradient from
+        # '_base_score'). The formula exists and reduces to a one-dimensional
+        # root problem:
+        #
+        #     s = log(mean(x)) - mean(log(x))
+        #     solve  log(k) - digamma(k) = s   for k > 0
+        #     theta  = mean(x) / k
+        #
+        # 'scipy.special.digamma' is already imported here, and
+        # 'scipy.optimize.brentq' can bracket the root around the Minka
+        # approximation k0 = (3 - s + sqrt((s - 3)^2 + 24 s)) / (12 s), searching
+        # k0 * (1 +- 0.4). Two cases need care before this is added: 'fixed'
+        # holding 'k' or 'theta' (with theta fixed, k still solves a
+        # one-dimensional equation; with k fixed, theta = mean(x) / k outright),
+        # and a sample containing an exact zero, where mean(log(x)) diverges.
     )
     Gamma.__doc__ = GAMMA_DOC
 

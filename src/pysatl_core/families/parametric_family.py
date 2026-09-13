@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
+    from pysatl_core.estimation.result import MLEResult
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         | ParametricFamilyCharacteristic[Any, Any]
     )
     type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
+    type MLEFormula = Callable[[NumericArray, Mapping[str, Any]], Parametrization | None]
     type NonParametrizedCharacteristic[In, Out] = Callable[[], Out]
     type ParametricFamilyCharacteristic[In, Out] = (
         NonParametrizedCharacteristic[In, Out] | ParametrizedCharacteristic[In, Out]
@@ -94,6 +96,50 @@ class ParametricFamily:
         under ``DEFAULT_ANALYTICAL_COMPUTATION_LABEL``.
     support_by_parametrization : Callable or None, optional
         Function that returns support for given parameters.
+    base_score : Callable or None, optional
+        Gradient of the log-density with respect to the base parameters.
+    mle : Callable or None, optional
+        Closed-form maximum likelihood solution for this family, declared
+        alongside ``base_score``.
+
+        It is called as ``mle(sample, fixed)``, where *fixed* maps the names of
+        parameters pinned through :meth:`view` to their values, in this
+        family's **base** parametrization (an empty mapping for the full
+        family).  It must return an instance of the **full base**
+        parametrization, or ``None`` for a case it does not cover — the
+        estimator then falls back to the numerical path.
+
+        Returning ``None`` replaces the SciPy idiom of calling ``super().fit()``
+        from an overridden method: a family here is an object rather than a
+        class, so "I do not handle this case" has to be expressed by a value.
+        That also lets a user-defined family declare a closed form without
+        subclassing anything.
+
+        The callable may raise
+        :class:`~pysatl_core.estimation.errors.FitDataError` when the data
+        contradict the fixed parameters, for instance ``min(x) < lower_bound``
+        with ``lower_bound`` fixed.
+    param_bounds : Mapping[str, tuple[float | None, float | None]] or None, optional
+        Box bounds for the parameters of this family's base parametrization,
+        keyed by parameter name; ``None`` in either slot of a pair means
+        infinity, and a parameter with no entry is unbounded.  Consumed by the
+        optimizer during maximum likelihood estimation.
+
+        Bounds and ``@constraint`` predicates are separate mechanisms on
+        purpose: a predicate is a black box that can validate a point but
+        cannot be turned into a search region, and a box cannot express a
+        relation between two parameters.  Declaring ``sigma > 0`` in both
+        places is therefore expected duplication, not redundancy.
+
+    Raises
+    ------
+    ValueError
+        If ``distr_parametrizations`` is empty, if a characteristic names an
+        unknown parametrization, or if ``param_bounds`` is malformed.  A
+        ``param_bounds`` entry naming a parameter that does not exist is also a
+        ``ValueError``, reported when the base parametrization is registered —
+        the earliest moment the parameter names are known, since a family is
+        constructed before its parametrization classes are declared.
     """
 
     def __init__(
@@ -104,6 +150,8 @@ class ParametricFamily:
         distr_characteristics: CharacteristicsMap,
         support_by_parametrization: SupportArg = None,
         base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
+        mle: MLEFormula | None = None,
+        param_bounds: Mapping[str, tuple[float | None, float | None]] | None = None,
     ):
         if not distr_parametrizations:
             raise ValueError(
@@ -120,6 +168,10 @@ class ParametricFamily:
 
         self._support_resolver: SupportResolver = support_by_parametrization or (lambda _p: None)
         self._base_score = base_score
+        self._mle = mle
+        self._param_bounds: dict[str, tuple[float | None, float | None]] = (
+            self._normalize_param_bounds(param_bounds)
+        )
 
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
@@ -228,6 +280,94 @@ class ParametricFamily:
         """Support resolver callable."""
         return self._support_resolver
 
+    @property
+    def param_bounds(self) -> Mapping[str, tuple[float | None, float | None]]:
+        """Declared box bounds for the base parameters, keyed by parameter name."""
+        return MappingProxyType(self._param_bounds)
+
+    @property
+    def base_score(self) -> Callable[[Parametrization, NumericArray], NumericArray] | None:
+        """
+        Gradient of the log-density with respect to the base parameters, if declared.
+
+        ``None`` when the family provides none.  :meth:`score` is the way to
+        *evaluate* the gradient; this property is the way to ask whether one
+        exists at all, which a caller cannot otherwise learn without provoking
+        the ``ValueError`` that :meth:`score` raises.
+        """
+        return self._base_score
+
+    @property
+    def mle(self) -> MLEFormula | None:
+        """
+        Closed-form maximum likelihood solution for this family, if declared.
+
+        ``None`` when the family provides none, in which case estimation falls
+        back to a numerical search.  See the ``mle`` constructor argument for
+        the contract the callable obeys.
+        """
+        return self._mle
+
+    @staticmethod
+    def _normalize_param_bounds(
+        param_bounds: Mapping[str, tuple[float | None, float | None]] | None,
+    ) -> dict[str, tuple[float | None, float | None]]:
+        """
+        Check the shape of a ``param_bounds`` mapping and copy it.
+
+        Only the structure is checked here. The parameter *names* cannot be
+        checked yet: a family is constructed before its parametrization classes
+        are declared, so ``self.base`` does not exist at this point. They are
+        checked in :meth:`register_parametrization` instead.
+
+        Raises
+        ------
+        ValueError
+            If an entry is not a ``(low, high)`` pair, holds a non-numeric
+            endpoint, or has ``low > high``.
+        """
+        if param_bounds is None:
+            return {}
+
+        normalized: dict[str, tuple[float | None, float | None]] = {}
+        for parameter_name, entry in param_bounds.items():
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise ValueError(
+                    f"param_bounds['{parameter_name}'] must be a (low, high) tuple; got {entry!r}."
+                )
+            low, high = entry
+            for edge_name, edge in (("low", low), ("high", high)):
+                if edge is not None and not isinstance(edge, (int, float)):
+                    raise ValueError(
+                        f"param_bounds['{parameter_name}'] has a non-numeric {edge_name} "
+                        f"endpoint {edge!r}; use a number, or None for infinity."
+                    )
+            if low is not None and high is not None and float(low) > float(high):
+                raise ValueError(
+                    f"param_bounds['{parameter_name}'] is empty: low={low} exceeds high={high}."
+                )
+            normalized[parameter_name] = (
+                None if low is None else float(low),
+                None if high is None else float(high),
+            )
+        return normalized
+
+    def _validate_param_bounds_names(self, parametrization_class: type[Parametrization]) -> None:
+        """
+        Reject ``param_bounds`` entries that name no parameter of the base class.
+
+        A misspelled name would otherwise silently drop the bound, leaving the
+        optimizer free to roam a region the family author meant to exclude.
+        """
+        known = set(getattr(parametrization_class, "__dataclass_fields__", {}))
+        unknown = sorted(set(self._param_bounds) - known)
+        if unknown:
+            raise ValueError(
+                f"param_bounds of family '{self._name}' name unknown parameter(s) {unknown} "
+                f"for its base parametrization '{self.base_parametrization_name}', which has "
+                f"{sorted(known)}."
+            )
+
     def register_parametrization(
         self,
         name: ParametrizationName,
@@ -246,10 +386,14 @@ class ParametricFamily:
         Raises
         ------
         ValueError
-            If name is already registered.
+            If name is already registered, or — when *name* is the base
+            parametrization — if ``param_bounds`` names a parameter this class
+            does not declare.
         """
         if name in self._parametrizations:
             raise ValueError(f"Parametrization '{name}' is already registered.")
+        if name == self.base_parametrization_name:
+            self._validate_param_bounds_names(parametrization_class)
         self._parametrizations[name] = parametrization_class
 
     def get_parametrization(self, name: ParametrizationName) -> type[Parametrization]:
@@ -457,6 +601,121 @@ class ParametricFamily:
         base_grad = self._base_score(base_params, x_arr)
         return parameters.gradient_transform(base_grad)
 
+    def fit(
+        self,
+        sample: NumericArray,
+        *,
+        parametrization: ParametrizationName | None = None,
+        optimizer: str | Callable[..., Any] | None = None,
+        **options: Any,
+    ) -> MLEResult:
+        """
+        Estimate this family's parameters from a sample by maximum likelihood.
+
+        Maximum likelihood picks the parameters under which the observed sample
+        is most probable.  In practice the logarithm is maximised — the maximum
+        is the same, since the logarithm is monotone, but a product of a
+        thousand densities would underflow to zero — so the criterion is
+
+        ``l(theta) = sum_i log f(x_i; theta) -> max``,
+
+        and the objective handed to the optimizer is ``-l(theta)``.
+
+        Estimation belongs to the family rather than to a distribution: a
+        distribution has its parameters pinned already, so there is nothing in
+        it to estimate.
+
+        Parameters
+        ----------
+        sample : NumericArray
+            Observed values.  Must be one-dimensional and finite, and hold at
+            least as many observations as there are free parameters.
+            Observation weights and censored data are not supported.
+        parametrization : ParametrizationName or None, optional
+            Parametrization the estimate is reported in.  Defaults to this
+            family's base parametrization, which is currently the only
+            supported choice: converting out of the base parametrization needs
+            an inverse transform that the ``Parametrization`` API does not
+            provide, and requesting another one raises ``NotImplementedError``.
+        optimizer : str or Callable or None, optional
+            A ``scipy.optimize.minimize`` method name (``"Nelder-Mead"``,
+            ``"Powell"``, ...) or a solver callable with the ``minimize``
+            signature.  Passing it forces the numerical path even for a family
+            that has a closed-form solution, and a ``UserWarning`` says so.
+            Unlike SciPy — where an overridden ``fit`` silently discards this
+            argument — the request is honoured.
+        **options
+            Extra keyword arguments forwarded to ``scipy.optimize.minimize``,
+            for example ``tol=1e-12`` or ``options={"maxiter": 500}``.
+
+        Returns
+        -------
+        MLEResult
+            Estimated parameters together with the attained log-likelihood, the
+            number of free parameters, a convergence flag and a diagnostic
+            message.  A fit that fails to converge is reported here with
+            ``success=False``, not raised: exceptions are reserved for
+            situations nothing can recover from, such as data lying outside a
+            fixed support.
+
+        Raises
+        ------
+        ValueError
+            If the sample is not one-dimensional or not finite.
+        InsufficientDataError
+            If the sample holds fewer observations than there are free
+            parameters.
+        FitDataError
+            If observations lie outside a support that does not depend on the
+            parameters, or contradict parameters fixed through :meth:`view`.
+        MLEError
+            If this family declares no ``lpdf``, or no usable starting point
+            can be built.
+        NotImplementedError
+            If a parametrization other than the base one is requested.
+
+        Notes
+        -----
+        **Which route is taken.** If the family declared a closed-form solution
+        through the ``mle`` constructor argument and no ``optimizer`` was
+        passed, that formula is used and no optimizer runs at all.  Otherwise
+        the search starts from a method-of-moments point and runs L-BFGS-B,
+        using the analytical gradient from :meth:`score` when the family
+        provides one.  A family without ``score`` is still fitted, with
+        ``minimize`` differencing the objective numerically — correct, but
+        several times more objective evaluations.  If L-BFGS-B reports failure
+        or takes no step, the fit is retried with Nelder-Mead and the fallback
+        is recorded in ``MLEResult.message``.
+
+        **Which coordinates are used.** The search always runs in this family's
+        base parametrization.  Maximum likelihood is invariant to
+        reparametrisation in theory, but numerically the variants are different
+        problems with different conditioning, and the estimate should not
+        depend on the coordinates it was asked for.
+
+        **Fixing some parameters.** Use :meth:`view`; there is no second
+        mechanism (no counterpart to SciPy's ``floc=``/``fa=``).
+
+        Examples
+        --------
+        >>> res = Normal.fit(sample)
+        >>> res.params.mu, res.params.sigma           # doctest: +SKIP
+        >>> res.method                                 # doctest: +SKIP
+        'closed_form'
+        >>> res = Normal.view(mu=0.0).fit(sample)      # doctest: +SKIP
+        >>> res.n_params                               # doctest: +SKIP
+        1
+        """
+        from pysatl_core.estimation.mle import fit_family
+
+        return fit_family(
+            self,
+            np.asarray(sample, dtype=np.float64),
+            parametrization=parametrization,
+            optimizer=optimizer,
+            **options,
+        )
+
     def view(
         self,
         *,
@@ -582,6 +841,12 @@ class PartialParametricFamily(ParametricFamily):
             distr_characteristics=view_chars,
             support_by_parametrization=_view_support,
             base_score=base_family._base_score,
+            mle=base_family._mle,
+            param_bounds={
+                name: bound
+                for name, bound in base_family._param_bounds.items()
+                if name in self._free_parameter_names
+            },
         )
 
         # Register the parametrization (needed for parent methods)
