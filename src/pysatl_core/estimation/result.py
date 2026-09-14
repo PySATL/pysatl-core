@@ -20,9 +20,19 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from pysatl_core.families.parametrizations import Parametrization
+
 if TYPE_CHECKING:
     from pysatl_core.families.distribution import ParametricFamilyDistribution
-    from pysatl_core.families.parametrizations import Parametrization
+
+
+type FitMethod = Literal["closed_form", "numeric"]
+"""Which branch of :func:`~pysatl_core.estimation.mle.fit_family` produced an estimate.
+
+Declared once and used by every function that passes the value along, so that a
+misspelling is a type error at the call site rather than a string that travels
+unchecked into :attr:`MLEResult.method`.
+"""
 
 
 # TODO(mle): inference is not implemented.  Standard errors and confidence
@@ -36,15 +46,24 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class MLEResult:
+class MLEResult[P: Parametrization]:
     """
     Outcome of a maximum likelihood fit.
+
+    The class is generic in the parametrization it carries, so that a caller
+    who knows which class a family estimates keeps that knowledge:
+    ``MLEResult[MeanStd].params.sigma`` is a ``float``, while a misspelled
+    ``.sigmaa`` is a type error.  ``fit`` itself can only promise
+    ``MLEResult[Parametrization]`` — a family is bound to its parametrization
+    class at runtime, by a decorator that runs after the family object exists,
+    so nothing static knows which class a given family will register.  See the
+    note in ``ParametricFamily.fit``.
 
     Parameters
     ----------
     family_name : str
         Name of the fitted family.
-    params : Parametrization
+    params : P
         Estimated parameters, in the parametrization the caller requested
         (the family's base parametrization by default).  For a
         :meth:`~pysatl_core.families.parametric_family.ParametricFamily.view`
@@ -60,8 +79,9 @@ class MLEResult:
         reconstruct it from ``params`` alone in every case, and because
         :attr:`aic` and :attr:`bic` need it.
     n_observations : int
-        Sample size the fit was based on.
-    method : {"closed_form", "numeric"}
+        Sample size the fit was based on.  Must be positive: ``bic`` takes its
+        logarithm.
+    method : FitMethod
         Which branch produced the estimate.
     optimizer : str or None
         Name of the optimizer actually used; ``None`` for ``closed_form``.
@@ -77,19 +97,42 @@ class MLEResult:
         Iterations reported by the optimizer, when it reports them.
     n_function_evaluations : int or None, optional
         Objective evaluations reported by the optimizer, when it reports them.
+
+    Raises
+    ------
+    ValueError
+        If ``n_observations`` or ``n_params`` is negative, or if
+        ``n_observations`` is zero.  The type ``int`` admits values this object
+        has no meaning for, and :attr:`bic` would otherwise fail deep inside
+        ``math.log`` with "expected a positive input", a message that names
+        neither the field nor the object.
     """
 
     family_name: str
-    params: Parametrization
+    params: P
     log_likelihood: float
     n_params: int
     n_observations: int
-    method: Literal["closed_form", "numeric"]
+    method: FitMethod
     optimizer: str | None
     success: bool
     message: str
     n_iterations: int | None = None
     n_function_evaluations: int | None = None
+
+    def __post_init__(self) -> None:
+        """Reject counts that no fit can produce."""
+        if self.n_observations <= 0:
+            raise ValueError(
+                f"n_observations must be positive; got {self.n_observations}. A fit is always "
+                f"based on at least one observation, and 'bic' takes the logarithm of this "
+                f"number."
+            )
+        if self.n_params < 0:
+            raise ValueError(
+                f"n_params must not be negative; got {self.n_params}. It counts the free "
+                f"parameters the fit estimated."
+            )
 
     @property
     def distribution(self) -> ParametricFamilyDistribution:
@@ -99,6 +142,11 @@ class MLEResult:
         Constructed on access rather than stored, so that a result can be
         inspected, compared or serialised without paying for a distribution
         nobody asked for.
+
+        The family is taken from the parametrization class rather than from
+        :attr:`family_name`: the name is a label, while ``__family__`` is the
+        object the parameters were actually produced by, so the two cannot
+        drift apart here.
 
         Returns
         -------
@@ -112,7 +160,7 @@ class MLEResult:
             which can happen for a fit that reports ``success=False``.
         """
         family = type(self.params).__family__
-        return family.distribution(**self.params.parameters)
+        return family.distribution_from(self.params)
 
     @property
     def aic(self) -> float:
@@ -125,4 +173,4 @@ class MLEResult:
         return self.n_params * math.log(self.n_observations) - 2.0 * self.log_likelihood
 
 
-__all__ = ["MLEResult"]
+__all__ = ["MLEResult", "FitMethod"]

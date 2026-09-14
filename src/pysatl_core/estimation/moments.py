@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from pysatl_core.estimation.bounds import clip_to_bounds
 from pysatl_core.estimation.errors import MLEError
 from pysatl_core.estimation.likelihood import field_names
 from pysatl_core.types import FamilyName
@@ -37,7 +38,12 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametric_family import ParametricFamily
     from pysatl_core.families.parametrizations import Parametrization
 
-    type MomentRule = Callable[[NDArray[np.float64]], Mapping[str, float]]
+
+# Outside ``TYPE_CHECKING`` so that a caller writing a rule of their own can
+# import the name; a PEP 695 alias keeps its right-hand side unevaluated, so
+# this costs nothing at import time.  See the note on the aliases in
+# ``likelihood.py`` for what the name does and does not give you.
+type MomentRule = Callable[[NDArray[np.float64]], Mapping[str, float]]
 
 
 UNIFORM_START_PADDING: float = 0.05
@@ -78,7 +84,7 @@ def _uniform_start(sample: NDArray[np.float64]) -> dict[str, float]:
     return {"lower_bound": low - pad, "upper_bound": high + pad}
 
 
-_MOMENT_STARTS: dict[str, MomentRule] = {
+_MOMENT_STARTS: dict[FamilyName | str, MomentRule] = {
     FamilyName.NORMAL: _normal_start,
     FamilyName.EXPONENTIAL: _exponential_start,
     FamilyName.GAMMA: _gamma_start,
@@ -94,7 +100,7 @@ as SciPy does (``args = (1.0,) * self.numargs``).
 """
 
 
-def register_moment_start(family_name: str, rule: MomentRule) -> None:
+def register_moment_start(family_name: FamilyName | str, rule: MomentRule) -> None:
     """
     Register a method-of-moments starting rule for a family.
 
@@ -103,9 +109,13 @@ def register_moment_start(family_name: str, rule: MomentRule) -> None:
 
     Parameters
     ----------
-    family_name : str
-        Name of the family the rule applies to.
-    rule : Callable[[NDArray[np.float64]], Mapping[str, float]]
+    family_name : FamilyName or str
+        Name of the family the rule applies to.  ``FamilyName`` is the exact
+        type for the built-in families and is written first for that reason;
+        a plain ``str`` is admitted because this function exists precisely so
+        that a user-defined family, whose name is not in that enumeration, can
+        register a rule.
+    rule : MomentRule
         Callable mapping a sample to starting values, keyed by the names of
         the family's base parameters.
     """
@@ -169,8 +179,6 @@ def starting_point(family: ParametricFamily, sample: NDArray[np.float64]) -> Par
     MLEError
         If the starting values cannot be assembled at all.
     """
-    from pysatl_core.estimation.mle import clip_to_bounds
-
     rule = _MOMENT_STARTS.get(family.name)
     if rule is not None:
         projected = project_onto_base(family, rule(sample))
@@ -189,6 +197,7 @@ def starting_point(family: ParametricFamily, sample: NDArray[np.float64]) -> Par
 
 __all__ = [
     "UNIFORM_START_PADDING",
+    "MomentRule",
     "starting_point",
     "register_moment_start",
     "project_onto_base",

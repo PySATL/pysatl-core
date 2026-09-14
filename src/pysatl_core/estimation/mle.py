@@ -12,6 +12,15 @@ to estimate.  Maximising the likelihood over all densities has no solution at
 all — the supremum is unbounded, since ever narrower spikes placed at the
 observations drive it up without limit — so the family is what makes the
 problem well posed, and the caller always supplies it.
+
+Three neighbours carry what policy merely *uses*, so that this module is about
+the decisions and not about their machinery:
+:mod:`pysatl_core.estimation.likelihood` builds the objective and its gradient,
+:mod:`pysatl_core.estimation.bounds` turns a family's declaration into the box
+an optimizer accepts, and :mod:`pysatl_core.estimation.optimizers` is the one
+door to ``scipy.optimize`` — it is what keeps ``OptimizeResult``, whose every
+attribute types as ``Any``, from travelling any further than the call that
+produced it.
 """
 
 from __future__ import annotations
@@ -21,11 +30,14 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import warnings
-from typing import TYPE_CHECKING, Any, cast
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Unpack
 
 import numpy as np
-from scipy.optimize import OptimizeResult, minimize
 
+from pysatl_core.distributions.support import IntervalSupport, PointSupport
+from pysatl_core.estimation.bounds import clip_to_bounds, resolve_bounds
 from pysatl_core.estimation.errors import FitDataError, InsufficientDataError, MLEError
 from pysatl_core.estimation.likelihood import (
     field_names,
@@ -35,69 +47,29 @@ from pysatl_core.estimation.likelihood import (
     to_vector,
 )
 from pysatl_core.estimation.moments import project_onto_base, starting_point
+from pysatl_core.estimation.optimizers import (
+    DEFAULT_OPTIMIZER,
+    FALLBACK_OPTIMIZER,
+    MinimizeMethod,
+    MinimizeOptions,
+    MinimizeSolver,
+    optimizer_name,
+    run_optimizer,
+)
 from pysatl_core.estimation.result import MLEResult
 from pysatl_core.types import FamilyName
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
 
+    import numpy.typing as npt
     from numpy.typing import NDArray
 
     from pysatl_core.distributions.support import Support
+    from pysatl_core.estimation.result import FitMethod
     from pysatl_core.families.parametric_family import ParametricFamily
     from pysatl_core.families.parametrizations import Parametrization
     from pysatl_core.types import ParametrizationName
-
-
-DEFAULT_OPTIMIZER: str = "L-BFGS-B"
-"""Optimizer used when the caller names none and no closed form applies.
-
-With the analytical gradient from ``ParametricFamily.score`` it is markedly
-more economical than a simplex method on smooth problems — on a normal sample
-of 1000 points it reaches the same estimate in 14 objective evaluations against
-147 for Nelder-Mead.
-"""
-
-FALLBACK_OPTIMIZER: str = "Nelder-Mead"
-"""Derivative-free optimizer retried when the default reports failure.
-
-A quasi-Newton method models the objective through its derivatives and stalls
-on a surface that is not smooth.  Where a parameter moves the boundary of the
-support, the objective is piecewise constant in the number of unexplained
-observations — a staircase, on which a line search finds no improvement and
-returns the starting point untouched.
-"""
-
-_GRADIENT_METHODS: frozenset[str] = frozenset(
-    {
-        "cg",
-        "bfgs",
-        "newton-cg",
-        "l-bfgs-b",
-        "tnc",
-        "slsqp",
-        "dogleg",
-        "trust-ncg",
-        "trust-krylov",
-        "trust-exact",
-        "trust-constr",
-    }
-)
-"""``scipy.optimize.minimize`` methods that make use of ``jac``."""
-
-_BOUNDED_METHODS: frozenset[str] = frozenset(
-    {
-        "nelder-mead",
-        "l-bfgs-b",
-        "tnc",
-        "slsqp",
-        "powell",
-        "trust-constr",
-        "cobyla",
-        "cobyqa",
-    }
-)
-"""``scipy.optimize.minimize`` methods that accept ``bounds``."""
 
 
 # TODO(mle): selecting a family from a list of candidates by AIC/BIC is not
@@ -136,7 +108,7 @@ _BOUNDED_METHODS: frozenset[str] = frozenset(
 # distribution type in ``lpdf_provider`` would be the whole change.
 
 
-def validate_sample(family: ParametricFamily, sample: NDArray[np.float64]) -> NDArray[np.float64]:
+def validate_sample(family: ParametricFamily, sample: npt.ArrayLike) -> NDArray[np.float64]:
     """
     Check that a sample can carry a maximum likelihood fit, and normalise it.
 
@@ -150,7 +122,10 @@ def validate_sample(family: ParametricFamily, sample: NDArray[np.float64]) -> ND
         Family being fitted; its base parametrization determines how many
         observations are the minimum.
     sample : array_like
-        Observed values, coerced to a float array.
+        Observed values, coerced to a float array.  Declared as ``ArrayLike``
+        rather than ``NDArray[np.float64]`` because that is what the body
+        accepts: the ``try``/``except`` around ``np.asarray`` is only reachable
+        for an argument that is *not* already a float array.
 
     Returns
     -------
@@ -211,178 +186,78 @@ def validate_sample(family: ParametricFamily, sample: NDArray[np.float64]) -> ND
     return arr
 
 
-# TODO(mle): ``param_bounds`` cannot say whether a bound is open or closed, and
-# this function assumes every one of them is open — it nudges each finite edge
-# inwards by one ULP unconditionally.  A family needing ``c >= 0`` rather than
-# ``c > 0`` therefore has no way to declare it: the optimizer is never allowed
-# to sit on the endpoint.  Closed parameter bounds are ordinary, not exotic —
-# SciPy declares them for ``foldnorm`` and ``foldcauchy`` (``c >= 0``), for
-# ``erlang`` and ``irwinhall`` (``n >= 1``), and they are the natural shape for
-# a mixture weight in [0, 1] or a correlation in [-1, 1].
-#
-# The workaround today is to declare the bound anyway and accept that an
-# estimate sitting exactly on the endpoint comes back as 5e-324 instead of 0.
-# Admissibility itself is unaffected: that is decided by the family's
-# ``@constraint`` predicates, not by these bounds.  The loss only bites when
-# the likelihood maximum lies *on* the boundary.
-#
-# SciPy solves this with an explicit flag: ``_ShapeInfo`` carries
-# ``inclusive=(bool, bool)`` and shifts an endpoint only when it is exclusive.
-# Two ways to add the same expressiveness here, both backward compatible — a
-# two-element entry keeps meaning "open at both ends":
-#
-#   1. a third element on the tuple, mirroring SciPy directly:
-#          param_bounds={"c": (0, None, (True, False))}
-#
-#   2. a small declarative object, which reads better at the declaration site
-#      and leaves room for further per-parameter metadata (integrality, or the
-#      reparametrisation transform of the TODO above):
-#          param_bounds={"c": Bound(low=0, high=None, low_closed=True)}
-#
-# Option 2 is preferable: a bare ``(0, None, (True, False))`` is hard to read
-# and easy to mis-order, and a ``Bound`` dataclass with defaults
-# ``low_closed=False, high_closed=False`` reproduces today's behaviour exactly
-# while naming what each field means.  The change is local — accept the new
-# form in ``ParametricFamily._normalize_param_bounds``, honour the flags here,
-# and update ``TestBoundsAgreeWithConstraints``, which currently asserts the
-# opposite (that a value *on* the declared edge fails ``validate()``).
-def _collect_bounds(family: ParametricFamily) -> tuple[list[tuple[float, float]], bool]:
+@dataclass(frozen=True, slots=True)
+class IntervalSignature:
+    """Fingerprint of a support that is an interval."""
+
+    left: float
+    right: float
+    left_closed: bool
+    right_closed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PointsSignature:
+    """Fingerprint of a support given as an explicit set of points."""
+
+    points: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OpaqueSignature:
     """
-    Assemble optimizer bounds, reporting whether the family declared any.
+    Fingerprint of a support matching neither shape protocol.
 
-    Returns
-    -------
-    tuple[list[tuple[float, float]], bool]
-        Bounds in the order of ``family.base.__dataclass_fields__``, and a flag
-        that is ``True`` when at least one of them came from the family rather
-        than from the ``(-inf, inf)`` default.
+    The last resort, and named as such rather than hidden behind a magic
+    string: two supports of an unknown kind are told apart by their type and
+    their ``repr``, which compares their *printed form* rather than their
+    meaning.  A family whose support lands here should declare
+    :class:`~pysatl_core.distributions.support.IntervalSupport` or
+    :class:`~pysatl_core.distributions.support.PointSupport` instead.
     """
-    declared = family.param_bounds
-    bounds: list[tuple[float, float]] = []
-    any_declared = False
 
-    for name in field_names(family.base):
-        entry = declared.get(name)
-        if entry is None:
-            bounds.append((-np.inf, np.inf))
-            continue
-        any_declared = True
-        raw_low, raw_high = entry
-        low = -np.inf if raw_low is None else float(raw_low)
-        high = np.inf if raw_high is None else float(raw_high)
-        # An entry such as ``("sigma", (0, None))`` states an *open* bound, but
-        # an optimizer only understands a closed box. Nudging each finite edge
-        # inwards by one ULP is what SciPy does in ``_ShapeInfo``. Formally the
-        # gap is 5e-324 and numerically useless on its own — the optimizer can
-        # still step into it — which is precisely why the objective returns
-        # ``inf`` wherever a constraint fails, so the line search backs off. No
-        # separate notion of a "practical" bound is introduced.
-        #
-        # Every declared bound is treated as open, because the declaration has
-        # no way to say otherwise. See the TODO above this function.
-        if np.isfinite(low):
-            low = float(np.nextafter(low, np.inf))
-        if np.isfinite(high):
-            high = float(np.nextafter(high, -np.inf))
-        bounds.append((low, high))
-
-    return bounds, any_declared
+    type_name: str
+    representation: str
 
 
-def resolve_bounds(family: ParametricFamily) -> list[tuple[float, float]] | None:
+type SupportSignature = IntervalSignature | PointsSignature | OpaqueSignature | None
+"""Comparable fingerprint of a support.
+
+Every member is a frozen dataclass, so ``==`` is structural and two
+fingerprints of the same shape compare field by field.  ``None`` means the
+family declares no support at all, which is itself a distinguishable state.
+"""
+
+
+def _support_signature(support: Support | None) -> SupportSignature:
     """
-    Build the box of parameter bounds handed to the optimizer.
+    Comparable fingerprint of a support, used to tell two supports apart.
 
-    The single source is the family's ``param_bounds``, declared beside
-    ``base_score`` and ``mle`` in its constructor.  Parameters with no entry get
-    ``(-inf, inf)``.  For a view, both the order and the membership follow
-    ``family.base.__dataclass_fields__``, that is, the free parameters only.
-
-    Bounds and constraints are two separate mechanisms on purpose:
-    ``param_bounds`` cannot validate anything, and a ``@constraint`` predicate
-    cannot be turned into a box.  Probing a predicate numerically does not work
-    either — it cannot distinguish "no upper bound" from "the bound is at the
-    edge of the search region", and for a coupled constraint the answer depends
-    on where the other parameter happens to sit.  SciPy reached the same
-    conclusion and added ``_ShapeInfo`` alongside ``_argcheck``.
-
-    Parameters
-    ----------
-    family : ParametricFamily
-        Family being fitted.
-
-    Returns
-    -------
-    list[tuple[float, float]] or None
-        One ``(low, high)`` pair per free parameter, or ``None`` when the
-        family declared no bounds at all — the optimisation then runs unbounded.
-
-    Warns
-    -----
-    UserWarning
-        When the family declares no bounds for any free parameter.
+    The fields are read through the shape protocols rather than probed by name:
+    every one of them is a declared, typed member of the concrete support
+    classes, so a misspelling here is a type error instead of a silent ``None``
+    that would send :func:`support_depends_on_params` down the wrong branch —
+    and with it the whole error contract of :func:`fit_family`, which either
+    raises ``FitDataError`` for out-of-support data or charges a penalty and
+    continues.
     """
-    bounds, any_declared = _collect_bounds(family)
-    if not any_declared:
-        warnings.warn(
-            f"Family '{family.name}' declares no 'param_bounds', so the optimizer runs "
-            f"without bounds and may probe inadmissible parameters. The objective rejects "
-            f"those with 'inf', so the fit is still correct, only slower and less robust. "
-            f"Pass 'param_bounds={{...}}' to the family constructor to fix this.",
-            UserWarning,
-            stacklevel=2,
-        )
-        return None
-    return bounds
-
-
-def clip_to_bounds(family: ParametricFamily, params: Parametrization) -> Parametrization:
-    """
-    Move a parametrization inside the declared bounds.
-
-    Parameters
-    ----------
-    family : ParametricFamily
-        Family whose bounds apply.
-    params : Parametrization
-        Candidate parameters, in the family's base parametrization.
-
-    Returns
-    -------
-    Parametrization
-        The same values, each clipped into its bound; unchanged if the family
-        declares no bounds.
-    """
-    bounds, any_declared = _collect_bounds(family)
-    if not any_declared:
-        return params
-    vec = to_vector(params)
-    lows = np.array([low for low, _ in bounds], dtype=np.float64)
-    highs = np.array([high for _, high in bounds], dtype=np.float64)
-    return from_vector(type(params), np.clip(vec, lows, highs))
-
-
-def _support_signature(support: Support | None) -> object:
-    """Comparable fingerprint of a support, used to tell two supports apart."""
     if support is None:
         return None
-    left = getattr(support, "left", None)
-    right = getattr(support, "right", None)
-    if left is not None or right is not None:
-        return (
-            "interval",
-            float(left) if left is not None else None,
-            float(right) if right is not None else None,
-            bool(getattr(support, "left_closed", True)),
-            bool(getattr(support, "right_closed", True)),
+    if isinstance(support, IntervalSupport):
+        return IntervalSignature(
+            left=float(support.left),
+            right=float(support.right),
+            left_closed=bool(support.left_closed),
+            right_closed=bool(support.right_closed),
         )
-    points = getattr(support, "points", None)
-    if points is not None:
-        return ("points", tuple(np.asarray(points).ravel().tolist()))
-    return ("repr", type(support).__name__, repr(support))
+    if isinstance(support, PointSupport):
+        return PointsSignature(
+            points=tuple(float(p) for p in np.asarray(support.points).ravel().tolist())
+        )
+    return OpaqueSignature(type_name=type(support).__name__, representation=repr(support))
 
 
-def support_depends_on_params(family: ParametricFamily, sample: NDArray[np.float64]) -> bool:
+def support_depends_on_params(family: ParametricFamily, probe: Parametrization) -> bool:
     """
     Decide whether the family's support moves with its parameters.
 
@@ -401,15 +276,19 @@ def support_depends_on_params(family: ParametricFamily, sample: NDArray[np.float
     ----------
     family : ParametricFamily
         Family being fitted.
-    sample : NDArray[np.float64]
-        Validated sample, used only to pick a plausible probe point.
+    probe : Parametrization
+        A plausible point of the parameter space, in the family's base
+        parametrization — the first of the two the supports are compared at.
+        The sample is not needed here and is no longer asked for: it only ever
+        served to produce this point, and computing it inside meant computing
+        it three times per fit.  :func:`~pysatl_core.estimation.moments.
+        starting_point` is the usual source.
 
     Returns
     -------
     bool
         ``True`` if the two supports differ.
     """
-    probe = _probe_params(family, sample)
     perturbed = _perturb(family, probe)
     first = _support_signature(family.support_resolver(probe))
     second = _support_signature(family.support_resolver(perturbed))
@@ -417,17 +296,43 @@ def support_depends_on_params(family: ParametricFamily, sample: NDArray[np.float
 
 
 def _probe_params(family: ParametricFamily, sample: NDArray[np.float64]) -> Parametrization:
-    """A plausible point of the parameter space, obtained without raising."""
+    """
+    A plausible point of the parameter space, obtained without raising.
+
+    The caught exceptions are the ones a *moment rule* can legitimately produce
+    on awkward data: a value it refuses (``ValueError``), arithmetic that does
+    not work out (``ArithmeticError`` and its three subclasses), or a start
+    that cannot be assembled at all (``MLEError``).  Anything else — a
+    ``TypeError``, a ``KeyError`` — is a bug in the rule rather than a verdict
+    about the data, and is left to surface.
+
+    Either way the substitution is announced: a rule that fails every time is a
+    defect worth seeing, and swallowing it in silence is what would really blur
+    the line between "the rule declined" and "the rule is broken".
+    """
     try:
         return starting_point(family, sample)
-    except (MLEError, ValueError, ArithmeticError):
+    except (MLEError, ValueError, ArithmeticError) as exc:
         ones = project_onto_base(family, dict.fromkeys(field_names(family.base), 1.0))
         if ones is None:  # pragma: no cover - ones covers every field by construction
             raise
-        return ones
+        # Degrading quietly is what blurs the line the docstring draws: the
+        # caller cannot otherwise tell "the rule declined this data" from "the
+        # rule is broken", because both end here.  Saying so costs nothing and
+        # the fit still proceeds.
+        warnings.warn(
+            f"the method-of-moments starting rule for family '{family.name}' failed "
+            f"({type(exc).__name__}: {exc}); starting from a default probe instead. The fit "
+            f"continues, but it starts further from the answer than it needs to.",
+            UserWarning,
+            stacklevel=2,
+        )
+        # Clipped like every other start: a probe outside the declared bounds
+        # would resolve the support at a point the optimizer may never occupy.
+        return clip_to_bounds(family, ones)
 
 
-def _perturb(family: ParametricFamily, params: Parametrization) -> Parametrization:
+def _perturb[P: Parametrization](family: ParametricFamily, params: P) -> P:
     """
     Move every parameter to a different value, staying inside the bounds.
 
@@ -467,73 +372,42 @@ def _check_fixed_support(
     )
 
 
-def _fixed_parameters(family: ParametricFamily) -> tuple[Mapping[str, Any], bool]:
+@dataclass(frozen=True, slots=True)
+class FixedParameters:
     """
-    Report which parameters a view has pinned, and in which coordinates.
+    Parameters pinned through ``view``, and the coordinates they were pinned in.
 
-    Returns
-    -------
-    tuple[Mapping[str, Any], bool]
-        The fixed values, and whether they were fixed in the parent family's
-        *base* parametrization.  A closed-form rule is written against the base
-        parametrization, so it cannot be handed values expressed in any other.
+    A named pair rather than a bare tuple: at the call site ``fixed.values`` and
+    ``fixed.in_base_parametrization`` say what they are, where the second
+    element of a ``tuple[Mapping[str, float], bool]`` said only ``True``.
     """
+
+    values: Mapping[str, float]
+    """The fixed values, keyed by parameter name."""
+
+    in_base_parametrization: bool
+    """Whether they were fixed in the parent family's *base* parametrization.
+
+    A closed-form rule is written against the base parametrization, so it
+    cannot be handed values expressed in any other.
+    """
+
+
+def _fixed_parameters(family: ParametricFamily) -> FixedParameters:
+    """Report which parameters a view has pinned, and in which coordinates."""
     from pysatl_core.families.parametric_family import PartialParametricFamily
 
     if not isinstance(family, PartialParametricFamily):
-        return {}, True
+        return FixedParameters(values=MappingProxyType({}), in_base_parametrization=True)
     # A view's own ``base_parametrization_name`` is the parametrization the
     # parameters were fixed in: ``PartialParametricFamily`` registers exactly
     # that one and nothing else.
-    fixed_in_base = (
-        family.base_parametrization_name == family.parent_family.base_parametrization_name
+    return FixedParameters(
+        values=family.fixed_parameters,
+        in_base_parametrization=(
+            family.base_parametrization_name == family.parent_family.base_parametrization_name
+        ),
     )
-    return dict(family.fixed_parameters), fixed_in_base
-
-
-def _optimizer_name(optimizer: str | Callable[..., Any]) -> str:
-    """Readable name for a method string or a custom solver callable."""
-    if isinstance(optimizer, str):
-        return optimizer
-    return getattr(optimizer, "__name__", None) or repr(optimizer)
-
-
-def _success_verdict(result: OptimizeResult) -> bool | None:
-    """
-    The solver's convergence verdict, or ``None`` when it stated none.
-
-    Three states, not two: converged, did not converge, and said nothing.
-    ``scipy.optimize.minimize`` always fills ``success``, but a solver handed in
-    through ``optimizer=`` is only obliged to return an ``OptimizeResult`` — the
-    remaining fields are conventions its built-in methods follow.  The caller
-    needs the third state to word ``MLEResult.message`` honestly, which is why
-    this returns ``bool | None`` rather than collapsing to a bool here.
-
-    A missing verdict is treated as failure downstream: claiming a convergence
-    nobody reported would be the one failure mode this package exists to avoid.
-    """
-    stated = getattr(result, "success", None)
-    return None if stated is None else bool(stated)
-
-
-def _reported_message(result: OptimizeResult) -> str:
-    """The solver's diagnostic text, or an empty string when it stated none."""
-    message = getattr(result, "message", None)
-    return "" if message is None else str(message)
-
-
-def _supports_jac(optimizer: str | Callable[..., Any]) -> bool:
-    """Whether ``minimize`` would actually use a gradient for this method."""
-    if not isinstance(optimizer, str):
-        return True
-    return optimizer.lower() in _GRADIENT_METHODS
-
-
-def _supports_bounds(optimizer: str | Callable[..., Any]) -> bool:
-    """Whether ``minimize`` accepts ``bounds`` for this method."""
-    if not isinstance(optimizer, str):
-        return True
-    return optimizer.lower() in _BOUNDED_METHODS
 
 
 def _convert_parametrization(
@@ -586,13 +460,13 @@ def _build_result(
     sample: NDArray[np.float64],
     parametrization: ParametrizationName | None,
     *,
-    method: str,
+    method: FitMethod,
     optimizer: str | None,
     success: bool,
     message: str,
     n_iterations: int | None = None,
     n_function_evaluations: int | None = None,
-) -> MLEResult:
+) -> MLEResult[Parametrization]:
     """Recompute the clean log-likelihood and pack everything into a result."""
     value = log_likelihood(family, params, sample)
     return MLEResult(
@@ -601,7 +475,7 @@ def _build_result(
         log_likelihood=value,
         n_params=len(field_names(family.base)),
         n_observations=int(sample.size),
-        method=cast("Any", method),
+        method=method,
         optimizer=optimizer,
         success=success,
         message=message,
@@ -612,12 +486,12 @@ def _build_result(
 
 def fit_family(
     family: ParametricFamily,
-    sample: NDArray[np.float64],
+    sample: npt.ArrayLike,
     *,
     parametrization: ParametrizationName | None = None,
-    optimizer: str | Callable[..., Any] | None = None,
-    **options: Any,
-) -> MLEResult:
+    optimizer: MinimizeMethod | MinimizeSolver | None = None,
+    **options: Unpack[MinimizeOptions],
+) -> MLEResult[Parametrization]:
     """
     Estimate the parameters of *family* from *sample* by maximum likelihood.
 
@@ -634,24 +508,27 @@ def fit_family(
         :meth:`~pysatl_core.families.parametric_family.ParametricFamily.view`
         works unchanged: it *is* a family, whose base parametrization holds
         only the free parameters.
-    sample : NDArray[np.float64]
+    sample : array_like
         Observed values; 1-D and finite.
     parametrization : ParametrizationName or None, optional
         Parametrization the estimate should be reported in.  Only the family's
         base parametrization is currently supported.
-    optimizer : str or Callable or None, optional
+    optimizer : MinimizeMethod or MinimizeSolver or None, optional
         ``scipy.optimize.minimize`` method name, or a solver callable with the
         ``minimize`` signature.  Passing it forces the numerical path even when
         a closed-form solution exists.
     **options
         Extra keyword arguments forwarded to ``scipy.optimize.minimize``, for
-        example ``tol=1e-12`` or ``options={"maxiter": 500}``.
+        example ``tol=1e-12`` or ``options={"maxiter": 500}``.  The accepted
+        keys are listed in :class:`MinimizeOptions`.
 
     Returns
     -------
-    MLEResult
+    MLEResult[Parametrization]
         The estimate together with its log-likelihood, convergence flag and
-        diagnostics.
+        diagnostics.  The parameter is the base ``Parametrization`` because a
+        family is bound to its parametrization class at runtime; a caller that
+        knows the class can narrow the result itself.
 
     Raises
     ------
@@ -667,25 +544,34 @@ def fit_family(
     NotImplementedError
         If a non-base *parametrization* is requested.
     """
-    sample = validate_sample(family, sample)
+    data = validate_sample(family, sample)
 
-    probe = _probe_params(family, sample)
-    if not support_depends_on_params(family, sample):
-        _check_fixed_support(family, sample, probe)
+    # One probe point, used three times: to resolve the support at, to compare
+    # it against a perturbed one, and — unless the closed form takes over — as
+    # the point the optimizer starts from.  Computing it once is not only
+    # cheaper; it also guarantees that the support the data were checked
+    # against is the support the search actually begins in.
+    probe = _probe_params(family, data)
+    if not support_depends_on_params(family, probe):
+        _check_fixed_support(family, data, probe)
 
     closed_form = family.mle
-    fixed, fixed_in_base = _fixed_parameters(family)
-    formula_applies = closed_form is not None and fixed_in_base
+    fixed = _fixed_parameters(family)
 
-    if formula_applies and optimizer is None:
-        params = closed_form(sample, fixed)  # type: ignore[misc]
+    # The narrowing has to stay inside the condition the checker can see: the
+    # earlier form stored ``closed_form is not None`` in a separate boolean,
+    # which lost it and made the call below need a ``type: ignore`` — one that
+    # would have gone on masking a genuine ``NoneType is not callable`` had the
+    # condition ever grown another term.
+    if closed_form is not None and fixed.in_base_parametrization and optimizer is None:
+        params = closed_form(data, fixed.values)
         if params is not None:
             projected = project_onto_base(family, params.parameters)
             if projected is not None:
                 return _build_result(
                     family,
                     projected,
-                    sample,
+                    data,
                     parametrization,
                     method="closed_form",
                     optimizer=None,
@@ -693,11 +579,12 @@ def fit_family(
                     message="closed-form maximum likelihood solution",
                 )
 
+    formula_applies = closed_form is not None and fixed.in_base_parametrization
     notes: list[str] = []
     if formula_applies and optimizer is not None:
         note = (
             f"family '{family.name}' has a closed-form MLE, but 'optimizer="
-            f"{_optimizer_name(optimizer)}' was passed, so the numerical path is used"
+            f"{optimizer_name(optimizer)}' was passed, so the numerical path is used"
         )
         notes.append(note)
         warnings.warn(note, UserWarning, stacklevel=3)
@@ -716,18 +603,21 @@ def fit_family(
             notes.append(caveat)
             warnings.warn(caveat, UserWarning, stacklevel=3)
 
-    return _fit_numerically(family, sample, parametrization, optimizer, notes=notes, **options)
+    return _fit_numerically(
+        family, data, parametrization, optimizer, start=probe, notes=notes, **options
+    )
 
 
 def _fit_numerically(
     family: ParametricFamily,
     sample: NDArray[np.float64],
     parametrization: ParametrizationName | None,
-    optimizer: str | Callable[..., Any] | None,
+    optimizer: MinimizeMethod | MinimizeSolver | None,
     *,
+    start: Parametrization,
     notes: list[str],
-    **options: Any,
-) -> MLEResult:
+    **options: Unpack[MinimizeOptions],
+) -> MLEResult[Parametrization]:
     """
     Run the numerical search, applying the optimizer fallback policy.
 
@@ -740,7 +630,7 @@ def _fit_numerically(
     is always recorded in ``MLEResult.message``.
     """
     fun, jac = make_objective(family, sample)
-    x0 = to_vector(starting_point(family, sample))
+    x0 = to_vector(start)
     bounds = resolve_bounds(family)
 
     start_value = fun(x0)
@@ -755,33 +645,25 @@ def _fit_numerically(
             f"the search starts where the data have a positive density."
         )
 
-    method: str | Callable[..., Any] = optimizer if optimizer is not None else DEFAULT_OPTIMIZER
-    result = _minimize(fun, x0, jac, bounds, method, options)
+    method: MinimizeMethod | MinimizeSolver = (
+        optimizer if optimizer is not None else DEFAULT_OPTIMIZER
+    )
+    outcome = run_optimizer(fun, x0, jac=jac, bounds=bounds, method=method, options=options)
 
-    n_iterations = getattr(result, "nit", None)
-    verdict = _success_verdict(result)
-    if optimizer is None and (not verdict or n_iterations == 0):
+    if optimizer is None and (not outcome.success or outcome.n_iterations == 0):
         notes.append(
-            f"{_optimizer_name(method)} did not converge "
-            f"(success={verdict}, nit={n_iterations}: {_reported_message(result)}); "
+            f"{optimizer_name(method)} did not converge "
+            f"(success={outcome.success}, nit={outcome.n_iterations}: {outcome.message}); "
             f"fell back to {FALLBACK_OPTIMIZER}"
         )
         method = FALLBACK_OPTIMIZER
-        result = _minimize(fun, x0, None, bounds, method, options)
-        n_iterations = getattr(result, "nit", None)
-        verdict = _success_verdict(result)
+        # No gradient on the retry: the fallback is derivative-free by design.
+        outcome = run_optimizer(fun, x0, jac=None, bounds=bounds, method=method, options=options)
 
-    if getattr(result, "x", None) is None:
-        raise MLEError(
-            f"Optimizer '{_optimizer_name(method)}' returned no 'x' field, so there is no "
-            f"estimate to report. A solver passed as 'optimizer=' must return an "
-            f"'OptimizeResult' carrying at least 'x'."
-        )
-    params = from_vector(family.base, np.asarray(result.x, dtype=np.float64))
-    message = _reported_message(result)
-    if message:
-        notes.append(message)
-    if verdict is None:
+    params = from_vector(family.base, outcome.x)
+    if outcome.message:
+        notes.append(outcome.message)
+    if outcome.success is None:
         notes.append("the optimizer reported no convergence flag, so success is not claimed")
 
     return _build_result(
@@ -790,50 +672,21 @@ def _fit_numerically(
         sample,
         parametrization,
         method="numeric",
-        optimizer=_optimizer_name(method),
-        success=bool(verdict),
+        optimizer=optimizer_name(method),
+        success=bool(outcome.success),
         message="; ".join(notes),
-        n_iterations=None if n_iterations is None else int(n_iterations),
-        n_function_evaluations=(
-            None if getattr(result, "nfev", None) is None else int(result.nfev)
-        ),
+        n_iterations=outcome.n_iterations,
+        n_function_evaluations=outcome.n_function_evaluations,
     )
 
 
-def _minimize(
-    fun: Callable[[NDArray[np.float64]], float],
-    x0: NDArray[np.float64],
-    jac: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None,
-    bounds: list[tuple[float, float]] | None,
-    method: str | Callable[..., Any],
-    options: Mapping[str, Any],
-) -> OptimizeResult:
-    """
-    Call ``scipy.optimize.minimize``, passing only what the method can use.
-
-    ``jac`` and ``bounds`` are withheld from methods that ignore them, so that
-    naming, say, ``optimizer="Powell"`` does not fill the caller's output with
-    SciPy warnings about arguments the method never asked for.
-    """
-    kwargs: dict[str, Any] = dict(options)
-    if jac is not None and _supports_jac(method):
-        kwargs["jac"] = jac
-    if bounds is not None and _supports_bounds(method):
-        kwargs["bounds"] = bounds
-    # The SciPy stubs restrict ``method`` to a Literal of the built-in names,
-    # but ``minimize`` also accepts a custom solver callable — which this
-    # package documents and supports — so the call is made through an
-    # untyped view of the same function.
-    solver = cast("Callable[..., OptimizeResult]", minimize)
-    return solver(fun, x0, method=method, **kwargs)
-
-
 __all__ = [
-    "DEFAULT_OPTIMIZER",
-    "FALLBACK_OPTIMIZER",
+    "FixedParameters",
+    "IntervalSignature",
+    "OpaqueSignature",
+    "PointsSignature",
+    "SupportSignature",
     "fit_family",
-    "resolve_bounds",
-    "clip_to_bounds",
     "support_depends_on_params",
     "validate_sample",
 ]

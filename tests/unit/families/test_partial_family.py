@@ -120,7 +120,7 @@ class TestPartialParametricFamily(TestBaseFamily):
         assert partial.fixed_parameters == {"a": 2.0}
         # MappingProxyType does not allow modification
         with pytest.raises(TypeError):
-            partial.fixed_parameters["a"] = 3.0  # type: ignore[index]
+            partial.fixed_parameters["a"] = 3.0
 
     def test_fixed_parameter_names(self) -> None:
         fam = self._make_two_param_family()

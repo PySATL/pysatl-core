@@ -29,6 +29,8 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+import inspect
+from dataclasses import fields
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
@@ -41,11 +43,15 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from pysatl_core.families.parametric_family import ParametricFamily
+    from pysatl_core.families.parametric_family import (
+        ParametricFamily,
+        ParametricFamilyCharacteristic,
+    )
     from pysatl_core.families.parametrizations import Parametrization
 
-    type ObjectiveFunc = Callable[[NDArray[np.float64]], float]
-    type GradientFunc = Callable[[NDArray[np.float64]], NDArray[np.float64]]
+type ObjectiveFunc = Callable[[NDArray[np.float64]], float]
+type GradientFunc = Callable[[NDArray[np.float64]], NDArray[np.float64]]
+type LpdfProvider = Callable[[Parametrization, NDArray[np.float64]], NDArray[np.float64]]
 
 
 OUT_OF_SUPPORT_PENALTY: float = float(np.log(np.finfo(np.float64).max) * 100)
@@ -85,10 +91,10 @@ def field_names(params_or_class: Parametrization | type[Parametrization]) -> tup
     List a parametrization's fields, in declaration order.
 
     ``Parametrization`` is an ABC that the ``@parametrization`` decorator turns
-    into a dataclass, and views get a class synthesised at runtime, so
-    ``__dataclass_fields__`` exists on every concrete parametrization but is
-    not part of the declared base class. Reading it through ``getattr`` keeps
-    that fact in one place instead of scattering it across the package.
+    into a dataclass, and views get a class synthesised at runtime.  That
+    promise is now declared on the base class itself (``Parametrization.
+    __dataclass_fields__``), so the fields are read through
+    ``dataclasses.fields`` rather than probed by name.
 
     Parameters
     ----------
@@ -100,8 +106,16 @@ def field_names(params_or_class: Parametrization | type[Parametrization]) -> tup
     tuple[str, ...]
         Field names in declaration order. For a view this is the free
         parameters only.
+
+    Raises
+    ------
+    TypeError
+        If the argument is not a parametrization that the decorator has turned
+        into a dataclass.  Previously such an object silently yielded an empty
+        tuple, which reads downstream as "a family with no free parameters" —
+        a different situation entirely.
     """
-    return tuple(getattr(params_or_class, "__dataclass_fields__", {}))
+    return tuple(f.name for f in fields(params_or_class))
 
 
 def to_vector(params: Parametrization) -> NDArray[np.float64]:
@@ -125,13 +139,13 @@ def to_vector(params: Parametrization) -> NDArray[np.float64]:
     )
 
 
-def from_vector(param_cls: type[Parametrization], vec: NDArray[np.float64]) -> Parametrization:
+def from_vector[P: Parametrization](param_cls: type[P], vec: NDArray[np.float64]) -> P:
     """
     Rebuild a parametrization from a flat vector.
 
     Parameters
     ----------
-    param_cls : type[Parametrization]
+    param_cls : type[P]
         Parametrization class to instantiate.  For a view this is the
         lightweight class holding only the free parameters.
     vec : NDArray[np.float64]
@@ -139,10 +153,10 @@ def from_vector(param_cls: type[Parametrization], vec: NDArray[np.float64]) -> P
 
     Returns
     -------
-    Parametrization
-        Instance carrying those values.  The instance is *not* validated:
-        rejecting inadmissible parameters is the objective function's job, and
-        it does so with a value rather than an exception.
+    P
+        Instance of exactly the class that was passed in.  It is *not*
+        validated: rejecting inadmissible parameters is the objective
+        function's job, and it does so with a value rather than an exception.
     """
     names = field_names(param_cls)
     return param_cls(**{name: float(value) for name, value in zip(names, vec, strict=True)})
@@ -178,9 +192,34 @@ def satisfies_constraints(params: Parametrization) -> bool:
     return True
 
 
-def lpdf_provider(
-    family: ParametricFamily,
-) -> Callable[[Parametrization, NDArray[np.float64]], NDArray[np.float64]]:
+def _accepts_params_and_points(provider: ParametricFamilyCharacteristic[object, object]) -> bool:
+    """
+    Whether a characteristic provider has the ``(params, x)`` calling shape.
+
+    ``distr_characteristics`` admits three shapes — ``f()``, ``f(params)`` and
+    ``f(params, x)`` — and the declared type is their union, so nothing in it
+    says which one a given ``lpdf`` entry is.  ``ParametricFamily.
+    _bind_parametrization`` answers the same question the same way, by reading
+    the signature; asking it here is what turns "the wrong shape" into a
+    message at fit time instead of a bare ``TypeError`` thrown thousands of
+    iterations deep inside the optimizer.
+    """
+    try:
+        parameters = list(inspect.signature(provider).parameters.values())
+    except (TypeError, ValueError):  # pragma: no cover - builtins without a signature
+        # A provider whose signature cannot be read is given the benefit of the
+        # doubt: refusing it would reject a legitimate C-implemented callable.
+        return True
+    positional = [
+        p
+        for p in parameters
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    takes_var_positional = any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in parameters)
+    return len(positional) >= 2 or (len(positional) >= 1 and takes_var_positional)
+
+
+def lpdf_provider(family: ParametricFamily) -> LpdfProvider:
     """
     Fetch the family's raw analytical log-density provider.
 
@@ -198,13 +237,14 @@ def lpdf_provider(
 
     Returns
     -------
-    Callable[[Parametrization, NDArray[np.float64]], NDArray[np.float64]]
+    LpdfProvider
         Callable mapping ``(params, x)`` to log-density values.
 
     Raises
     ------
     MLEError
-        If the family does not declare ``lpdf``.
+        If the family does not declare ``lpdf``, or declares it with a calling
+        shape other than ``(params, x)``.
     """
     by_parametrization = family.distr_characteristics.get(CharacteristicName.LPDF)
     base_name = family.base_parametrization_name
@@ -218,8 +258,22 @@ def lpdf_provider(
             f"no 'pdf -> lpdf' edge — and 'log(pdf)' is not used as a substitute because it "
             f"loses precision in the tails."
         )
+    # A label chosen here has to be deterministic: two fits of the same family
+    # must sum the same log-density.  ``dict`` preserves insertion order, so
+    # falling back to the first declared provider is reproducible, and the
+    # default label is preferred whenever the family declares one.
     provider = labeled.get(DEFAULT_ANALYTICAL_COMPUTATION_LABEL) or next(iter(labeled.values()))
-    return cast("Callable[[Parametrization, NDArray[np.float64]], NDArray[np.float64]]", provider)
+    if not _accepts_params_and_points(provider):
+        raise MLEError(
+            f"Family '{family.name}' declares 'lpdf' for parametrization '{base_name}' as a "
+            f"provider that takes no evaluation points "
+            f"({inspect.signature(provider)}). Maximum likelihood estimation needs the "
+            f"log-density *at the observations*, so the provider must have the "
+            f"'(parameters, x)' shape that 'pdf', 'cdf' and 'ppf' use."
+        )
+    # Guarded by the arity check above: the declared union admits three calling
+    # shapes and only this one survives it.
+    return cast("LpdfProvider", provider)
 
 
 def _inside_support(
@@ -236,7 +290,7 @@ def _usable_mask(
     family: ParametricFamily,
     params: Parametrization,
     sample: NDArray[np.float64],
-    provider: Callable[[Parametrization, NDArray[np.float64]], NDArray[np.float64]],
+    provider: LpdfProvider,
 ) -> tuple[NDArray[np.bool_], NDArray[np.float64], int]:
     """
     Split the sample into the part the current parameters explain and the rest.
@@ -384,6 +438,9 @@ def log_likelihood(
 
 __all__ = [
     "OUT_OF_SUPPORT_PENALTY",
+    "ObjectiveFunc",
+    "GradientFunc",
+    "LpdfProvider",
     "field_names",
     "make_objective",
     "log_likelihood",

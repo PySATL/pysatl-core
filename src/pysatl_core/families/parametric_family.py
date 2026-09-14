@@ -16,7 +16,7 @@ import inspect
 from collections.abc import Mapping
 from functools import partial
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
+from typing import TYPE_CHECKING, Any, Unpack, cast, dataclass_transform, overload
 
 import numpy as np
 
@@ -32,8 +32,15 @@ from pysatl_core.types import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import numpy.typing as npt
+
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
+    from pysatl_core.estimation.optimizers import (
+        MinimizeMethod,
+        MinimizeOptions,
+        MinimizeSolver,
+    )
     from pysatl_core.estimation.result import MLEResult
     from pysatl_core.types import (
         GenericCharacteristicName,
@@ -53,7 +60,7 @@ if TYPE_CHECKING:
         | ParametricFamilyCharacteristic[Any, Any]
     )
     type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
-    type MLEFormula = Callable[[NumericArray, Mapping[str, Any]], Parametrization | None]
+    type MLEFormula = Callable[[NumericArray, Mapping[str, float]], Parametrization | None]
     type NonParametrizedCharacteristic[In, Out] = Callable[[], Out]
     type ParametricFamilyCharacteristic[In, Out] = (
         NonParametrizedCharacteristic[In, Out] | ParametrizedCharacteristic[In, Out]
@@ -491,7 +498,7 @@ class ParametricFamily:
         parametrization_name: ParametrizationName | None = None,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
-        **parameters_values: Any,
+        **parameters_values: float,
     ) -> ParametricFamilyDistribution:
         """
         Create a distribution instance with given parameters.
@@ -527,6 +534,50 @@ class ParametricFamily:
         )
 
         parameters = parametrization_class(**parameters_values)
+        return self.distribution_from(
+            parameters,
+            sampling_strategy=sampling_strategy,
+            computation_strategy=computation_strategy,
+        )
+
+    def distribution_from(
+        self,
+        parameters: Parametrization,
+        *,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+    ) -> ParametricFamilyDistribution:
+        """
+        Create a distribution instance from an existing parametrization object.
+
+        The counterpart of :meth:`distribution` for a caller that already holds
+        the parameters as an object — an estimate returned by :meth:`fit`, for
+        instance.  Going through ``distribution(**params.parameters)`` instead
+        would flatten them into a mapping only to rebuild the same class from
+        it, and would let a parameter whose name collides with
+        ``parametrization_name`` or one of the strategy arguments bind to the
+        wrong place.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parameters of this family, in any parametrization it registers.
+        sampling_strategy : SamplingStrategy or None, optional
+            Strategy for generating random samples; unique per distribution.
+        computation_strategy : ComputationStrategy or None, optional
+            Strategy for computing characteristics and conversions; unique per
+            distribution.
+
+        Returns
+        -------
+        ParametricFamilyDistribution
+            Distribution instance with those parameters.
+
+        Raises
+        ------
+        ValueError
+            If the parameters do not satisfy the family's constraints.
+        """
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
@@ -603,12 +654,12 @@ class ParametricFamily:
 
     def fit(
         self,
-        sample: NumericArray,
+        sample: npt.ArrayLike,
         *,
         parametrization: ParametrizationName | None = None,
-        optimizer: str | Callable[..., Any] | None = None,
-        **options: Any,
-    ) -> MLEResult:
+        optimizer: MinimizeMethod | MinimizeSolver | None = None,
+        **options: Unpack[MinimizeOptions],
+    ) -> MLEResult[Parametrization]:
         """
         Estimate this family's parameters from a sample by maximum likelihood.
 
@@ -627,7 +678,7 @@ class ParametricFamily:
 
         Parameters
         ----------
-        sample : NumericArray
+        sample : array_like
             Observed values.  Must be one-dimensional and finite, and hold at
             least as many observations as there are free parameters.
             Observation weights and censored data are not supported.
@@ -637,7 +688,7 @@ class ParametricFamily:
             supported choice: converting out of the base parametrization needs
             an inverse transform that the ``Parametrization`` API does not
             provide, and requesting another one raises ``NotImplementedError``.
-        optimizer : str or Callable or None, optional
+        optimizer : MinimizeMethod or MinimizeSolver or None, optional
             A ``scipy.optimize.minimize`` method name (``"Nelder-Mead"``,
             ``"Powell"``, ...) or a solver callable with the ``minimize``
             signature.  Passing it forces the numerical path even for a family
@@ -646,17 +697,26 @@ class ParametricFamily:
             argument — the request is honoured.
         **options
             Extra keyword arguments forwarded to ``scipy.optimize.minimize``,
-            for example ``tol=1e-12`` or ``options={"maxiter": 500}``.
+            for example ``tol=1e-12`` or ``options={"maxiter": 500}``.  The
+            accepted keys are listed in
+            :class:`~pysatl_core.estimation.optimizers.MinimizeOptions`.
 
         Returns
         -------
-        MLEResult
+        MLEResult[Parametrization]
             Estimated parameters together with the attained log-likelihood, the
             number of free parameters, a convergence flag and a diagnostic
             message.  A fit that fails to converge is reported here with
             ``success=False``, not raised: exceptions are reserved for
             situations nothing can recover from, such as data lying outside a
             fixed support.
+
+            The result is parameterised by ``Parametrization`` rather than by
+            the family's own class: a family is bound to its parametrization
+            classes at runtime, by the ``@parametrization`` decorator, which
+            runs *after* the family object exists, so no static type can name
+            the class a given family will register.  A caller who knows it — a
+            family author, typically — can say so at the call site.
 
         Raises
         ------
@@ -698,19 +758,29 @@ class ParametricFamily:
 
         Examples
         --------
-        >>> res = Normal.fit(sample)
-        >>> res.params.mu, res.params.sigma           # doctest: +SKIP
+        >>> res = Normal.fit(sample)                   # doctest: +SKIP
         >>> res.method                                 # doctest: +SKIP
         'closed_form'
+        >>> res.params.parameters["sigma"]             # doctest: +SKIP
+        1.98
         >>> res = Normal.view(mu=0.0).fit(sample)      # doctest: +SKIP
         >>> res.n_params                               # doctest: +SKIP
         1
+
+        Attribute access on the estimate — ``res.params.sigma`` — works at
+        runtime and is the natural way to read it, but a checker cannot verify
+        it through the declared ``Parametrization``.  A caller who wants that
+        verified narrows the result to the class the family registers:
+
+        >>> res: MLEResult[MeanStd] = Normal.fit(sample)   # doctest: +SKIP
+        >>> res.params.sigma                               # doctest: +SKIP
+        1.98
         """
         from pysatl_core.estimation.mle import fit_family
 
         return fit_family(
             self,
-            np.asarray(sample, dtype=np.float64),
+            sample,
             parametrization=parametrization,
             optimizer=optimizer,
             **options,
@@ -720,7 +790,7 @@ class ParametricFamily:
         self,
         *,
         parametrization_name: str | None = None,
-        **fixed_params: Any,
+        **fixed_params: float,
     ) -> PartialParametricFamily:
         """
         Create a view of this family with partially fixed parameters.
@@ -730,8 +800,11 @@ class ParametricFamily:
         parametrization_name : str, optional
             Name of the parametrization in which the fixed parameters are given.
             If not provided, the base parametrization of the family is used.
-        **fixed_params : Any
-            Parameter names and values to fix.
+        **fixed_params : float
+            Parameter names and values to fix.  Every parameter of every
+            parametrization in this package is a real number; declaring that
+            here is what keeps ``fixed_parameters`` — and the ``fixed`` mapping
+            a closed-form rule receives — free of ``Any``.
 
         Returns
         -------
@@ -772,7 +845,7 @@ class PartialParametricFamily(ParametricFamily):
     ----------
     base_family : ParametricFamily
         The original parametric family.
-    fixed_params : dict[str, Any]
+    fixed_params : dict[str, float]
         Dictionary of fixed parameter names and their values.
     parametrization_name : str, optional
         Name of the parametrization in which the fixed parameters are specified.
@@ -789,7 +862,7 @@ class PartialParametricFamily(ParametricFamily):
     def __init__(
         self,
         base_family: ParametricFamily,
-        fixed_params: dict[str, Any],
+        fixed_params: dict[str, float],
         parametrization_name: str | None = None,
     ) -> None:
         self._fixed_in_param = parametrization_name or base_family.base_parametrization_name
@@ -966,7 +1039,7 @@ class PartialParametricFamily(ParametricFamily):
         return self._base_family
 
     @property
-    def fixed_parameters(self) -> Mapping[str, Any]:
+    def fixed_parameters(self) -> Mapping[str, float]:
         """Fixed parameter values."""
         return MappingProxyType(self._fixed_params)
 
@@ -1066,7 +1139,7 @@ class PartialParametricFamily(ParametricFamily):
         parametrization_name: str | None = None,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
-        **kwargs: Any,
+        **kwargs: float,
     ) -> ParametricFamilyDistribution:
         target = parametrization_name or self._fixed_in_param
         if target != self._fixed_in_param:
@@ -1090,7 +1163,7 @@ class PartialParametricFamily(ParametricFamily):
         self,
         *,
         parametrization_name: str | None = None,
-        **additional_params: Any,
+        **additional_params: float,
     ) -> PartialParametricFamily:
         if parametrization_name is not None and parametrization_name != self._fixed_in_param:
             raise ValueError(
