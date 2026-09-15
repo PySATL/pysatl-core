@@ -54,9 +54,7 @@ class TestOverflowingLogDensity:
             distr_type=UnivariateContinuous,
             distr_parametrizations=["h"],
             distr_characteristics={
-                CharacteristicName.LPDF: lambda p, x: np.full_like(
-                    x, 1e308 * cast(Any, p).scale
-                )
+                CharacteristicName.LPDF: lambda p, x: np.full_like(x, 1e308 * cast(Any, p).scale)
             },
         )
 
@@ -321,9 +319,7 @@ class TestFallbackKeepsTheBetterEstimate:
     def test_the_fallback_never_reports_a_worse_estimate(self, gamma_family, rng):
         sample = rng.gamma(3.0, 2.0, 500)
         with_fallback = gamma_family.fit(sample, options={"maxiter": 2})
-        without_fallback = gamma_family.fit(
-            sample, optimizer="L-BFGS-B", options={"maxiter": 2}
-        )
+        without_fallback = gamma_family.fit(sample, optimizer="L-BFGS-B", options={"maxiter": 2})
         assert with_fallback.log_likelihood >= without_fallback.log_likelihood
 
 
