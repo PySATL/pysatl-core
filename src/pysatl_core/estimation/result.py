@@ -35,16 +35,6 @@ unchecked into :attr:`MLEResult.method`.
 """
 
 
-# TODO(mle): inference is not implemented.  Standard errors and confidence
-# intervals follow from the observed Fisher information — the negative Hessian
-# of the log-likelihood at the estimate.  The building block is already there:
-# ``ParametricFamily.score`` gives the per-observation gradient, so the
-# observed information can be approximated by the outer-product (BHHH)
-# estimator ``sum_i s_i s_i^T`` or by differentiating the score numerically.
-# Adding ``standard_errors`` and ``confidence_interval(level)`` here would then
-# be a local change, requiring no new family-level API.
-
-
 @dataclass(frozen=True, slots=True)
 class MLEResult[P: Parametrization]:
     """

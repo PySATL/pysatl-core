@@ -70,22 +70,6 @@ ever compete with one that explains more of the data.
 """
 
 
-# TODO(mle): coupled constraints (``lower_bound < upper_bound`` in the uniform
-# family) are checked by predicate here but never handed to the optimizer: a box
-# of per-parameter bounds cannot express a relation between two parameters.  To
-# support them, translate the family's coupled ``@constraint`` predicates into
-# ``scipy.optimize.minimize(constraints=...)`` entries and switch the numerical
-# path to SLSQP or trust-constr when any are present.
-
-# TODO(mle): a family that does not declare ``lpdf`` is unsupported.  The
-# characteristic graph has no ``pdf -> lpdf`` edge (see the comment on
-# ``CharacteristicName.LPDF`` in ``types.py``), so nothing can derive the
-# log-density for such a family.  Adding that edge to
-# ``distributions/registry/`` would let this module fall back to the graph.  A
-# local ``log(pdf)`` fallback is deliberately *not* used: it silently loses
-# precision in the tails, exactly where the log-density matters.
-
-
 def field_names(params_or_class: Parametrization | type[Parametrization]) -> tuple[str, ...]:
     """
     List a parametrization's fields, in declaration order.
@@ -133,10 +117,8 @@ def to_vector(params: Parametrization) -> NDArray[np.float64]:
         Values ordered by ``params.__dataclass_fields__``, that is, by
         declaration order of the parametrization's fields.
     """
-    return np.array(
-        [float(getattr(params, name)) for name in field_names(params)],
-        dtype=np.float64,
-    )
+    values = params.parameters
+    return np.array([values[name] for name in field_names(params)], dtype=np.float64)
 
 
 def from_vector[P: Parametrization](param_cls: type[P], vec: NDArray[np.float64]) -> P:
@@ -376,8 +358,6 @@ def make_objective(
         params = from_vector(param_cls, np.asarray(vec, dtype=np.float64))
         zeros = np.zeros(n_free, dtype=np.float64)
         if not satisfies_constraints(params):
-            # ``fun`` already rejects this point with ``inf``; the gradient is
-            # never used to move away from it, so its value only has to be finite.
             return zeros
         usable, _terms, _n_bad = _usable_mask(family, params, sample, provider)
         if not usable.any():
@@ -385,11 +365,6 @@ def make_objective(
         try:
             scores = np.asarray(family.score(params, sample[usable]), dtype=np.float64)
         except ValueError:
-            # A family may declare its score undefined on a boundary point that
-            # still carries a finite log-density.  Reporting a zero gradient
-            # there is honest enough for the caller: a gradient method reads it
-            # as a stationary point, stops, and the fallback policy in
-            # ``mle.py`` retries with a derivative-free method.
             return zeros
         grad = -scores.sum(axis=0)
         return np.where(np.isfinite(grad), grad, 0.0).astype(np.float64)

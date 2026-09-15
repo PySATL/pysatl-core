@@ -2,10 +2,10 @@
 The one door through which this package reaches ``scipy.optimize``.
 
 ``scipy.optimize.OptimizeResult`` is a bag of attributes — its stubs declare
-``__getattr__(str) -> Any``, so ``result.sucess`` type-checks as happily as
-``result.success`` — and letting such an object travel through the estimator
-would make every value derived from it unverifiable.  :class:`OptimizerOutcome`
-normalises it once, here, and everything downstream works with declared types.
+``__getattr__(str) -> Any``, so letting such an object travel through the
+estimator would make every value derived from it unverifiable.
+:class:`OptimizerOutcome` normalises it once, here, and everything downstream
+works with declared types.
 
 The same applies in the other direction: what the caller may name as an
 optimizer, and what may be forwarded to ``minimize``, are spelled out as
@@ -133,15 +133,25 @@ class MinimizeOptions(TypedDict, total=False):
     decides both, from the family's ``score`` and ``param_bounds`` and from what
     the chosen method can actually use, and a value passed here would be
     overwritten.
+
+    ``args``, ``hess`` and ``hessp`` are absent for the same reason.  The
+    objective built by :func:`~pysatl_core.estimation.likelihood.make_objective`
+    is a function of the parameter vector alone, so an ``args`` tuple would be
+    forwarded to SciPy and reach ``fun(x, *args)`` as a ``TypeError`` raised
+    from inside the objective — the opposite of what declaring this shape is
+    for.  ``hess`` and ``hessp`` are ignored by both the default method and the
+    fallback, and naming them only fills the caller's output with SciPy's
+    "does not use Hessian information" warnings, the very noise
+    :func:`run_optimizer` withholds ``jac`` and ``bounds`` to avoid.
+
+    ``constraints`` stays: it neither fails nor warns, and it is what the
+    coupled-constraint work in ``docs/estimation_todos.md`` #2 will need.
     """
 
     tol: float
     options: Mapping[str, object]
     callback: MinimizeCallback
-    args: tuple[object, ...]
     constraints: object
-    hess: object
-    hessp: object
 
 
 class _MinimizeFunc(Protocol):

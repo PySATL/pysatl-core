@@ -72,42 +72,6 @@ if TYPE_CHECKING:
     from pysatl_core.types import ParametrizationName
 
 
-# TODO(mle): selecting a family from a list of candidates by AIC/BIC is not
-# implemented.  It is a loop over ``fit_family`` that keeps the candidate with
-# the smallest criterion; ``MLEResult`` already carries ``n_params``,
-# ``n_observations`` and ``log_likelihood``, so no new plumbing is needed.  The
-# open question is what to do with candidates whose fit reports
-# ``success=False``, which is why it is not decided here.
-
-# TODO(mle): parameters with a one-sided bound are optimised in their natural
-# coordinates.  Re-parametrising them (``sigma -> log sigma``, ``k -> log k``)
-# would remove the bound entirely and improve conditioning near zero.  It needs
-# a per-parameter transform declared next to ``param_bounds`` plus the matching
-# chain rule applied to the gradient before it reaches the optimizer.
-
-# TODO(mle): whether the support depends on the parameters is decided by the
-# heuristic in ``support_depends_on_params`` — it compares the support at two
-# points of the parameter space.  It answers correctly for all four built-in
-# families, but a family whose support happens to coincide at those two points
-# would be misclassified.  The proper fix is a declarative flag on
-# ``ParametricFamily`` (say ``support_depends_on_parameters: bool``), set by the
-# family author, with this heuristic kept only as the default.
-
-# TODO(mle): a result cannot be converted from the base parametrization into an
-# arbitrary one.  ``Parametrization`` offers only
-# ``transform_to_base_parametrization``; there is no inverse, and it cannot be
-# synthesised from the forward map.  Adding
-# ``transform_from_base_parametrization`` to the parametrizations of the
-# built-in families would make ``fit(..., parametrization=...)`` work for every
-# declared parametrization.
-
-# TODO(mle): discrete families are not supported.  None are registered, and
-# ``CharacteristicName`` has ``PMF`` but no ``LPMF``, so there is no log-mass
-# characteristic for the objective to sum.  Nothing here assumes continuity
-# beyond that missing characteristic: adding ``LPMF`` and selecting it by
-# distribution type in ``lpdf_provider`` would be the whole change.
-
-
 def validate_sample(family: ParametricFamily, sample: npt.ArrayLike) -> NDArray[np.float64]:
     """
     Check that a sample can carry a maximum likelihood fit, and normalise it.
@@ -146,9 +110,6 @@ def validate_sample(family: ParametricFamily, sample: npt.ArrayLike) -> NDArray[
     the specification.  Be aware that its stated rationale does not hold: a
     constant sample drives ``sigma`` to 0 for a normal family and collapses the
     interval for a uniform one, and neither is in fact refused — the closed-form
-    branch never calls ``validate()``, so such a fit is reported as successful.
-    See the TODO above ``_build_result``.  Observation weights and censored data
-    are not supported.
     """
     try:
         arr = np.asarray(sample, dtype=np.float64)
@@ -243,6 +204,9 @@ def _support_signature(support: Support | None) -> SupportSignature:
     """
     if support is None:
         return None
+    # New dataclass, not the support itself: IntervalSupport/PointSupport are
+    # Protocols, so an arbitrary implementation's own `==` can't be trusted to
+    # compare structurally.
     if isinstance(support, IntervalSupport):
         return IntervalSignature(
             left=float(support.left),
@@ -311,24 +275,19 @@ def _probe_params(family: ParametricFamily, sample: NDArray[np.float64]) -> Para
     the line between "the rule declined" and "the rule is broken".
     """
     try:
-        return starting_point(family, sample)
+        return starting_point(family, sample, stacklevel=5)
     except (MLEError, ValueError, ArithmeticError) as exc:
         ones = project_onto_base(family, dict.fromkeys(field_names(family.base), 1.0))
         if ones is None:  # pragma: no cover - ones covers every field by construction
             raise
-        # Degrading quietly is what blurs the line the docstring draws: the
-        # caller cannot otherwise tell "the rule declined this data" from "the
-        # rule is broken", because both end here.  Saying so costs nothing and
-        # the fit still proceeds.
         warnings.warn(
             f"the method-of-moments starting rule for family '{family.name}' failed "
             f"({type(exc).__name__}: {exc}); starting from a default probe instead. The fit "
             f"continues, but it starts further from the answer than it needs to.",
             UserWarning,
-            stacklevel=2,
+            stacklevel=4,
         )
-        # Clipped like every other start: a probe outside the declared bounds
-        # would resolve the support at a point the optimizer may never occupy.
+
         return clip_to_bounds(family, ones)
 
 
@@ -435,25 +394,6 @@ def _convert_parametrization(
     )
 
 
-# TODO(mle): a fit is never checked against the family's own ``@constraint``
-# predicates, so an estimate that violates them is reported with
-# ``success=True``.  A constant sample is the reachable case: the closed form
-# returns ``sigma = 0`` for ``Normal`` and ``lower_bound == upper_bound`` for
-# ``ContinuousUniform``, both of which ``validate()`` rejects, yet ``fit``
-# succeeds and only ``log_likelihood == -inf`` hints at the problem — the
-# failure surfaces later, and elsewhere, as a ``ValueError`` from
-# ``MLEResult.distribution``.
-#
-# Note this contradicts the reasoning in section 6.1 of the specification,
-# which omitted a constant-sample check on the grounds that ``sigma > 0`` and
-# ``lower_bound < upper_bound`` "already reject" such an estimate.  They do
-# not: no code path on the closed-form branch calls ``validate()``.
-#
-# The fix belongs in ``_build_result``: call ``params.validate()`` and turn the
-# resulting ``ValueError`` into a ``FitDataError`` naming the constraint and
-# the sample property that caused it.  Left undone here because it changes the
-# error contract of ``fit`` (a case that currently returns would start
-# raising), which is the specification author's call to make.
 def _build_result(
     family: ParametricFamily,
     params: Parametrization,
@@ -469,6 +409,14 @@ def _build_result(
 ) -> MLEResult[Parametrization]:
     """Recompute the clean log-likelihood and pack everything into a result."""
     value = log_likelihood(family, params, sample)
+    if success and value == -np.inf:
+        success = False
+        unusable = (
+            "the data have zero likelihood under this estimate - an observation lies "
+            "outside the support it implies, or has zero density there - so the estimate "
+            "is not usable"
+        )
+        message = f"{message}; {unusable}" if message else unusable
     return MLEResult(
         family_name=family.name,
         params=_convert_parametrization(family, params, parametrization),
@@ -538,7 +486,12 @@ def fit_family(
         If there are fewer observations than free parameters.
     FitDataError
         If observations fall outside a support that does not depend on the
-        parameters, or contradict the parameters fixed in a view.
+        parameters.  A closed-form rule may raise it for a second reason — data
+        that contradict the parameters fixed in a view — but only on its own
+        branch: the numerical path reports the same situation as a returned
+        result with ``success=False`` and ``log_likelihood == -inf`` rather
+        than as an exception.  Do not rely on the exception to detect it; test
+        ``success`` instead, which is correct on both paths.
     MLEError
         If the family declares no ``lpdf``, or no usable starting point exists.
     NotImplementedError
@@ -546,11 +499,6 @@ def fit_family(
     """
     data = validate_sample(family, sample)
 
-    # One probe point, used three times: to resolve the support at, to compare
-    # it against a perturbed one, and — unless the closed form takes over — as
-    # the point the optimizer starts from.  Computing it once is not only
-    # cheaper; it also guarantees that the support the data were checked
-    # against is the support the search actually begins in.
     probe = _probe_params(family, data)
     if not support_depends_on_params(family, probe):
         _check_fixed_support(family, data, probe)
@@ -558,11 +506,6 @@ def fit_family(
     closed_form = family.mle
     fixed = _fixed_parameters(family)
 
-    # The narrowing has to stay inside the condition the checker can see: the
-    # earlier form stored ``closed_form is not None`` in a separate boolean,
-    # which lost it and made the call below need a ``type: ignore`` — one that
-    # would have gone on masking a genuine ``NoneType is not callable`` had the
-    # condition ever grown another term.
     if closed_form is not None and fixed.in_base_parametrization and optimizer is None:
         params = closed_form(data, fixed.values)
         if params is not None:
@@ -589,10 +532,6 @@ def fit_family(
         notes.append(note)
         warnings.warn(note, UserWarning, stacklevel=3)
         if family.name == FamilyName.CONTINUOUS_UNIFORM:
-            # Unlike SciPy, which drops an explicitly passed ``optimizer`` on
-            # the floor in every overridden ``fit`` (``_remove_optimizer_
-            # parameters``), the request is honoured here — but not silently,
-            # because for this family the numerical path is genuinely unsound.
             caveat = (
                 "the numerical path is unreliable for a uniform family: the likelihood "
                 "maximum sits on the boundary of the admissible region (at min(x) and "
@@ -631,7 +570,7 @@ def _fit_numerically(
     """
     fun, jac = make_objective(family, sample)
     x0 = to_vector(start)
-    bounds = resolve_bounds(family)
+    bounds = resolve_bounds(family, stacklevel=5)
 
     start_value = fun(x0)
     if not np.isfinite(start_value):
@@ -651,14 +590,28 @@ def _fit_numerically(
     outcome = run_optimizer(fun, x0, jac=jac, bounds=bounds, method=method, options=options)
 
     if optimizer is None and (not outcome.success or outcome.n_iterations == 0):
-        notes.append(
-            f"{optimizer_name(method)} did not converge "
-            f"(success={outcome.success}, nit={outcome.n_iterations}: {outcome.message}); "
-            f"fell back to {FALLBACK_OPTIMIZER}"
-        )
-        method = FALLBACK_OPTIMIZER
+        # A retry is a second opinion, not a verdict — adopting it unseen
+        # returned a worse likelihood on ~half of sampled fits.
+        first = outcome
+        first_name = optimizer_name(method)
+        verdict = "did not converge" if not first.success else "converged without taking a step"
         # No gradient on the retry: the fallback is derivative-free by design.
-        outcome = run_optimizer(fun, x0, jac=None, bounds=bounds, method=method, options=options)
+        retry = run_optimizer(
+            fun, x0, jac=None, bounds=bounds, method=FALLBACK_OPTIMIZER, options=options
+        )
+        preamble = (
+            f"{first_name} {verdict} "
+            f"(success={first.success}, nit={first.n_iterations}: {first.message})"
+        )
+        if fun(retry.x) <= fun(first.x):
+            outcome = retry
+            method = FALLBACK_OPTIMIZER
+            notes.append(f"{preamble}; fell back to {FALLBACK_OPTIMIZER}")
+        else:
+            notes.append(
+                f"{preamble}; {FALLBACK_OPTIMIZER} was tried and reached a worse point, "
+                f"so the {first_name} estimate was kept"
+            )
 
     params = from_vector(family.base, outcome.x)
     if outcome.message:

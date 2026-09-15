@@ -120,7 +120,7 @@ class TestBoundsAgreeWithConstraints:
     Read this class as describing *today's* behaviour, not a requirement.  It
     asserts that a value sitting exactly *on* a declared edge fails
     ``validate()``, which is true only because ``param_bounds`` has no way to
-    say that a bound is closed — see the TODO above ``_collect_bounds``.
+    say that a bound is closed — see ``docs/estimation_todos.md`` #4.
     Closed bounds are ordinary (SciPy declares ``c >= 0`` for ``foldnorm``,
     ``n >= 1`` for ``erlang``), so when the declaration gains that
     expressiveness this class has to change with it: a family declaring a

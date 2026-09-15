@@ -21,6 +21,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -39,10 +40,6 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametrizations import Parametrization
 
 
-# Outside ``TYPE_CHECKING`` so that a caller writing a rule of their own can
-# import the name; a PEP 695 alias keeps its right-hand side unevaluated, so
-# this costs nothing at import time.  See the note on the aliases in
-# ``likelihood.py`` for what the name does and does not give you.
 type MomentRule = Callable[[NDArray[np.float64]], Mapping[str, float]]
 
 
@@ -153,7 +150,9 @@ def project_onto_base(
     return family.base(**{name: float(values[name]) for name in fields})
 
 
-def starting_point(family: ParametricFamily, sample: NDArray[np.float64]) -> Parametrization:
+def starting_point(
+    family: ParametricFamily, sample: NDArray[np.float64], *, stacklevel: int = 2
+) -> Parametrization:
     """
     Choose the point the optimizer starts from.
 
@@ -168,6 +167,12 @@ def starting_point(family: ParametricFamily, sample: NDArray[np.float64]) -> Par
         Family being fitted.
     sample : NDArray[np.float64]
         Validated 1-D sample.
+    stacklevel : int, optional
+        Frames to skip when attributing the warning below, in the sense of
+        :func:`warnings.warn`.  The default points at a direct caller;
+        ``fit_family`` passes a larger value so that a misspelled rule is
+        reported against the user's ``fit`` call rather than against this
+        package.
 
     Returns
     -------
@@ -178,12 +183,31 @@ def starting_point(family: ParametricFamily, sample: NDArray[np.float64]) -> Par
     ------
     MLEError
         If the starting values cannot be assembled at all.
+
+    Warns
+    -----
+    UserWarning
+        When a registered rule returns names that partly match the family's
+        free parameters and partly do not — the signature of a misspelled
+        name, as opposed to a rule written in another parametrization, which
+        shares no names at all and is left alone.
     """
     rule = _MOMENT_STARTS.get(family.name)
     if rule is not None:
-        projected = project_onto_base(family, rule(sample))
+        values = rule(sample)
+        projected = project_onto_base(family, values)
         if projected is not None:
             return clip_to_bounds(family, projected)
+        names = set(field_names(family.base))
+        if names & set(values):
+            warnings.warn(
+                f"the method-of-moments rule for family '{family.name}' returned "
+                f"{sorted(values)}, which does not cover its free parameters "
+                f"{sorted(names)}; starting from a default point instead. Check the "
+                f"names the rule returns.",
+                UserWarning,
+                stacklevel=stacklevel,
+            )
 
     ones = dict.fromkeys(field_names(family.base), 1.0)
     projected = project_onto_base(family, ones)

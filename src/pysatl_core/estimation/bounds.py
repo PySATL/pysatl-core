@@ -34,41 +34,6 @@ if TYPE_CHECKING:
     from pysatl_core.families.parametrizations import Parametrization
 
 
-# TODO(mle): ``param_bounds`` cannot say whether a bound is open or closed, and
-# this function assumes every one of them is open — it nudges each finite edge
-# inwards by one ULP unconditionally.  A family needing ``c >= 0`` rather than
-# ``c > 0`` therefore has no way to declare it: the optimizer is never allowed
-# to sit on the endpoint.  Closed parameter bounds are ordinary, not exotic —
-# SciPy declares them for ``foldnorm`` and ``foldcauchy`` (``c >= 0``), for
-# ``erlang`` and ``irwinhall`` (``n >= 1``), and they are the natural shape for
-# a mixture weight in [0, 1] or a correlation in [-1, 1].
-#
-# The workaround today is to declare the bound anyway and accept that an
-# estimate sitting exactly on the endpoint comes back as 5e-324 instead of 0.
-# Admissibility itself is unaffected: that is decided by the family's
-# ``@constraint`` predicates, not by these bounds.  The loss only bites when
-# the likelihood maximum lies *on* the boundary.
-#
-# SciPy solves this with an explicit flag: ``_ShapeInfo`` carries
-# ``inclusive=(bool, bool)`` and shifts an endpoint only when it is exclusive.
-# Two ways to add the same expressiveness here, both backward compatible — a
-# two-element entry keeps meaning "open at both ends":
-#
-#   1. a third element on the tuple, mirroring SciPy directly:
-#          param_bounds={"c": (0, None, (True, False))}
-#
-#   2. a small declarative object, which reads better at the declaration site
-#      and leaves room for further per-parameter metadata (integrality, or the
-#      reparametrisation transform of the TODO in ``mle.py``):
-#          param_bounds={"c": Bound(low=0, high=None, low_closed=True)}
-#
-# Option 2 is preferable: a bare ``(0, None, (True, False))`` is hard to read
-# and easy to mis-order, and a ``Bound`` dataclass with defaults
-# ``low_closed=False, high_closed=False`` reproduces today's behaviour exactly
-# while naming what each field means.  The change is local — accept the new
-# form in ``ParametricFamily._normalize_param_bounds``, honour the flags here,
-# and update ``TestBoundsAgreeWithConstraints``, which currently asserts the
-# opposite (that a value *on* the declared edge fails ``validate()``).
 def _collect_bounds(family: ParametricFamily) -> tuple[list[tuple[float, float]], bool]:
     """
     Assemble optimizer bounds, reporting whether the family declared any.
@@ -102,7 +67,6 @@ def _collect_bounds(family: ParametricFamily) -> tuple[list[tuple[float, float]]
         # separate notion of a "practical" bound is introduced.
         #
         # Every declared bound is treated as open, because the declaration has
-        # no way to say otherwise. See the TODO above this function.
         if np.isfinite(low):
             low = float(np.nextafter(low, np.inf))
         if np.isfinite(high):
@@ -112,7 +76,9 @@ def _collect_bounds(family: ParametricFamily) -> tuple[list[tuple[float, float]]
     return bounds, any_declared
 
 
-def resolve_bounds(family: ParametricFamily) -> list[tuple[float, float]] | None:
+def resolve_bounds(
+    family: ParametricFamily, *, stacklevel: int = 2
+) -> list[tuple[float, float]] | None:
     """
     Build the box of parameter bounds handed to the optimizer.
 
@@ -130,6 +96,12 @@ def resolve_bounds(family: ParametricFamily) -> list[tuple[float, float]] | None
     ----------
     family : ParametricFamily
         Family being fitted.
+    stacklevel : int, optional
+        Frames to skip when attributing the "declares no bounds" warning, in
+        the sense of :func:`warnings.warn`.  The default, ``2``, points at a
+        direct caller of this function; ``fit_family`` passes a larger value so
+        that the warning lands on the user's ``fit`` call rather than inside
+        this package.
 
     Returns
     -------
@@ -150,7 +122,7 @@ def resolve_bounds(family: ParametricFamily) -> list[tuple[float, float]] | None
             f"those with 'inf', so the fit is still correct, only slower and less robust. "
             f"Pass 'param_bounds={{...}}' to the family constructor to fix this.",
             UserWarning,
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return None
     return bounds
