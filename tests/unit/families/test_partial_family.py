@@ -4,6 +4,7 @@ __author__ = "Myznikov Fedor"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -118,9 +119,12 @@ class TestPartialParametricFamily(TestBaseFamily):
         fam = self._make_two_param_family()
         partial = fam.view(a=2.0)
         assert partial.fixed_parameters == {"a": 2.0}
-        # MappingProxyType does not allow modification
+        # MappingProxyType does not allow modification. The cast only lifts the
+        # static type to one that declares __setitem__, so mypy can see this
+        # is a subscript assignment instead of a nonsensical expression; the
+        # object being assigned into is still the real, read-only proxy.
         with pytest.raises(TypeError):
-            partial.fixed_parameters["a"] = 3.0
+            cast(MutableMapping[str, float], partial.fixed_parameters)["a"] = 3.0
 
     def test_fixed_parameter_names(self) -> None:
         fam = self._make_two_param_family()
