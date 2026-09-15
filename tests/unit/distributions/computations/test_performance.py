@@ -183,9 +183,12 @@ class TestContinuousPerformance:
         # Results should be the same regardless of input order
         r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)  # type: ignore[call-arg,type-var]
         r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)  # type: ignore[call-arg,type-var]
+        # Cast to np.float64 explicitly: np.sort's return dtype for a plain
+        # `float`-typed input is not resolved consistently across numpy-stub
+        # versions, which made assert_allclose's overload matching flaky.
         np.testing.assert_allclose(
-            np.sort(r_sorted),
-            np.sort(r_shuffled),
+            np.asarray(np.sort(r_sorted), dtype=np.float64),
+            np.asarray(np.sort(r_shuffled), dtype=np.float64),
             atol=1e-8,
         )
 
