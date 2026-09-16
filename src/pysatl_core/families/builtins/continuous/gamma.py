@@ -260,6 +260,7 @@ def configure_gamma_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        param_bounds={"k": (0, None), "theta": (0, None)},
     )
     Gamma.__doc__ = GAMMA_DOC
 
