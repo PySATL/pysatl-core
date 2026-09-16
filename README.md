@@ -30,6 +30,9 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
   finite weighted mixtures, and characteristic-level approximations.
 - Distribution objects exposing common probabilistic operations
   (sampling, analytical and fitted computations).
+- **Maximum likelihood estimation** (`family.fit(sample)`) with closed-form solutions
+  where they exist, a numerical fallback driven by the family's analytical score,
+  and a result object carrying the log-likelihood, AIC/BIC and convergence diagnostics.
 - Clear separation between *distribution definitions*, *parametrizations*,
   *computation strategies*, and *characteristics*.
 - Modern Python with strict static typing (PEP 695).
@@ -132,6 +135,8 @@ For transformation workflows, see `examples/transformations_overview.ipynb`.
 - `examples/overview.ipynb` — base walkthrough for families, parametrizations, and characteristic queries.
 - `examples/transformations_overview.ipynb` — affine, binary, finite-mixture, and approximation workflows.
 - `examples/example_sampling_methods.ipynb` — sampling backends and UNURAN-oriented scenarios.
+- `examples/example_estimation_quickstart.ipynb` — maximum likelihood estimation: fitting a
+  family, fixing parameters with `view()`, choosing an optimizer, comparing families by AIC/BIC.
 
 ---
 
