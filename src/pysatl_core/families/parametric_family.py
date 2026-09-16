@@ -16,7 +16,7 @@ import inspect
 from collections.abc import Callable, Mapping
 from functools import partial
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
+from typing import TYPE_CHECKING, Any, Unpack, cast, dataclass_transform, overload
 
 import numpy as np
 
@@ -30,8 +30,16 @@ from pysatl_core.types import (
 )
 
 if TYPE_CHECKING:
+    import numpy.typing as npt
+
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
+    from pysatl_core.estimation.optimizers import (
+        MinimizeMethod,
+        MinimizeOptions,
+        MinimizeSolver,
+    )
+    from pysatl_core.estimation.result import MLEResult
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
@@ -641,6 +649,140 @@ class ParametricFamily:
         base_params = parameters.transform_to_base_parametrization()
         base_grad = self._base_score(base_params, x_arr)
         return parameters.gradient_transform(base_grad)
+
+    def fit(
+        self,
+        sample: npt.ArrayLike,
+        *,
+        parametrization: ParametrizationName | None = None,
+        optimizer: MinimizeMethod | MinimizeSolver | None = None,
+        **options: Unpack[MinimizeOptions],
+    ) -> MLEResult[Parametrization]:
+        """
+        Estimate this family's parameters from a sample by maximum likelihood.
+
+        Maximum likelihood picks the parameters under which the observed sample
+        is most probable.  In practice the logarithm is maximised — the maximum
+        is the same, since the logarithm is monotone, but a product of a
+        thousand densities would underflow to zero — so the criterion is
+
+        ``l(theta) = sum_i log f(x_i; theta) -> max``,
+
+        and the objective handed to the optimizer is ``-l(theta)``.
+
+        Estimation belongs to the family rather than to a distribution: a
+        distribution has its parameters pinned already, so there is nothing in
+        it to estimate.
+
+        Parameters
+        ----------
+        sample : array_like
+            Observed values.  Must be one-dimensional and finite, and hold at
+            least as many observations as there are free parameters.
+            Observation weights and censored data are not supported.
+        parametrization : ParametrizationName or None, optional
+            Parametrization the estimate is reported in.  Defaults to this
+            family's base parametrization, which is currently the only
+            supported choice: converting out of the base parametrization needs
+            an inverse transform that the ``Parametrization`` API does not
+            provide, and requesting another one raises ``NotImplementedError``.
+        optimizer : MinimizeMethod or MinimizeSolver or None, optional
+            A ``scipy.optimize.minimize`` method name (``"Nelder-Mead"``,
+            ``"Powell"``, ...) or a solver callable with the ``minimize``
+            signature.  Passing it forces the numerical path even for a family
+            that has a closed-form solution, and a ``UserWarning`` says so.
+            Unlike SciPy — where an overridden ``fit`` silently discards this
+            argument — the request is honoured.
+        **options
+            Extra keyword arguments forwarded to ``scipy.optimize.minimize``,
+            for example ``tol=1e-12`` or ``options={"maxiter": 500}``.  The
+            accepted keys are listed in
+            :class:`~pysatl_core.estimation.optimizers.MinimizeOptions`.
+
+        Returns
+        -------
+        MLEResult[Parametrization]
+            Estimated parameters together with the attained log-likelihood, the
+            number of free parameters, a convergence flag and a diagnostic
+            message.  A fit that fails to converge is reported here with
+            ``success=False``, not raised: exceptions are reserved for
+            situations nothing can recover from, such as data lying outside a
+            fixed support.
+
+            The result is parameterised by ``Parametrization`` rather than by
+            the family's own class: a family is bound to its parametrization
+            classes at runtime, by the ``@parametrization`` decorator, which
+            runs *after* the family object exists, so no static type can name
+            the class a given family will register.  A caller who knows it — a
+            family author, typically — can say so at the call site.
+
+        Raises
+        ------
+        ValueError
+            If the sample is not one-dimensional or not finite.
+        InsufficientDataError
+            If the sample holds fewer observations than there are free
+            parameters.
+        FitDataError
+            If observations lie outside a support that does not depend on the
+            parameters, or contradict parameters fixed through :meth:`view`.
+        MLEError
+            If this family declares no ``lpdf``, or no usable starting point
+            can be built.
+        NotImplementedError
+            If a parametrization other than the base one is requested.
+
+        Notes
+        -----
+        **Which route is taken.** If the family declared a closed-form solution
+        through the ``mle`` constructor argument and no ``optimizer`` was
+        passed, that formula is used and no optimizer runs at all.  Otherwise
+        the search starts from a method-of-moments point and runs L-BFGS-B,
+        using the analytical gradient from :meth:`score` when the family
+        provides one.  A family without ``score`` is still fitted, with
+        ``minimize`` differencing the objective numerically — correct, but
+        several times more objective evaluations.  If L-BFGS-B reports failure
+        or takes no step, the fit is retried with Nelder-Mead and the fallback
+        is recorded in ``MLEResult.message``.
+
+        **Which coordinates are used.** The search always runs in this family's
+        base parametrization.  Maximum likelihood is invariant to
+        reparametrisation in theory, but numerically the variants are different
+        problems with different conditioning, and the estimate should not
+        depend on the coordinates it was asked for.
+
+        **Fixing some parameters.** Use :meth:`view`; there is no second
+        mechanism (no counterpart to SciPy's ``floc=``/``fa=``).
+
+        Examples
+        --------
+        >>> res = Normal.fit(sample)                   # doctest: +SKIP
+        >>> res.method                                 # doctest: +SKIP
+        'closed_form'
+        >>> res.params.parameters["sigma"]             # doctest: +SKIP
+        1.98
+        >>> res = Normal.view(mu=0.0).fit(sample)      # doctest: +SKIP
+        >>> res.n_params                               # doctest: +SKIP
+        1
+
+        Attribute access on the estimate — ``res.params.sigma`` — works at
+        runtime and is the natural way to read it, but a checker cannot verify
+        it through the declared ``Parametrization``.  A caller who wants that
+        verified narrows the result to the class the family registers:
+
+        >>> res: MLEResult[MeanStd] = Normal.fit(sample)   # doctest: +SKIP
+        >>> res.params.sigma                               # doctest: +SKIP
+        1.98
+        """
+        from pysatl_core.estimation.mle import fit_family
+
+        return fit_family(
+            self,
+            sample,
+            parametrization=parametrization,
+            optimizer=optimizer,
+            **options,
+        )
 
     def view(
         self,
