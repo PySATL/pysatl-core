@@ -10,7 +10,8 @@ __author__ = "Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import cast
+from collections.abc import Mapping
+from typing import Any, cast
 
 import numpy as np
 
@@ -261,6 +262,61 @@ def configure_exponential_family() -> None:
         grad = 1.0 / lam - x
         return grad[..., np.newaxis]
 
+    def _mle_exponential(sample: NumericArray, fixed: Mapping[str, Any]) -> Parametrization | None:
+        """
+        Closed-form maximum likelihood estimate for the exponential family.
+
+        Setting the derivative of ``l(lambda) = n log lambda - lambda * sum(x)``
+        to zero gives ``lambda_hat = 1 / mean(x)``.
+
+        The family has a single parameter, so there is no case with it fixed:
+        such a view is refused by ``PartialParametricFamily`` itself, which
+        will not let every parameter be pinned.  ``None`` is returned for that
+        combination purely for completeness.
+
+        Parameters
+        ----------
+        sample : NumericArray
+            Observed values.
+        fixed : Mapping[str, Any]
+            Parameters pinned by a view, in the base parametrization.
+
+        Returns
+        -------
+        Parametrization or None
+            Estimated parameters in the base parametrization, or ``None`` if
+            the rate is already fixed.
+
+        Raises
+        ------
+        FitDataError
+            If every observation is zero.  The estimate ``1 / mean(x)`` then
+            diverges, and the likelihood has no maximum at any finite rate.
+        """
+        from pysatl_core.estimation.errors import FitDataError
+
+        if "lambda_" in fixed:
+            return None
+
+        mean = float(np.mean(sample))
+        if mean <= 0.0:
+            raise FitDataError(
+                f"The exponential maximum likelihood estimate is 1 / mean(x), but the "
+                f"sample mean is {mean}. Every observation sits at the boundary x = 0, "
+                f"where the likelihood grows without bound as the rate goes to infinity, "
+                f"so no finite estimate exists."
+            )
+        return _Rate(lambda_=1.0 / mean)
+
+    def _moment_start(sample: NumericArray) -> dict[str, float]:
+        """Moment start for the exponential family: ``lambda = 1 / mean(x)``."""
+        mean = float(sample.mean())
+        return {"lambda_": 1.0 / mean if mean != 0.0 else 1.0}
+
+    # The key names the method this formula solves; taken from the method
+    # itself so that the two spellings cannot drift apart.
+    from pysatl_core.estimation.methods.mle import MLE_NAME
+
     Exponential = ParametricFamily(
         name=FamilyName.EXPONENTIAL,
         distr_type=UnivariateContinuous,
@@ -278,6 +334,9 @@ def configure_exponential_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        closed_forms={MLE_NAME: _mle_exponential},
+        moment_start=_moment_start,
+        param_bounds={"lambda_": (0, None)},
     )
     Exponential.__doc__ = EXPONENTIAL_DOC
 

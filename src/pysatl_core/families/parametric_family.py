@@ -13,7 +13,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
@@ -30,10 +30,12 @@ from pysatl_core.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    import numpy.typing as npt
 
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
+    from pysatl_core.estimation.estimator import AnyFitResult, Estimator
+    from pysatl_core.estimation.methods.mle.result import MLEResult
     from pysatl_core.types import (
         GenericCharacteristicName,
         LabelName,
@@ -52,6 +54,10 @@ if TYPE_CHECKING:
         | ParametricFamilyCharacteristic[Any, Any]
     )
     type CharacteristicsMap = Mapping[GenericCharacteristicName, CharacteristicProvider]
+    type ClosedForm = Callable[[NumericArray, Mapping[str, float]], Parametrization | None]
+    from pysatl_core.estimation.parameters.start import MomentRule
+    from pysatl_core.types import EstimatorName
+
     type NonParametrizedCharacteristic[In, Out] = Callable[[], Out]
     type ParametricFamilyCharacteristic[In, Out] = (
         NonParametrizedCharacteristic[In, Out] | ParametrizedCharacteristic[In, Out]
@@ -94,6 +100,79 @@ class ParametricFamily:
         under ``DEFAULT_ANALYTICAL_COMPUTATION_LABEL``.
     support_by_parametrization : Callable or None, optional
         Function that returns support for given parameters.
+    base_score : Callable or None, optional
+        Gradient of the log-density with respect to the base parameters.
+    closed_forms : Mapping[EstimatorName, Callable] or None, optional
+        Closed-form solutions this family knows, keyed by the name of the
+        estimation method each one solves — ``{"mle": ...}`` for a maximum
+        likelihood formula.  Declared alongside ``base_score``.
+
+        A table rather than one named argument per method.  The slot used to be
+        called ``mle=``, which meant the constructor would have grown a
+        parameter for every estimation method that ever gained a formula; an
+        estimator now asks for its own name instead, and this signature never
+        changes again.  The key is a plain string, not an estimator class, so
+        that declaring a family needs no import from
+        :mod:`pysatl_core.estimation` — a family should not have to know who
+        will fit it.
+
+        Each entry is called as ``rule(sample, fixed)``, where *fixed* maps the names of
+        parameters pinned through :meth:`view` to their values, in this
+        family's **base** parametrization (an empty mapping for the full
+        family).  It must return an instance of the **full base**
+        parametrization, or ``None`` for a case it does not cover — the
+        estimator then falls back to its numerical path.
+
+        Returning ``None`` replaces the SciPy idiom of calling ``super().fit()``
+        from an overridden method: a family here is an object rather than a
+        class, so "I do not handle this case" has to be expressed by a value.
+        That also lets a user-defined family declare a closed form without
+        subclassing anything.
+
+        The callable may raise
+        :class:`~pysatl_core.estimation.errors.FitDataError` when the data
+        contradict the fixed parameters, for instance ``min(x) < lower_bound``
+        with ``lower_bound`` fixed.
+    moment_start : Callable or None, optional
+        Method-of-moments rule for this family, declared alongside ``mle`` and
+        ``base_score``.
+
+        It is called as ``moment_start(sample)`` and returns starting values
+        keyed by the names of this family's **base** parameters — for the
+        normal family, ``{"mu": ..., "sigma": ...}``.  It is where a numerical
+        fit begins, not an estimate in its own right, and a rule is free to
+        move the point somewhere a *fit* would not go: the uniform rule pads
+        the observed range outwards, because a start that excludes even one
+        observation sits on a flat plateau of pure penalty.
+
+        A family that declares none starts from a vector of ones, exactly as
+        SciPy does (``args = (1.0,) * self.numargs``).
+
+        It lives on the family rather than in a registry keyed by family name,
+        so that a rule cannot outlive the family it describes, two families of
+        the same name cannot collide, and nothing has to be unregistered
+        afterwards.
+    param_bounds : Mapping[str, tuple[float | None, float | None]] or None, optional
+        Box bounds for the parameters of this family's base parametrization,
+        keyed by parameter name; ``None`` in either slot of a pair means
+        infinity, and a parameter with no entry is unbounded.  Consumed by the
+        optimizer during maximum likelihood estimation.
+
+        Bounds and ``@constraint`` predicates are separate mechanisms on
+        purpose: a predicate is a black box that can validate a point but
+        cannot be turned into a search region, and a box cannot express a
+        relation between two parameters.  Declaring ``sigma > 0`` in both
+        places is therefore expected duplication, not redundancy.
+
+    Raises
+    ------
+    ValueError
+        If ``distr_parametrizations`` is empty, if a characteristic names an
+        unknown parametrization, or if ``param_bounds`` is malformed.  A
+        ``param_bounds`` entry naming a parameter that does not exist is also a
+        ``ValueError``, reported when the base parametrization is registered —
+        the earliest moment the parameter names are known, since a family is
+        constructed before its parametrization classes are declared.
     """
 
     def __init__(
@@ -104,6 +183,9 @@ class ParametricFamily:
         distr_characteristics: CharacteristicsMap,
         support_by_parametrization: SupportArg = None,
         base_score: Callable[[Parametrization, NumericArray], NumericArray] | None = None,
+        closed_forms: Mapping[EstimatorName, ClosedForm] | None = None,
+        moment_start: MomentRule | None = None,
+        param_bounds: Mapping[str, tuple[float | None, float | None]] | None = None,
     ):
         if not distr_parametrizations:
             raise ValueError(
@@ -120,6 +202,11 @@ class ParametricFamily:
 
         self._support_resolver: SupportResolver = support_by_parametrization or (lambda _p: None)
         self._base_score = base_score
+        self._closed_forms: dict[EstimatorName, ClosedForm] = dict(closed_forms or {})
+        self._moment_start = moment_start
+        self._param_bounds: dict[str, tuple[float | None, float | None]] = (
+            self._normalize_param_bounds(param_bounds)
+        )
 
         # Runtime registry of parametrization classes
         self._parametrizations: dict[ParametrizationName, type[Parametrization]] = {}
@@ -228,6 +315,126 @@ class ParametricFamily:
         """Support resolver callable."""
         return self._support_resolver
 
+    @property
+    def param_bounds(self) -> Mapping[str, tuple[float | None, float | None]]:
+        """Declared box bounds for the base parameters, keyed by parameter name."""
+        return MappingProxyType(self._param_bounds)
+
+    @property
+    def base_score(self) -> Callable[[Parametrization, NumericArray], NumericArray] | None:
+        """
+        Gradient of the log-density with respect to the base parameters, if declared.
+
+        ``None`` when the family provides none.  :meth:`score` is the way to
+        *evaluate* the gradient; this property is the way to ask whether one
+        exists at all, which a caller cannot otherwise learn without provoking
+        the ``ValueError`` that :meth:`score` raises.
+        """
+        return self._base_score
+
+    @property
+    def closed_forms(self) -> Mapping[EstimatorName, ClosedForm]:
+        """
+        Closed-form solutions this family declares, keyed by estimation method.
+
+        Empty when it declares none.  Ask :meth:`closed_form_for` rather than
+        indexing this: an estimator wants the one entry that answers to its own
+        name, and a missing key is an ordinary answer rather than an error.
+        """
+        return MappingProxyType(self._closed_forms)
+
+    def closed_form_for(self, estimator: EstimatorName) -> ClosedForm | None:
+        """
+        The closed-form solution for one estimation method, if this family has one.
+
+        Parameters
+        ----------
+        estimator : EstimatorName
+            Name of the method asking — an estimator passes its own
+            :attr:`~pysatl_core.estimation.estimator.Estimator.name`, so no
+            method name is spelled out at the call site.
+
+        Returns
+        -------
+        Callable or None
+            ``None`` when the family declares no formula for that method, in
+            which case the method falls back to whatever it does numerically.
+            See the ``closed_forms`` constructor argument for the contract the
+            callable obeys.
+        """
+        return self._closed_forms.get(estimator)
+
+    @property
+    def moment_start(self) -> MomentRule | None:
+        """
+        This family's method-of-moments rule, or ``None``.
+
+        See the ``moment_start`` constructor argument.  It is read by
+        :func:`pysatl_core.estimation.parameters.start.starting_point`, which falls back
+        to a vector of ones when there is none.
+        """
+        return self._moment_start
+
+    @staticmethod
+    def _normalize_param_bounds(
+        param_bounds: Mapping[str, tuple[float | None, float | None]] | None,
+    ) -> dict[str, tuple[float | None, float | None]]:
+        """
+        Check the shape of a ``param_bounds`` mapping and copy it.
+
+        Only the structure is checked here. The parameter *names* cannot be
+        checked yet: a family is constructed before its parametrization classes
+        are declared, so ``self.base`` does not exist at this point. They are
+        checked in :meth:`register_parametrization` instead.
+
+        Raises
+        ------
+        ValueError
+            If an entry is not a ``(low, high)`` pair, holds a non-numeric
+            endpoint, or has ``low > high``.
+        """
+        if param_bounds is None:
+            return {}
+
+        normalized: dict[str, tuple[float | None, float | None]] = {}
+        for parameter_name, entry in param_bounds.items():
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise ValueError(
+                    f"param_bounds['{parameter_name}'] must be a (low, high) tuple; got {entry!r}."
+                )
+            low, high = entry
+            for edge_name, edge in (("low", low), ("high", high)):
+                if edge is not None and not isinstance(edge, (int, float)):
+                    raise ValueError(
+                        f"param_bounds['{parameter_name}'] has a non-numeric {edge_name} "
+                        f"endpoint {edge!r}; use a number, or None for infinity."
+                    )
+            if low is not None and high is not None and float(low) > float(high):
+                raise ValueError(
+                    f"param_bounds['{parameter_name}'] is empty: low={low} exceeds high={high}."
+                )
+            normalized[parameter_name] = (
+                None if low is None else float(low),
+                None if high is None else float(high),
+            )
+        return normalized
+
+    def _validate_param_bounds_names(self, parametrization_class: type[Parametrization]) -> None:
+        """
+        Reject ``param_bounds`` entries that name no parameter of the base class.
+
+        A misspelled name would otherwise silently drop the bound, leaving the
+        optimizer free to roam a region the family author meant to exclude.
+        """
+        known = set(getattr(parametrization_class, "__dataclass_fields__", {}))
+        unknown = sorted(set(self._param_bounds) - known)
+        if unknown:
+            raise ValueError(
+                f"param_bounds of family '{self._name}' name unknown parameter(s) {unknown} "
+                f"for its base parametrization '{self.base_parametrization_name}', which has "
+                f"{sorted(known)}."
+            )
+
     def register_parametrization(
         self,
         name: ParametrizationName,
@@ -246,10 +453,14 @@ class ParametricFamily:
         Raises
         ------
         ValueError
-            If name is already registered.
+            If name is already registered, or — when *name* is the base
+            parametrization — if ``param_bounds`` names a parameter this class
+            does not declare.
         """
         if name in self._parametrizations:
             raise ValueError(f"Parametrization '{name}' is already registered.")
+        if name == self.base_parametrization_name:
+            self._validate_param_bounds_names(parametrization_class)
         self._parametrizations[name] = parametrization_class
 
     def get_parametrization(self, name: ParametrizationName) -> type[Parametrization]:
@@ -347,7 +558,7 @@ class ParametricFamily:
         parametrization_name: ParametrizationName | None = None,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
-        **parameters_values: Any,
+        **parameters_values: float,
     ) -> ParametricFamilyDistribution:
         """
         Create a distribution instance with given parameters.
@@ -383,6 +594,50 @@ class ParametricFamily:
         )
 
         parameters = parametrization_class(**parameters_values)
+        return self.distribution_from(
+            parameters,
+            sampling_strategy=sampling_strategy,
+            computation_strategy=computation_strategy,
+        )
+
+    def distribution_from(
+        self,
+        parameters: Parametrization,
+        *,
+        sampling_strategy: SamplingStrategy | None = None,
+        computation_strategy: ComputationStrategy | None = None,
+    ) -> ParametricFamilyDistribution:
+        """
+        Create a distribution instance from an existing parametrization object.
+
+        The counterpart of :meth:`distribution` for a caller that already holds
+        the parameters as an object — an estimate returned by :meth:`fit`, for
+        instance.  Going through ``distribution(**params.parameters)`` instead
+        would flatten them into a mapping only to rebuild the same class from
+        it, and would let a parameter whose name collides with
+        ``parametrization_name`` or one of the strategy arguments bind to the
+        wrong place.
+
+        Parameters
+        ----------
+        parameters : Parametrization
+            Parameters of this family, in any parametrization it registers.
+        sampling_strategy : SamplingStrategy or None, optional
+            Strategy for generating random samples; unique per distribution.
+        computation_strategy : ComputationStrategy or None, optional
+            Strategy for computing characteristics and conversions; unique per
+            distribution.
+
+        Returns
+        -------
+        ParametricFamilyDistribution
+            Distribution instance with those parameters.
+
+        Raises
+        ------
+        ValueError
+            If the parameters do not satisfy the family's constraints.
+        """
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
@@ -457,11 +712,165 @@ class ParametricFamily:
         base_grad = self._base_score(base_params, x_arr)
         return parameters.gradient_transform(base_grad)
 
+    @overload
+    def fit(
+        self,
+        sample: npt.ArrayLike,
+        *,
+        parametrization: ParametrizationName | None = None,
+    ) -> MLEResult[Parametrization]: ...
+
+    @overload
+    def fit[R: AnyFitResult](
+        self,
+        sample: npt.ArrayLike,
+        *,
+        estimator: Estimator[R],
+        parametrization: ParametrizationName | None = None,
+    ) -> R: ...
+
+    def fit(
+        self,
+        sample: npt.ArrayLike,
+        *,
+        estimator: Estimator[AnyFitResult] | None = None,
+        parametrization: ParametrizationName | None = None,
+    ) -> AnyFitResult:
+        """
+        Estimate this family's parameters from a sample.
+
+        Which method is used, and how it is configured, is the *estimator*: one
+        object carrying both.  Maximum likelihood is the default, so
+        ``family.fit(sample)`` keeps meaning what it always did; anything else
+        — another method, or the same one tuned — is that object::
+
+            family.fit(sample, estimator=MLE(optimizer="Powell"))
+
+        Nothing about a particular method appears in this signature, and that
+        is deliberate.  An ``optimizer=`` keyword here would belong to maximum
+        likelihood alone, would mean nothing to a method of moments, and would
+        have to be either ignored or rejected for every method that is not the
+        default — so it lives on :class:`~pysatl_core.estimation.methods.mle.MLE`,
+        where it applies.
+
+        The return type follows the estimator, so a checker knows that an
+        :class:`~pysatl_core.estimation.methods.mle.MLE` produces an
+        :class:`~pysatl_core.estimation.result.MLEResult` with a
+        ``log_likelihood``, while a method that reports no likelihood produces
+        its own result type and the same attribute is an error.  Adding a
+        method needs no change here: see
+        :class:`~pysatl_core.estimation.estimator.Estimator`.
+
+        Estimation belongs to the family rather than to a distribution: a
+        distribution has its parameters pinned already, so there is nothing in
+        it to estimate.
+
+        Parameters
+        ----------
+        sample : array_like
+            Observed values.  Must be one-dimensional and finite, and hold at
+            least as many observations as there are free parameters.
+            Observation weights and censored data are not supported.
+        estimator : Estimator, optional
+            The estimation method, configured.  Defaults to an unconfigured
+            :class:`~pysatl_core.estimation.methods.mle.MLE`.
+        parametrization : ParametrizationName or None, optional
+            Parametrization the estimate is reported in.  Defaults to this
+            family's base parametrization, which is currently the only
+            supported choice: converting out of the base parametrization needs
+            an inverse transform that the ``Parametrization`` API does not
+            provide, and requesting another one raises ``NotImplementedError``.
+
+        Returns
+        -------
+        FitResult
+            Whatever the estimator returns — for the default, an
+            :class:`~pysatl_core.estimation.result.MLEResult`: the estimated
+            parameters together with the attained log-likelihood, the number of
+            free parameters, a convergence flag and a diagnostic message.  A
+            fit that fails to converge is reported here with ``success=False``,
+            not raised: exceptions are reserved for situations nothing can
+            recover from, such as data lying outside a fixed support.
+
+            The result is parameterised by ``Parametrization`` rather than by
+            the family's own class: a family is bound to its parametrization
+            classes at runtime, by the ``@parametrization`` decorator, which
+            runs *after* the family object exists, so no static type can name
+            the class a given family will register.  A caller who knows it — a
+            family author, typically — can say so at the call site.
+
+        Raises
+        ------
+        TypeError
+            If *estimator* is not an estimator.
+        ValueError
+            If the sample is not one-dimensional or not finite.
+        InsufficientDataError
+            If the sample holds fewer observations than there are free
+            parameters.
+        FitDataError
+            If observations lie outside a support that does not depend on the
+            parameters, or contradict parameters fixed through :meth:`view`.
+        EstimationError
+            If this family declares no ``lpdf``, or no usable starting point
+            can be built.  Raised by the default estimator; another method
+            reports its own failures.
+        NotImplementedError
+            If a parametrization other than the base one is requested.
+
+        Notes
+        -----
+        The policy of a maximum likelihood fit — closed form against numerical
+        search, the optimizer fallback, the coordinates the search runs in — is
+        documented on :class:`~pysatl_core.estimation.methods.mle.MLE`, which owns it.
+
+        **Fixing some parameters.** Use :meth:`view`; there is no second
+        mechanism (no counterpart to SciPy's ``floc=``/``fa=``).
+
+        Examples
+        --------
+        >>> res = Normal.fit(sample)                   # doctest: +SKIP
+        >>> res.route                                  # doctest: +SKIP
+        'closed_form'
+        >>> res.params.parameters["sigma"]             # doctest: +SKIP
+        1.98
+        >>> res = Normal.view(mu=0.0).fit(sample)      # doctest: +SKIP
+        >>> res.n_params                               # doctest: +SKIP
+        1
+
+        Estimators are values, so comparing methods is a loop:
+
+        >>> for est in (MLE(), MLE(optimizer="Nelder-Mead")):   # doctest: +SKIP
+        ...     print(est.name, Normal.fit(sample, estimator=est).params)
+
+        Attribute access on the estimate — ``res.params.sigma`` — works at
+        runtime and is the natural way to read it, but a checker cannot verify
+        it through the declared ``Parametrization``.  A caller who wants that
+        verified narrows the result to the class the family registers:
+
+        >>> res: MLEResult[MeanStd] = Normal.fit(sample)   # doctest: +SKIP
+        >>> res.params.sigma                               # doctest: +SKIP
+        1.98
+        """
+        from pysatl_core.estimation.estimator import Estimator as EstimatorProtocol
+        from pysatl_core.estimation.methods.mle.estimator import MLE
+
+        if estimator is None:
+            estimator = MLE()
+        elif not isinstance(estimator, EstimatorProtocol):
+            raise TypeError(
+                f"fit() expected an estimator - an object with a 'name' and an 'estimate' "
+                f"method, such as 'MLE()' - but got {type(estimator).__name__}. An optimizer "
+                f"or its options go on the estimator, as 'MLE(optimizer=..., "
+                f"options={{...}})'. See 'pysatl_core.estimation.estimator.Estimator'."
+            )
+        return estimator.estimate(self, sample, parametrization=parametrization)
+
     def view(
         self,
         *,
         parametrization_name: str | None = None,
-        **fixed_params: Any,
+        **fixed_params: float,
     ) -> PartialParametricFamily:
         """
         Create a view of this family with partially fixed parameters.
@@ -471,8 +880,11 @@ class ParametricFamily:
         parametrization_name : str, optional
             Name of the parametrization in which the fixed parameters are given.
             If not provided, the base parametrization of the family is used.
-        **fixed_params : Any
-            Parameter names and values to fix.
+        **fixed_params : float
+            Parameter names and values to fix.  Every parameter of every
+            parametrization in this package is a real number; declaring that
+            here is what keeps ``fixed_parameters`` — and the ``fixed`` mapping
+            a closed-form rule receives — free of ``Any``.
 
         Returns
         -------
@@ -513,7 +925,7 @@ class PartialParametricFamily(ParametricFamily):
     ----------
     base_family : ParametricFamily
         The original parametric family.
-    fixed_params : dict[str, Any]
+    fixed_params : dict[str, float]
         Dictionary of fixed parameter names and their values.
     parametrization_name : str, optional
         Name of the parametrization in which the fixed parameters are specified.
@@ -530,7 +942,7 @@ class PartialParametricFamily(ParametricFamily):
     def __init__(
         self,
         base_family: ParametricFamily,
-        fixed_params: dict[str, Any],
+        fixed_params: dict[str, float],
         parametrization_name: str | None = None,
     ) -> None:
         self._fixed_in_param = parametrization_name or base_family.base_parametrization_name
@@ -582,6 +994,13 @@ class PartialParametricFamily(ParametricFamily):
             distr_characteristics=view_chars,
             support_by_parametrization=_view_support,
             base_score=base_family._base_score,
+            closed_forms=base_family._closed_forms,
+            moment_start=base_family._moment_start,
+            param_bounds={
+                name: bound
+                for name, bound in base_family._param_bounds.items()
+                if name in self._free_parameter_names
+            },
         )
 
         # Register the parametrization (needed for parent methods)
@@ -701,7 +1120,7 @@ class PartialParametricFamily(ParametricFamily):
         return self._base_family
 
     @property
-    def fixed_parameters(self) -> Mapping[str, Any]:
+    def fixed_parameters(self) -> Mapping[str, float]:
         """Fixed parameter values."""
         return MappingProxyType(self._fixed_params)
 
@@ -801,7 +1220,7 @@ class PartialParametricFamily(ParametricFamily):
         parametrization_name: str | None = None,
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
-        **kwargs: Any,
+        **kwargs: float,
     ) -> ParametricFamilyDistribution:
         target = parametrization_name or self._fixed_in_param
         if target != self._fixed_in_param:
@@ -825,7 +1244,7 @@ class PartialParametricFamily(ParametricFamily):
         self,
         *,
         parametrization_name: str | None = None,
-        **additional_params: Any,
+        **additional_params: float,
     ) -> PartialParametricFamily:
         if parametrization_name is not None and parametrization_name != self._fixed_in_param:
             raise ValueError(
