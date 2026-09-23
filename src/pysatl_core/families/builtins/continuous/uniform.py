@@ -10,7 +10,8 @@ __author__ = "Fedor Myznikov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import cast
+from collections.abc import Mapping
+from typing import Any, cast
 
 import numpy as np
 
@@ -308,6 +309,94 @@ def configure_uniform_family() -> None:
         grad_b = np.full_like(x, -1.0 / width, dtype=np.float64)
         return np.stack([grad_a, grad_b], axis=-1)
 
+    def _mle_uniform(sample: NumericArray, fixed: Mapping[str, Any]) -> Parametrization | None:
+        """
+        Closed-form maximum likelihood estimate for the uniform family.
+
+        The estimate is the observed range::
+
+            a_hat = min(x),   b_hat = max(x)
+
+        The likelihood ``(b - a)^-n`` is decreasing in the width, so it is
+        maximised by the narrowest interval that still covers every
+        observation.  Note that the maximum lies *on the boundary* of the
+        admissible region rather than at a stationary point: the score is the
+        constant ``[1/(b-a), -1/(b-a)]`` and never vanishes, so there is no
+        equation to solve and a gradient method has nothing to converge to.
+        That is why this formula is not a convenience but the only reliable
+        route for this family.
+
+        With one endpoint fixed through
+        :meth:`~pysatl_core.families.parametric_family.ParametricFamily.view`,
+        the other is still the corresponding extreme of the sample — provided
+        the fixed endpoint does not already exclude part of the data.
+
+        Parameters
+        ----------
+        sample : NumericArray
+            Observed values.
+        fixed : Mapping[str, Any]
+            Parameters pinned by a view, in the base parametrization.
+
+        Returns
+        -------
+        Parametrization
+            Estimated parameters in the full base parametrization.
+
+        Raises
+        ------
+        FitDataError
+            If a fixed endpoint leaves observations outside the interval. No
+            value of the free endpoint can rescue that: the likelihood is zero
+            for every candidate.
+        """
+        from pysatl_core.estimation.errors import FitDataError
+
+        observed_low = float(np.min(sample))
+        observed_high = float(np.max(sample))
+
+        fixed_low = fixed.get("lower_bound")
+        fixed_high = fixed.get("upper_bound")
+
+        if fixed_low is not None and observed_low < float(fixed_low):
+            raise FitDataError(
+                f"lower_bound is fixed at {float(fixed_low)}, but the sample reaches down to "
+                f"{observed_low}. Those observations lie outside every admissible support, so "
+                f"the likelihood is zero for any upper_bound."
+            )
+        if fixed_high is not None and observed_high > float(fixed_high):
+            raise FitDataError(
+                f"upper_bound is fixed at {float(fixed_high)}, but the sample reaches up to "
+                f"{observed_high}. Those observations lie outside every admissible support, so "
+                f"the likelihood is zero for any lower_bound."
+            )
+
+        return _Standard(
+            lower_bound=observed_low if fixed_low is None else float(fixed_low),
+            upper_bound=observed_high if fixed_high is None else float(fixed_high),
+        )
+
+    UNIFORM_START_PADDING = 0.05
+    """Fraction of the observed range by which the start is widened.
+
+    The start has to cover the sample: an interval that excludes even one
+    observation makes the objective a constant wall of penalty, with no
+    gradient and no simplex direction leading out of it.  Padding outwards is
+    the same trick SciPy plays in ``_fit_loc_scale_support``.
+    """
+
+    def _moment_start(sample: NumericArray) -> dict[str, float]:
+        """Moment start for the uniform family: the observed range, padded outwards."""
+        low = float(sample.min())
+        high = float(sample.max())
+        span = high - low
+        pad = UNIFORM_START_PADDING * span if span > 0.0 else max(abs(low), 1.0)
+        return {"lower_bound": low - pad, "upper_bound": high + pad}
+
+    # The key names the method this formula solves; taken from the method
+    # itself so that the two spellings cannot drift apart.
+    from pysatl_core.estimation.methods.mle import MLE_NAME
+
     Uniform = ParametricFamily(
         name=FamilyName.CONTINUOUS_UNIFORM,
         distr_type=UnivariateContinuous,
@@ -325,6 +414,13 @@ def configure_uniform_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        closed_forms={MLE_NAME: _mle_uniform},
+        moment_start=_moment_start,
+        # No 'param_bounds': the only restriction on these parameters is the
+        # relation 'lower_bound < upper_bound', and a box of per-parameter
+        # bounds cannot express a relation between two parameters. Each
+        # endpoint on its own ranges over the whole line. The family is fitted
+        # by the closed-form solution above in any case.
     )
     Uniform.__doc__ = UNIFORM_DOC
 

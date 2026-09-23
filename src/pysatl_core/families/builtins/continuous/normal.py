@@ -11,7 +11,8 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import math
-from typing import cast
+from collections.abc import Mapping
+from typing import Any, cast
 
 import numpy as np
 from scipy.special import erf, erfinv
@@ -270,6 +271,61 @@ def configure_normal_family() -> None:
         grad_sigma = (z * z - 1) / sigma
         return np.stack([grad_mu, grad_sigma], axis=-1)
 
+    def _mle_normal(sample: NumericArray, fixed: Mapping[str, Any]) -> Parametrization | None:
+        """
+        Closed-form maximum likelihood estimate for the normal family.
+
+        With nothing fixed, the estimates are the sample mean and the square
+        root of the mean squared deviation from it::
+
+            mu_hat    = mean(x)
+            sigma_hat = sqrt(mean((x - mu_hat)^2))
+
+        Note the divisor: the maximum likelihood estimate of the variance
+        divides by ``n``, not by ``n - 1``.  The ``n - 1`` version is the
+        unbiased estimator, which is a different criterion — maximum likelihood
+        makes no unbiasedness claim, and here the two genuinely disagree.
+
+        With a parameter fixed through
+        :meth:`~pysatl_core.families.parametric_family.ParametricFamily.view`
+        the remaining one is still available in closed form: fixing ``mu``
+        leaves ``sigma_hat = sqrt(mean((x - mu)^2))``, and fixing ``sigma``
+        leaves ``mu_hat = mean(x)``, since the term of the log-likelihood
+        carrying ``mu`` does not involve ``sigma``.  Every case is covered, so
+        this never returns ``None``.
+
+        Parameters
+        ----------
+        sample : NumericArray
+            Observed values.
+        fixed : Mapping[str, Any]
+            Parameters pinned by a view, in the base parametrization.
+
+        Returns
+        -------
+        Parametrization
+            Estimated parameters in the full base parametrization.
+        """
+        fixed_mu = fixed.get("mu")
+        mu = float(np.mean(sample)) if fixed_mu is None else float(fixed_mu)
+
+        fixed_sigma = fixed.get("sigma")
+        sigma = (
+            float(np.sqrt(np.mean((sample - mu) ** 2)))
+            if fixed_sigma is None
+            else float(fixed_sigma)
+        )
+
+        return _MeanStd(mu=mu, sigma=sigma)
+
+    def _moment_start(sample: NumericArray) -> dict[str, float]:
+        """Moment start for the normal family — which is also its exact estimate."""
+        return {"mu": float(sample.mean()), "sigma": float(sample.std())}
+
+    # The key names the method this formula solves; taken from the method
+    # itself so that the two spellings cannot drift apart.
+    from pysatl_core.estimation.methods.mle import MLE_NAME
+
     Normal = ParametricFamily(
         name=FamilyName.NORMAL,
         distr_type=UnivariateContinuous,
@@ -287,6 +343,9 @@ def configure_normal_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        closed_forms={MLE_NAME: _mle_normal},
+        moment_start=_moment_start,
+        param_bounds={"sigma": (0, None)},
     )
     Normal.__doc__ = NORMAL_DOC
 

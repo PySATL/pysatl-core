@@ -245,6 +245,14 @@ def configure_gamma_family() -> None:
 
         return np.stack([grad_k, grad_theta], axis=-1)
 
+    def _moment_start(sample: NumericArray) -> dict[str, float]:
+        """Moment start for the gamma family: ``k = mean^2 / var``, ``theta = var / mean``."""
+        mean = float(sample.mean())
+        var = float(sample.var())
+        if mean <= 0.0 or var <= 0.0:
+            return {"k": 1.0, "theta": 1.0}
+        return {"k": mean * mean / var, "theta": var / mean}
+
     Gamma = ParametricFamily(
         name=FamilyName.GAMMA,
         distr_type=UnivariateContinuous,
@@ -260,6 +268,8 @@ def configure_gamma_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        moment_start=_moment_start,
+        param_bounds={"k": (0, None), "theta": (0, None)},
     )
     Gamma.__doc__ = GAMMA_DOC
 
