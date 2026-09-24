@@ -177,16 +177,17 @@ class TestFitterRegistry:
         assert reg.find(CharacteristicName.PPF, [CharacteristicName.PDF]) is None
 
     def test_all_fitter_descriptors_registered(self) -> None:
-        """Verify that the default fitter_registry contains all 8 built-in fitters."""
+        """Verify that the default fitter_registry contains all 9 built-in fitters."""
         from pysatl_core.distributions.computations.registry import fitter_registry
 
         descriptors = fitter_registry().all_descriptors()
-        assert len(descriptors) == 8
+        assert len(descriptors) == 9
         names = {d.name for d in descriptors}
         expected = {
             "pdf_to_cdf_1C",
             "cdf_to_pdf_1C",
             "cdf_to_ppf_1C",
+            "cdf_to_ppf_tabulated_1C",
             "ppf_to_cdf_1C",
             "pmf_to_cdf_1D",
             "cdf_to_pmf_1D",
