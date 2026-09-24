@@ -17,8 +17,10 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 import time
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
+from scipy import integrate
 
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.computations.continuous import (
@@ -167,9 +169,8 @@ class TestContinuousPerformance:
             f"_fit_cdf_to_ppf_1C with 50 points took {elapsed:.2f}s (expected < 10s)"
         )
 
-    def test_pdf_to_cdf_sorted_vs_unsorted_similar_time(self) -> None:
-        """Segment-wise integration should work well for both sorted and
-        unsorted inputs (it sorts internally)."""
+    def test_pdf_to_cdf_input_order_preserves_integration_work(self) -> None:
+        """Preserve CDF values and segment-wise integration work under permutation."""
         distr = _make_uniform_pdf_distribution()
         fitted = _fit_pdf_to_cdf_1C(distr)
 
@@ -177,27 +178,22 @@ class TestContinuousPerformance:
         rng = np.random.default_rng(42)
         x_shuffled = rng.permutation(x_sorted)
 
-        _, t_sorted = _time_call(fitted.func, x_sorted)
-        _, t_shuffled = _time_call(fitted.func, x_shuffled)
+        expected_intervals = [(-np.inf, float(x_sorted[0]))]
+        expected_intervals.extend(zip(x_sorted[:-1], x_sorted[1:], strict=True))
 
-        # Results should be the same regardless of input order
-        r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)  # type: ignore[call-arg,type-var]
-        r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)  # type: ignore[call-arg,type-var]
-        np.testing.assert_allclose(
-            np.sort(r_sorted),  # type: ignore[arg-type]
-            np.sort(r_shuffled),  # type: ignore[arg-type]
-            atol=1e-8,
-        )
+        for x in (x_sorted, x_shuffled):
+            # Run the real integrator while recording its integration bounds.
+            with patch(
+                "pysatl_core.distributions.computations.continuous._sp_integrate.quad",
+                wraps=integrate.quad,
+            ) as quad:
+                result = fitted.func(x)  # type: ignore[call-arg]
 
-        # Timing should be similar (within 5× of each other).
-        # 3× was too tight for CI environments where scheduling jitter can
-        # easily produce a 3–4× spread on sub-10 ms measurements.
-        if t_sorted > 0.001 and t_shuffled > 0.001:
-            ratio = max(t_sorted, t_shuffled) / min(t_sorted, t_shuffled)
-            assert ratio < 5.0, (
-                f"Sorted/unsorted timing ratio {ratio:.1f}× "
-                f"(sorted={t_sorted:.4f}s, shuffled={t_shuffled:.4f}s)"
-            )
+            # Uniform(0, 1) has CDF(x) = x here, in the original input order.
+            np.testing.assert_allclose(result, x, rtol=0, atol=1e-8)
+            assert quad.call_count == x.size
+            intervals = [(call.args[1], call.args[2]) for call in quad.call_args_list]
+            assert intervals == expected_intervals
 
 
 # ---------------------------------------------------------------------------
