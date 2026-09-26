@@ -181,8 +181,8 @@ class TestContinuousPerformance:
         _, t_shuffled = _time_call(fitted.func, x_shuffled)
 
         # Results should be the same regardless of input order
-        r_sorted = np.asarray(fitted.func(x_sorted), dtype=float)  # type: ignore[call-arg,type-var]
-        r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=float)  # type: ignore[call-arg,type-var]
+        r_sorted = np.asarray(fitted.func(x_sorted), dtype=np.float64)  # type: ignore[call-arg]
+        r_shuffled = np.asarray(fitted.func(x_shuffled), dtype=np.float64)  # type: ignore[call-arg]
         np.testing.assert_allclose(
             np.sort(r_sorted),
             np.sort(r_shuffled),
