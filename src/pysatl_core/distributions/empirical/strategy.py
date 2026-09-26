@@ -13,7 +13,7 @@ documents as an identity-comparable handle on the current fit.  Any
 distribution willing to expose the same property gets the same invalidation
 for free; distributions without it are served as plain Default.
 
-The strategy does **not** override characteristic resolution.  The fast,
+The strategy does **not** override characteristic resolution. The fast,
 vectorised PPF used by empirical distributions is a regular ``cdf -> ppf``
 edge in the characteristic graph (``cdf_to_ppf_tabulated_1C``), selected by
 the graph itself because :class:`EmpiricalDistribution` declares a
@@ -98,12 +98,12 @@ class EmpiricalComputationStrategy(DefaultComputationStrategy):
         """
         current = getattr(distr, "estimator", None)
         if current is not self._tracked_estimator:
-            self._cache.clear()
+            self.invalidate()
             self._tracked_estimator = current
 
     def invalidate(self) -> None:
-        """Drop every cached fit and forget the tracked estimator."""
-        self._cache.clear()
+        """Drop cached computations and forget the tracked estimator."""
+        super().invalidate()
         self._tracked_estimator = None
 
     def explain_computation_path(

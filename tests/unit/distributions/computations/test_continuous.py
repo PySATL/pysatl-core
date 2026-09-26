@@ -14,9 +14,13 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 
+from collections.abc import Callable
+from typing import Any
+
 import numpy as np
 import pytest
 
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.distributions.computations.continuous import (
     _build_cdf_to_pdf_1C,
     _build_cdf_to_ppf_1C,
@@ -24,11 +28,29 @@ from pysatl_core.distributions.computations.continuous import (
     _build_ppf_to_cdf_1C,
     _fit_cdf_to_pdf_1C,
     _fit_cdf_to_ppf_1C,
+    _fit_cdf_to_ppf_tabulated_1C,
     _fit_pdf_to_cdf_1C,
     _fit_ppf_to_cdf_1C,
 )
-from pysatl_core.types import CharacteristicName
+from pysatl_core.types import CharacteristicName, Kind, NumericArray
 from tests.unit.distributions.test_basic import DistributionTestBase
+from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
+
+
+class _TabulatedCdf(StandaloneEuclideanUnivariateDistribution):
+    """Analytical CDF with an explicit grid domain for fitter regressions."""
+
+    def __init__(self, cdf: Callable[..., NumericArray], domain: tuple[float, float]) -> None:
+        self.tabulation_domain = domain
+        super().__init__(
+            Kind.CONTINUOUS,
+            {
+                CharacteristicName.CDF: AnalyticalComputation[NumericArray, NumericArray](
+                    target=CharacteristicName.CDF,
+                    func=cdf,
+                )
+            },
+        )
 
 
 class TestFitPdfToCdf1C(DistributionTestBase):
@@ -185,6 +207,71 @@ class TestFitCdfToPpf1C(DistributionTestBase):
         assert desc.target == CharacteristicName.PPF
         assert desc.sources == [CharacteristicName.CDF]
         assert set(desc.option_names()) == {"max_iter", "x_tol", "eps", "x0"}
+
+
+class TestFitCdfToPpfTabulated1C:
+    def test_disconnected_density_avoids_interpolation_across_plateau(self) -> None:
+        """Mixed fast and exact queries must invert the actual CDF."""
+
+        def cdf(x: NumericArray, **_: Any) -> NumericArray:
+            x_arr = np.asarray(x, dtype=float)
+            return np.where(
+                x_arr < 0.0,
+                0.0,
+                np.where(
+                    x_arr < 1.0,
+                    0.5 * x_arr,
+                    np.where(
+                        x_arr < 2.0,
+                        0.5,
+                        np.where(x_arr < 3.0, 0.5 + 0.5 * (x_arr - 2.0), 1.0),
+                    ),
+                ),
+            )
+
+        distr = _TabulatedCdf(cdf, (0.0, 3.0))
+        fitted = _fit_cdf_to_ppf_tabulated_1C(distr, grid_size=7)
+        q = np.array([0.95, 0.55, 0.1, 0.67, 0.5, 0.75])
+        x = np.asarray(fitted(q), dtype=float)
+
+        np.testing.assert_allclose(x, np.where(q <= 0.5, 2.0 * q, 1.0 + 2.0 * q), atol=1e-8)
+        np.testing.assert_allclose(cdf(x), q, atol=1e-8)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="An unsampled plateau is not detectable from the current CDF grid",
+    )
+    def test_plateau_between_grid_points_does_not_get_interpolated(self) -> None:
+        """A narrow zero-density gap can be missed by every tabulation point."""
+
+        def cdf(x: NumericArray, **_: Any) -> NumericArray:
+            x_arr = np.asarray(x, dtype=float)
+            return 0.5 * np.clip(x_arr / 1.1, 0.0, 1.0) + 0.5 * np.clip(
+                (x_arr - 1.2) / 1.8, 0.0, 1.0
+            )
+
+        # The seven grid points are 0, 0.5, ..., 3; none lies in (1.1, 1.2).
+        distr = _TabulatedCdf(cdf, (0.0, 3.0))
+        fitted = _fit_cdf_to_ppf_tabulated_1C(distr, grid_size=7)
+        q = np.array([0.49, 0.5, 0.51])
+        x = np.asarray(fitted(q), dtype=float)
+
+        np.testing.assert_allclose(x, [1.078, 1.1, 1.236], atol=1e-8, rtol=0.0)
+        np.testing.assert_allclose(cdf(x), q, atol=1e-8, rtol=0.0)
+
+    def test_leading_flat_run_uses_cdf_solver(self) -> None:
+        """The first retained knot must not bridge a discarded tail run."""
+
+        def cdf(x: NumericArray, **_: Any) -> NumericArray:
+            return np.clip(np.asarray(x, dtype=float) - 1.0, 0.0, 1.0)
+
+        distr = _TabulatedCdf(cdf, (0.0, 2.0))
+        fitted = _fit_cdf_to_ppf_tabulated_1C(distr, grid_size=5)
+        q = np.array([0.1, 0.25, 0.5, 0.75])
+        x = np.asarray(fitted(q), dtype=float)
+
+        np.testing.assert_allclose(x, 1.0 + q, atol=1e-8)
+        np.testing.assert_allclose(cdf(x), q, atol=1e-8)
 
 
 class TestFitPpfToCdf1C(DistributionTestBase):

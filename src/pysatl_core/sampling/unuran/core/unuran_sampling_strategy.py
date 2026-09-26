@@ -14,6 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Final
 
 from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
@@ -96,7 +97,7 @@ class DefaultUnuranSamplingStrategy:
 
     def __deepcopy__(self, memo: dict[int, Any]) -> DefaultUnuranSamplingStrategy:
         """
-        Return an uninitialised copy that shares only the configuration.
+        Return an uninitialised copy with an independent configuration.
 
         A cached sampler cannot be copied and must not be shared.  It holds the
         CFFI handles for the UNU.RAN generator (``_ffi``, ``_lib`` and raw
@@ -113,13 +114,14 @@ class DefaultUnuranSamplingStrategy:
 
         Notes
         -----
-        The configuration object is shared, not copied.  It is a frozen
-        dataclass, so its fields cannot be rebound, but ``method_params`` is a
-        plain dict and mutating it in place is visible from both strategies.
-        Nothing in the library mutates it today.
+        The configuration is deep-copied with ``memo`` because its frozen
+        dataclass still contains mutable ``method_params``. Registering the
+        new strategy first also preserves references back to it, if any are
+        held inside those parameters.
         """
-        new = DefaultUnuranSamplingStrategy(config=self._config_value)
+        new = object.__new__(DefaultUnuranSamplingStrategy)
         memo[id(self)] = new
+        DefaultUnuranSamplingStrategy.__init__(new, config=deepcopy(self._config_value, memo))
         return new
 
     def invalidate(self) -> None:

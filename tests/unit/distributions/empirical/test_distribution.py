@@ -25,6 +25,7 @@ from pysatl_core.distributions.empirical import (
     FittedEmpirical,
     ScipyGaussianKde,
 )
+from pysatl_core.distributions.strategies import DefaultComputationStrategy
 from pysatl_core.types import CharacteristicName
 
 
@@ -194,6 +195,26 @@ class TestSupportIsRejectedWhenBounded:
         assert method.fit_calls == 0
 
 
+class TestScipyGaussianKdePdf:
+    def test_mixed_finite_infinite_and_nan_input(self, sample: NDArray[np.float64]) -> None:
+        from scipy.stats import gaussian_kde
+
+        fitted = ScipyGaussianKde().fit(sample)
+        result = fitted.pdf(np.array([-1.0, -np.inf, np.nan, 1.0, np.inf]))
+
+        np.testing.assert_allclose(result[[0, 3]], gaussian_kde(sample)([-1.0, 1.0]))
+        assert result[1] == 0.0
+        assert np.isnan(result[2])
+        assert result[4] == 0.0
+
+    def test_scalar_nan_propagates(self, sample: NDArray[np.float64]) -> None:
+        fitted = ScipyGaussianKde().fit(sample)
+        result = fitted.pdf(cast(NDArray[np.float64], np.float64(np.nan)))
+
+        assert np.ndim(result) == 0
+        assert np.isnan(result)
+
+
 class TestScipyGaussianKdeCdf:
     """
     The KDE CDF is evaluated in closed form rather than by integration.
@@ -339,6 +360,46 @@ class TestDefaultStrategy:
         assert isinstance(distr.computation_strategy, EmpiricalComputationStrategy)
 
 
+class TestSampleSnapshot:
+    def test_mutations_after_ppf_preparation_leave_original_and_clone_unchanged(self) -> None:
+        sample = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+        distr = EmpiricalDistribution(sample)
+        clone = distr.with_method(ScipyGaussianKde(bandwidth="silverman"))
+        x = np.array([-0.5, 0.5])
+        q = np.array([0.25, 0.5, 0.75])
+
+        before = [
+            (
+                current.calculate_characteristic(CharacteristicName.PDF, x),
+                current.calculate_characteristic(CharacteristicName.CDF, x),
+                current.calculate_characteristic(CharacteristicName.PPF, q),
+                current.tabulation_domain,
+            )
+            for current in (distr, clone)
+        ]
+
+        sample[:] += 100.0
+        public_data = distr.data
+        with pytest.raises(ValueError):
+            public_data[:] += 100.0
+        with pytest.raises(ValueError):
+            public_data.setflags(write=True)
+
+        assert clone.data is public_data
+        np.testing.assert_array_equal(public_data, [-2.0, -1.0, 0.0, 1.0, 2.0])
+        for current, (pdf, cdf, ppf, domain) in zip((distr, clone), before, strict=True):
+            np.testing.assert_array_equal(
+                current.calculate_characteristic(CharacteristicName.PDF, x), pdf
+            )
+            np.testing.assert_array_equal(
+                current.calculate_characteristic(CharacteristicName.CDF, x), cdf
+            )
+            np.testing.assert_array_equal(
+                current.calculate_characteristic(CharacteristicName.PPF, q), ppf
+            )
+            assert current.tabulation_domain == domain
+
+
 class TestWithMethod:
     def test_returns_new_instance(self, distr: EmpiricalDistribution) -> None:
         clone = distr.with_method(ScipyGaussianKde(bandwidth="silverman"))
@@ -373,6 +434,26 @@ class TestWithMethod:
         assert clone.sampling_strategy is not distr.sampling_strategy
         assert clone.computation_strategy is not distr.computation_strategy
 
+    def test_sampling_config_is_independent_of_clone(self, sample: NDArray[np.float64]) -> None:
+        from pysatl_core.sampling.unuran.core.unuran_sampling_strategy import (
+            DefaultUnuranSamplingStrategy,
+        )
+        from pysatl_core.sampling.unuran.method_config import UnuranMethodConfig
+
+        strategy = DefaultUnuranSamplingStrategy(
+            UnuranMethodConfig(method_params={"nested": {"values": [1]}})
+        )
+        distr = EmpiricalDistribution(sample, sampling_strategy=strategy)
+        clone = distr.with_method(ScipyGaussianKde(bandwidth="silverman"))
+
+        assert isinstance(clone.sampling_strategy, DefaultUnuranSamplingStrategy)
+        clone_params = clone.sampling_strategy.config.method_params
+        original_params = strategy.config.method_params
+        assert clone_params is not None
+        assert original_params is not None
+        clone_params["nested"]["values"].append(2)
+        assert original_params["nested"]["values"] == [1]
+
     def test_method_property_reflects_new_method(self, distr: EmpiricalDistribution) -> None:
         new_method = ScipyGaussianKde(bandwidth="silverman")
         clone = distr.with_method(new_method)
@@ -405,6 +486,51 @@ class TestWithMethod:
 
 
 class TestSetMethod:
+    def test_default_caching_strategy_rebuilds_ppf_after_method_swap(
+        self, sample: NDArray[np.float64]
+    ) -> None:
+        strategy = DefaultComputationStrategy(enable_caching=True)
+        distr = EmpiricalDistribution(
+            sample,
+            method=ScipyGaussianKde(bandwidth=2.0),
+            computation_strategy=strategy,
+        )
+        q = np.array([0.1, 0.9])
+        before = distr.calculate_characteristic(CharacteristicName.PPF, q)
+
+        new_method = ScipyGaussianKde(bandwidth=0.05)
+        distr.set_method(new_method)
+        after = distr.calculate_characteristic(CharacteristicName.PPF, q)
+        fresh = EmpiricalDistribution(sample, method=new_method)
+        expected = fresh.calculate_characteristic(CharacteristicName.PPF, q)
+
+        assert not np.allclose(after, before)
+        np.testing.assert_allclose(after, expected)
+
+    def test_failed_fit_preserves_current_distribution(self, distr: EmpiricalDistribution) -> None:
+        class _FailingMethod:
+            def fit(self, sample: NDArray[np.float64]) -> FittedEmpirical:
+                raise ValueError("cannot fit")
+
+        original_method = distr.method
+        original_estimator = distr.estimator
+        x = np.array([-0.5, 0.5])
+        pdf_before = distr.calculate_characteristic(CharacteristicName.PDF, x)
+        ppf_before = distr.calculate_characteristic(CharacteristicName.PPF, np.array([0.25, 0.75]))
+
+        with pytest.raises(ValueError, match="cannot fit"):
+            distr.set_method(_FailingMethod())
+
+        assert distr.method is original_method
+        assert distr.estimator is original_estimator
+        np.testing.assert_array_equal(
+            distr.calculate_characteristic(CharacteristicName.PDF, x), pdf_before
+        )
+        np.testing.assert_array_equal(
+            distr.calculate_characteristic(CharacteristicName.PPF, np.array([0.25, 0.75])),
+            ppf_before,
+        )
+
     def test_mutates_in_place_returns_none(self, distr: EmpiricalDistribution) -> None:
         original_id = id(distr)
         distr.set_method(ScipyGaussianKde(bandwidth="silverman"))
@@ -444,11 +570,10 @@ class TestSetMethod:
         """
         White-box: pins the invalidation *mechanism*, not a public contract.
 
-        Cache clearing has no cheap observable of its own -- the behavioural
-        guarantee it backs ("characteristics follow the current method") is
-        covered by TestMethodSwapIsVisibleThroughCharacteristics.  Expect this
-        test to be rewritten alongside any change to how fits are cached; a
-        failure here does not by itself mean behaviour regressed.
+        The public behaviour is covered by
+        test_default_caching_strategy_rebuilds_ppf_after_method_swap.  This
+        test specifically checks estimator-identity tracking; a failure here
+        does not by itself mean the public behaviour regressed.
         """
         strategy = EmpiricalComputationStrategy(enable_caching=True)
         d = EmpiricalDistribution(sample, computation_strategy=strategy)

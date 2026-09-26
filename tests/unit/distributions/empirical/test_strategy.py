@@ -20,6 +20,8 @@ from typing import Any, cast
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
+from scipy.optimize import brentq
 
 from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.distributions.empirical import (
@@ -78,15 +80,24 @@ class TestInheritance:
         strategy = EmpiricalComputationStrategy(computation_defaults={"grid_size": 33})
         assert strategy._computation_defaults == {"grid_size": 33}
 
-    def test_computation_defaults_reach_the_fitter(self) -> None:
+    def test_computation_defaults_reach_the_fitter(self, monkeypatch: pytest.MonkeyPatch) -> None:
         distr = EmpiricalDistribution(
             _make_distr().data,
             computation_strategy=EmpiricalComputationStrategy(
                 computation_defaults={"grid_size": 5},
             ),
         )
+        grid_sizes: list[int] = []
+        original_cdf = distr.estimator.cdf
+
+        def recording_cdf(x: NDArray[np.float64]) -> NDArray[np.float64]:
+            grid_sizes.append(np.size(x))
+            return original_cdf(x)
+
+        monkeypatch.setattr(distr.estimator, "cdf", recording_cdf)
         coarse = distr.calculate_characteristic(CharacteristicName.PPF, np.array([0.3]))
         fine = _make_distr().calculate_characteristic(CharacteristicName.PPF, np.array([0.3]))
+        assert 5 in grid_sizes
         assert not np.isclose(coarse[0], fine[0])
 
 
@@ -244,26 +255,48 @@ class TestOptionsAreHonoured:
     # options live on step 0.  See test_ppf_plan_starts_from_the_analytical_cdf.
     PPF_STEP = 0
 
-    def test_grid_size_changes_the_result(self) -> None:
+    def test_grid_size_changes_the_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         distr = _make_distr()
         plan = distr.explain_computation_path(CharacteristicName.PPF)
         q = np.array([0.3])
 
         default = distr.calculate_characteristic(CharacteristicName.PPF, q)
+        grid_sizes: list[int] = []
+        original_cdf = distr.estimator.cdf
+
+        def recording_cdf(x: NDArray[np.float64]) -> NDArray[np.float64]:
+            grid_sizes.append(np.size(x))
+            return original_cdf(x)
+
+        monkeypatch.setattr(distr.estimator, "cdf", recording_cdf)
         coarse = distr.calculate_characteristic(
             CharacteristicName.PPF, q, plan.with_options(self.PPF_STEP, grid_size=5)
         )
+        assert 5 in grid_sizes
         assert not np.isclose(default[0], coarse[0])
 
-    def test_tail_margin_changes_the_result(self) -> None:
+    def test_tail_margin_changes_the_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         distr = _make_distr()
         plan = distr.explain_computation_path(CharacteristicName.PPF)
         q = np.array([0.3])
 
         default = distr.calculate_characteristic(CharacteristicName.PPF, q)
+        grid_bounds: list[tuple[float, float]] = []
+        original_cdf = distr.estimator.cdf
+
+        def recording_cdf(x: NDArray[np.float64]) -> NDArray[np.float64]:
+            if np.size(x) == 1025:
+                grid_bounds.append((float(np.min(x)), float(np.max(x))))
+            return original_cdf(x)
+
+        monkeypatch.setattr(distr.estimator, "cdf", recording_cdf)
         padded = distr.calculate_characteristic(
             CharacteristicName.PPF, q, plan.with_options(self.PPF_STEP, tail_margin=3.0)
         )
+        domain = distr.tabulation_domain
+        assert domain is not None
+        lo, hi = domain
+        assert grid_bounds == [(lo - 3.0 * (hi - lo), hi + 3.0 * (hi - lo))]
         assert not np.isclose(default[0], padded[0], atol=1e-12, rtol=0.0)
 
     def test_invalid_option_value_is_rejected(self) -> None:
@@ -289,22 +322,43 @@ class TestTabulatedPpfNumerics:
         )
         assert np.all(np.diff(result) >= -1e-10)
 
-    def test_matches_root_finding_within_tolerance(self) -> None:
+    @pytest.mark.parametrize("multimodal", [False, True], ids=["unimodal", "multimodal"])
+    def test_matches_independent_root_finding_within_tolerance(self, multimodal: bool) -> None:
         rng = np.random.default_rng(7)
-        sample = rng.normal(0.0, 1.0, 400)
+        if multimodal:
+            left_mode = rng.normal(-3.0, 0.2, 200)
+            sample = np.concatenate((left_mode, -left_mode))
+            method = ScipyGaussianKde(bandwidth=0.15)
+            # Symmetric, separated modes make the CDF nearly flat around 0.5.
+            quantiles = np.array(
+                [0.1, 0.49, 0.4999, 0.49999, 0.499999, 0.500001, 0.50001, 0.5001, 0.51, 0.9]
+            )
+        else:
+            sample = rng.normal(0.0, 1.0, 400)
+            method = ScipyGaussianKde()
+            quantiles = np.linspace(0.1, 0.9, 9)
 
-        fast = EmpiricalDistribution(sample)
-        slow = EmpiricalDistribution(sample, computation_strategy=DefaultComputationStrategy())
-        quantiles = np.linspace(0.1, 0.9, 9)
-
-        fast_vals = fast.calculate_characteristic(CharacteristicName.PPF, quantiles)
-        slow_vals = np.array(
-            [
-                float(np.squeeze(slow.calculate_characteristic(CharacteristicName.PPF, float(q))))
-                for q in quantiles
-            ]
+        distr = EmpiricalDistribution(sample, method=method)
+        assert (
+            distr.explain_computation_path(CharacteristicName.PPF).steps[-1].method_name
+            == TABULATED_FITTER
         )
-        assert np.allclose(fast_vals, slow_vals, atol=5e-2)
+        domain = distr.tabulation_domain
+        assert domain is not None
+        lo, hi = domain
+
+        # Invert the estimator's analytical CDF directly. Another PPF query
+        # would use the same tabulated edge and could reproduce its error.
+        cdf = distr.estimator.cdf
+
+        def cdf_minus_q(x: float, q: float) -> float:
+            return float(cdf(np.array([x]))[0]) - q
+
+        reference = np.array(
+            [brentq(cdf_minus_q, lo, hi, args=(float(q),), xtol=1e-12) for q in quantiles]
+        )
+        tabulated = distr.calculate_characteristic(CharacteristicName.PPF, quantiles)
+        np.testing.assert_allclose(tabulated, reference, atol=1e-3, rtol=0.0)
 
     def test_extreme_quantiles_are_solved_not_clipped(self) -> None:
         """Tails outside the tabulated range must round-trip through the CDF."""

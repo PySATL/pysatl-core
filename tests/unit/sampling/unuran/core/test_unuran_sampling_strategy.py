@@ -14,6 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from copy import deepcopy
 from typing import cast
 
 import numpy as np
@@ -119,6 +120,29 @@ class TestConfigProperty:
 
 
 _SAMPLER_MODULE = "pysatl_core.sampling.unuran.core.unuran_sampling_strategy.DefaultUnuranSampler"
+
+
+class TestDeepcopy:
+    def test_config_is_independent_and_cached_sampler_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        config = UnuranMethodConfig(method_params={"nested": {"values": [1]}})
+        strategy = DefaultUnuranSamplingStrategy(config)
+        strategy.sample(1, _make_continuous_distr())
+        cached_sampler = strategy._sampler
+
+        clone, cloned_config = deepcopy((strategy, config))
+
+        assert cached_sampler is not None
+        assert strategy._sampler is cached_sampler
+        assert clone._sampler is None
+        assert clone.config is cloned_config
+        assert clone.config is not config
+        assert clone.config.method_params is not None
+        assert config.method_params is not None
+        clone.config.method_params["nested"]["values"].append(2)
+        assert config.method_params["nested"]["values"] == [1]
 
 
 class TestSampleMethod:

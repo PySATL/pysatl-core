@@ -9,15 +9,14 @@ Option taxonomy used here
 ``CharacteristicOption``
     Parameters that are intrinsic to the *characteristic* being computed and
     therefore shared between the fitter and any evaluator for the same
-    characteristic.  They affect the *meaning* of the result and must be
+    characteristic. They affect the *meaning* of the result and must be
     encoded into the cache key.
 
     * ``_fit_cdf_to_ppf_1C``: ``eps``, ``x0``  — define the effective support
       bounds used when inverting the CDF; different values yield a different
       PPF.
     * ``_fit_cdf_to_ppf_tabulated_1C``: ``tail_margin`` — pads the tabulation
-      domain and thus moves the boundary between the interpolated and the
-      exactly solved region.
+      domain and changes the interpolated region.
     * ``_fit_ppf_to_cdf_1C``: ``q_lowest``, ``q_highest`` — bracket for the
       root search; they define the domain of the resulting CDF approximation.
 
@@ -65,14 +64,7 @@ if TYPE_CHECKING:
 
 
 _MIN_TABULATED_CDF_STEP = 1e-12
-"""
-Smallest CDF increment treated as signal when inverting a tabulated CDF.
-
-Matches the tail resolution the other 1C fitters work at (see the
-``q_lowest`` / ``q_highest`` defaults of :func:`_fit_ppf_to_cdf_1C`).
-Increments below it come from floating-point noise in a numerically
-integrated CDF rather than from probability mass.
-"""
+"""Smallest CDF increment treated as usable for PCHIP interpolation."""
 
 
 def _fit_pdf_to_cdf_1C(
@@ -358,27 +350,14 @@ def _fit_cdf_to_ppf_tabulated_1C(
     Fit a ``cdf -> ppf`` conversion by tabulating the CDF and inverting it.
 
     The CDF is evaluated once on a uniform grid spanning the distribution's
-    ``tabulation_domain`` and inverted with monotone (PCHIP) interpolation.
-    Because the CDF is sampled in a single vectorised call, evaluating the
-    resulting PPF on an array of quantiles costs one interpolation instead
-    of one root search per point -- a large win for distributions whose CDF
-    is expensive (numerical integration, kernel estimators).
+    ``tabulation_domain``. Consecutive usable grid points form separate runs;
+    each run is inverted with monotone PCHIP interpolation. Quantiles between
+    runs and in the tails are solved against the real CDF by bracket expansion
+    and bisection.
 
-    Quantiles falling outside the tabulated probability range are **not**
-    approximated by the grid endpoints: they are solved exactly against the
-    real CDF by bracket expansion plus bisection.  The fast path therefore
-    covers the bulk of the distribution while the tails are solved exactly.
-
-    .. warning::
-        One known gap in that split: the leading grid knot is always kept (it
-        has no predecessor to test the increment against), so when the knots
-        right after it are dropped as degenerate, the first interpolation
-        interval spans the whole filtered-out run.  ``q_lowest`` then claims
-        coverage the interpolant cannot deliver, and quantiles inside that
-        first interval are interpolated instead of solved.  Measured on a
-        Gaussian KDE over 2000 points: quantiles between 3e-169 and 4e-12 come
-        back with a CDF off by up to 150 orders of magnitude.  Quantiles above
-        the first genuinely usable knot are unaffected.
+    .. note::
+        A plateau entirely between two grid points cannot be detected from
+        this tabulation and may still be crossed by interpolation.
 
     Parameters
     ----------
@@ -388,17 +367,16 @@ def _fit_cdf_to_ppf_tabulated_1C(
         region of interest.
     tail_margin : float, default 0.0
         *(Characteristic option)* Extra padding added to each side of
-        ``tabulation_domain``, in units of its width.  Widening the domain
-        moves the boundary between the interpolated and the exactly solved
-        region, so different values yield a different PPF approximation.
+        ``tabulation_domain``, in units of its width. Widening the domain
+        changes the interpolation runs and their boundaries.
     grid_size : int, default 1025
         *(Computation option)* Number of CDF tabulation points.
     max_iter : int, default 60
         *(Computation option)* Maximum bracket-expansion and bisection
-        iterations used for quantiles outside the tabulated range.
+        iterations used for quantiles outside interpolated runs.
     x_tol : float, default 1e-10
         *(Computation option)* Early-stop tolerance on bracket width for the
-        out-of-range solver.
+        CDF solver used outside interpolation runs.
 
     Returns
     -------
@@ -434,30 +412,23 @@ def _fit_cdf_to_ppf_tabulated_1C(
     x_grid = np.linspace(lo, hi, grid_size)
     cdf_grid = np.asarray(cdf_func(x_grid), dtype=float)
 
-    # PCHIP needs abscissae that are not merely increasing but separated by a
-    # meaningful amount: in the saturated tails consecutive CDF samples can
-    # differ by a single ULP while x moves a full grid step, which sends the
-    # interpolated slope to infinity.  Such knots are dropped rather than
-    # nudged apart by an epsilon — a fabricated slope would map a whole range
-    # of quantiles onto essentially arbitrary points.  Quantiles left uncovered
-    # are solved exactly below, so dropping costs accuracy nowhere -- with the
-    # one exception noted in the warning above: `usable[0]` is unconditionally
-    # True, so a dropped run directly after the leading knot is bridged by
-    # interpolation instead of being left to the exact solver.
+    # Keep original grid indices: joining retained knots across a discarded
+    # run would interpolate through a detected CDF plateau.
     cdf_grid = np.maximum.accumulate(cdf_grid)
     usable = np.ones(cdf_grid.size, dtype=bool)
     usable[1:] = np.diff(cdf_grid) > _MIN_TABULATED_CDF_STEP
-    q_knots = cdf_grid[usable]
-    x_knots = x_grid[usable]
-
-    if q_knots.size >= 2:
-        interpolator = _sp_interpolate.PchipInterpolator(q_knots, x_knots, extrapolate=False)
-        q_lowest, q_highest = float(q_knots[0]), float(q_knots[-1])
-    else:
-        # Degenerate tabulation (e.g. a CDF that is constant on the whole
-        # domain): keep no fast path, every quantile is solved exactly.
-        interpolator = None
-        q_lowest, q_highest = np.inf, -np.inf
+    retained = np.flatnonzero(usable)
+    run_breaks = np.flatnonzero(np.diff(retained) > 1) + 1
+    runs = np.split(retained, run_breaks)
+    interpolated_runs = [
+        (
+            float(cdf_grid[run[0]]),
+            float(cdf_grid[run[-1]]),
+            _sp_interpolate.PchipInterpolator(cdf_grid[run], x_grid[run], extrapolate=False),
+        )
+        for run in runs
+        if run.size >= 2
+    ]
 
     span = hi - lo
 
@@ -470,13 +441,14 @@ def _fit_cdf_to_ppf_tabulated_1C(
     support_hi = float(getattr(support, "right", np.inf))
 
     def _solve_exactly(q_out: NumericArray, **options: Any) -> NumericArray:
-        """Bracket-expand around the domain, then bisect against the true CDF."""
-        lo_b = np.full_like(q_out, lo)
-        hi_b = np.full_like(q_out, hi)
+        """Bracket with the grid, expand if needed, then find the left quantile."""
+        right = np.clip(np.searchsorted(cdf_grid, q_out, side="left"), 1, grid_size - 1)
+        lo_b = np.clip(x_grid[right - 1], support_lo, support_hi)
+        hi_b = np.clip(x_grid[right], support_lo, support_hi)
 
         step = span
         for _ in range(max_iter):
-            too_high = np.asarray(cdf_func(lo_b, **options), dtype=float) > q_out
+            too_high = np.asarray(cdf_func(lo_b, **options), dtype=float) >= q_out
             expandable = too_high & (lo_b > support_lo)
             if not bool(expandable.any()):
                 break
@@ -500,7 +472,7 @@ def _fit_cdf_to_ppf_tabulated_1C(
             lo_b = np.where(below, mid, lo_b)
             hi_b = np.where(below, hi_b, mid)
 
-        return 0.5 * (lo_b + hi_b)
+        return hi_b
 
     def _ppf(q: NumericArray, **options: Any) -> NumericArray:
         q_arr = np.atleast_1d(np.asarray(q, dtype=float))
@@ -510,12 +482,13 @@ def _fit_cdf_to_ppf_tabulated_1C(
         result[q_arr >= 1.0] = np.inf
         interior = (q_arr > 0.0) & (q_arr < 1.0)
 
-        interpolated = interior & (q_arr >= q_lowest) & (q_arr <= q_highest)
-        if interpolator is not None and np.any(interpolated):
-            clipped = np.clip(q_arr[interpolated], q_lowest, q_highest)
-            result[interpolated] = interpolator(clipped)
+        exact = interior.copy()
+        for q_lowest, q_highest, interpolator in interpolated_runs:
+            interpolated = exact & (q_arr >= q_lowest) & (q_arr <= q_highest)
+            if np.any(interpolated):
+                result[interpolated] = interpolator(q_arr[interpolated])
+                exact[interpolated] = False
 
-        exact = interior & ~interpolated
         if np.any(exact):
             result[exact] = _solve_exactly(q_arr[exact], **options)
 
@@ -541,9 +514,8 @@ def _build_cdf_to_ppf_tabulated_1C() -> FitterDescriptor:
                 default=0.0,
                 description=(
                     "Extra padding on each side of the declared tabulation "
-                    "domain, in units of its width.  Moves the boundary between "
-                    "the interpolated and the exactly solved region and therefore "
-                    "changes the resulting PPF approximation."
+                    "domain, in units of its width. Changes the interpolation "
+                    "runs and their boundaries."
                 ),
                 validate=lambda v: v >= 0.0,
             ),
@@ -554,7 +526,7 @@ def _build_cdf_to_ppf_tabulated_1C() -> FitterDescriptor:
                 type=int,
                 default=1025,
                 description=(
-                    "Number of CDF tabulation points.  More points improve "
+                    "Number of CDF tabulation points. More points improve "
                     "interpolation accuracy at a linear fit-time cost."
                 ),
                 validate=lambda v: v >= 2,
@@ -565,7 +537,7 @@ def _build_cdf_to_ppf_tabulated_1C() -> FitterDescriptor:
                 default=60,
                 description=(
                     "Maximum bracket-expansion and bisection iterations for "
-                    "quantiles outside the tabulated range."
+                    "quantiles outside interpolated runs."
                 ),
                 validate=lambda v: v > 0,
             ),
@@ -579,8 +551,8 @@ def _build_cdf_to_ppf_tabulated_1C() -> FitterDescriptor:
         ),
         constraint_tags=frozenset({"continuous", "univariate", "tabulated"}),
         description=(
-            "CDF -> PPF via CDF tabulation on a declared domain and monotone "
-            "(PCHIP) inversion, with exact bisection outside the tabulated range."
+            "CDF -> PPF via PCHIP within consecutive usable grid runs, with "
+            "CDF bisection between runs and in the tails."
         ),
     )
 

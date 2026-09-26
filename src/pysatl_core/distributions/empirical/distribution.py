@@ -4,7 +4,8 @@ Empirical Distribution
 Wraps a density estimator (e.g. KDE) built from observed data into a
 ``Distribution`` that integrates with the characteristic graph.
 PDF and CDF come straight from the estimator; PPF is derived by the
-graph, which inverts the tabulated CDF (``cdf_to_ppf_tabulated_1C``).
+graph, which inverts a tabulated CDF where interpolation is safe and solves
+detected plateau gaps against the CDF (``cdf_to_ppf_tabulated_1C``).
 """
 
 from __future__ import annotations
@@ -105,6 +106,9 @@ class _ScipyFittedKde:
         result = np.zeros_like(x_arr)
         if finite.any():
             result[finite] = self._kde.pdf(x_arr[finite])
+        # Infinite inputs have zero Gaussian density; NaN must remain visible
+        # rather than being mistaken for a valid zero-density observation.
+        result[np.isnan(x_arr)] = np.nan
         return result[0] if scalar_input else result
 
     def cdf(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -126,20 +130,16 @@ class _ScipyFittedKde:
         vectorising the loop buys ~1.4x, not an order of magnitude.  The bulk
         of it is paid once per fit, when
         :func:`~pysatl_core.distributions.computations.continuous._fit_cdf_to_ppf_tabulated_1C`
-        tabulates the CDF on its grid (measured: ~120 ms for a 1025-point grid
-        over a 10k sample, ~99% of the PPF fit time), after which PPF calls are
-        served from the cached interpolant in ~0.1 ms.
+        tabulates the CDF. Most PPF queries then use the cached interpolant;
+        detected plateau gaps and tails require CDF bisection.
 
-        If that fit time ever becomes the bottleneck, the way out is
+        If grid evaluation becomes the bottleneck, the way out is
         algorithmic, not micro-optimisation: on a *uniform* grid the sum above
         is a convolution, so linear binning plus an FFT computes it in
-        ``O(m log m)`` independently of the sample size (measured: 0.5 ms for
-        the same grid, i.e. 40-340x, at the price of a binning error of order
-        1e-5 that shrinks quadratically with grid size).  That path needs a
-        uniform grid, so it does not fit this "evaluate at arbitrary points"
-        signature; it would go behind an optional ``cdf_on_grid(lo, hi, n)``
-        hook on :class:`FittedEmpirical` that the tabulating fitter prefers
-        when the estimator provides it.
+        ``O(m log m)`` independently of the sample size, at the price of a
+        binning error. That path needs a uniform grid, so it does not fit this
+        "evaluate at arbitrary points" signature; it would go behind an
+        optional ``cdf_on_grid(lo, hi, n)`` hook on :class:`FittedEmpirical`.
         """
         from scipy.special import ndtr
 
@@ -168,8 +168,8 @@ class EmpiricalDistribution(Distribution):
 
     PDF and CDF are provided analytically by the estimator.  PPF is
     derived by the characteristic graph, which tabulates the CDF over
-    :attr:`tabulation_domain` and inverts it monotonically, solving
-    quantiles outside that range exactly.
+    :attr:`tabulation_domain` and interpolates within usable runs, solving
+    quantiles in detected plateau gaps and tails against the estimator's CDF.
 
     Parameters
     ----------
@@ -216,7 +216,10 @@ class EmpiricalDistribution(Distribution):
         sampling_strategy: SamplingStrategy | None = None,
         computation_strategy: ComputationStrategy | None = None,
     ) -> None:
-        self._sample = self.validate_sample(sample)
+        validated = self.validate_sample(sample)
+        # Own the observations before fitting. A bytes-backed array cannot be
+        # made writable through the public data property or a view of it.
+        self._sample = np.frombuffer(validated.tobytes(), dtype=validated.dtype)
         self._reject_bounded_support(support)
         self._method = method
         self._estimator = method.fit(self._sample)
@@ -440,7 +443,7 @@ class EmpiricalDistribution(Distribution):
 
     @property
     def data(self) -> NDArray[np.float64]:
-        """The original data sample used to fit this distribution."""
+        """Immutable snapshot of the observations used to fit this distribution."""
         return self._sample
 
     @property
@@ -474,7 +477,7 @@ class EmpiricalDistribution(Distribution):
         """
         Return a clone of this distribution with a different empirical method.
 
-        The clone refits the new method on the same sample (shared array, no copy).
+        The clone refits the new method on the same immutable sample snapshot.
         Strategies are deep-copied like in any other ``with_*`` clone, so the
         clone is independent of whatever the original memoises later.  The
         sampler does start empty (see
@@ -496,9 +499,9 @@ class EmpiricalDistribution(Distribution):
         Refits ``method`` on the original sample and rebinds the underlying
         estimator. The graph's analytical loops do not need to be rebuilt:
         :meth:`_pdf` and :meth:`_cdf` always read the current estimator,
-        and :class:`EmpiricalComputationStrategy` clears its fitted-method
-        cache automatically when it notices that :attr:`estimator` no longer
-        returns the object it last saw.
+        and the built-in computation strategies clear cached methods and plans
+        when the estimator is replaced. :class:`EmpiricalComputationStrategy`
+        also detects a replaced estimator on its next query.
 
         Sampling strategies that hold cached state (notably
         :class:`DefaultUnuranSamplingStrategy`, whose generator is built once
@@ -506,6 +509,9 @@ class EmpiricalDistribution(Distribution):
         ``invalidate()`` method when present. Strategies without
         ``invalidate`` are left untouched — the assumption is that they hold
         no per-distribution state.
+
+        If fitting the new method fails, the current method, estimator, and
+        cached state remain unchanged.
 
         Notes
         -----
@@ -517,11 +523,14 @@ class EmpiricalDistribution(Distribution):
 
         For side-by-side comparison of methods, prefer :meth:`with_method`.
         """
+        # Fit before changing the live distribution. If fitting fails, the
+        # existing method, estimator, and their cached computations stay valid.
+        estimator = method.fit(self._sample)
         self._method = method
-        self._estimator = method.fit(self._sample)
-        # Computation cache: auto-invalidated on next query via estimator-id
-        # tracking in EmpiricalComputationStrategy. Custom strategies that
-        # implement an invalidate() hook get a chance to reset, too.
+        self._estimator = estimator
+        # Built-in computation strategies clear fitted methods and plans now.
+        # EmpiricalComputationStrategy also detects estimator swaps on a later
+        # query; custom strategies can opt into this invalidate() hook.
         getattr(self._computation_strategy, "invalidate", lambda: None)()
         # Sampling cache: must be reset explicitly — UNURAN's C-side init
         # captured the old PDF and cannot be patched in place.
