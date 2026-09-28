@@ -40,6 +40,44 @@ class Support(Protocol):
     def contains(self, x: NumericArray) -> BoolArray: ...
 
 
+@runtime_checkable
+class IntervalSupport(Support, Protocol):
+    """
+    Protocol for a support described by a single interval with endpoints.
+
+    ``Support`` itself declares only ``contains``, which is enough to *test* a
+    point but says nothing about the shape of the set.  A caller that needs to
+    compare two supports, or to read where one begins and ends, has to know
+    that much more, and this protocol is the declared form of what
+    :class:`ContinuousSupport` already provides through
+    :class:`~pysatl_core.types.Interval1D`.  Declaring it is what lets such a
+    caller read ``support.left`` instead of probing ``getattr(support, "left")``
+    with a string that no checker can verify.
+    """
+
+    left: float
+    right: float
+    left_closed: bool
+    right_closed: bool
+
+
+@runtime_checkable
+class PointSupport(Support, Protocol):
+    """
+    Protocol for a support given as an explicit, enumerable set of points.
+
+    The discrete counterpart of :class:`IntervalSupport`: it names the
+    ``points`` array that :class:`ExplicitTableDiscreteSupport` already exposes.
+    A lattice support is deliberately *not* an instance of this protocol — it
+    may be infinite, so it has no point array to hand out.
+    """
+
+    @property
+    def points(self) -> NumericArray:
+        """Points of the support."""
+        ...
+
+
 class ContinuousSupport(Interval1D, Support):
     """
     Support for continuous distributions represented as an interval.
@@ -433,6 +471,9 @@ class IntegerLatticeDiscreteSupport(DiscreteSupport):
 __all__ = [
     # Base support protocol
     "Support",
+    # Shape protocols: what a support exposes beyond ``contains``
+    "IntervalSupport",
+    "PointSupport",
     "ContinuousSupport",
     # Discrete support protocol and implementations
     "DiscreteSupport",

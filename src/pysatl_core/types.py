@@ -259,6 +259,17 @@ DEFAULT_ANALYTICAL_COMPUTATION_LABEL: LabelName = "PySATL_default_analytical_com
 type ParametrizationName = str
 """Type alias for parametrization names."""
 
+type EstimatorName = str
+"""Name of an estimation method, as carried by
+:attr:`~pysatl_core.estimation.result.FitResult.estimator`.
+
+A plain ``str`` rather than a ``Literal`` of the known methods, and
+deliberately so: the set of estimators is open.  A ``Literal`` would have to be
+edited in this module every time a method is added, which is exactly what the
+estimator protocol exists to avoid — an estimator defined in another package,
+or by a user, has a name this file cannot know.
+"""
+
 
 type ComputationFunc[In, Out] = Callable[[KwArg(Any)], Out] | Callable[[In, KwArg(Any)], Out]
 """Callable for a characteristic computation.
@@ -451,6 +462,7 @@ __all__ = [
     "LabelName",
     "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
     "ParametrizationName",
+    "EstimatorName",
     "ComputationFunc",
     "FitterFunc",
     "EvaluatorFunc",
