@@ -9,7 +9,7 @@ Option taxonomy used here
 ``CharacteristicOption``
     Parameters that are intrinsic to the *characteristic* being computed and
     therefore shared between the fitter and any evaluator for the same
-    characteristic.  They affect the *meaning* of the result and must be
+    characteristic. They affect the *meaning* of the result and must be
     encoded into the cache key.
 
     * ``_fit_cdf_to_ppf_1C``: ``eps``, ``x0``  — define the effective support
@@ -37,7 +37,10 @@ __license__ = "SPDX-License-Identifier: MIT"
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from scipy import integrate as _sp_integrate, optimize as _sp_optimize
+from scipy import (
+    integrate as _sp_integrate,
+    optimize as _sp_optimize,
+)
 
 from pysatl_core.distributions.computations._utils import (
     estimate_support_bounds,
@@ -452,7 +455,9 @@ def _build_ppf_to_cdf_1C() -> FitterDescriptor:
 
 
 def _build_continuous_descriptors() -> list[FitterDescriptor]:
-    """Build and return all continuous 1D fitter descriptors (lazy factory)."""
+    """
+    Build and return all continuous 1D fitter descriptors (lazy factory).
+    """
     return [
         _build_pdf_to_cdf_1C(),
         _build_cdf_to_pdf_1C(),

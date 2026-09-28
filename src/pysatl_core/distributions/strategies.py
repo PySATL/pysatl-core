@@ -456,6 +456,11 @@ class DefaultComputationStrategy:
     def is_caching_enabled(self) -> bool:
         return self._enable_caching
 
+    def invalidate(self) -> None:
+        """Drop fitted methods and resolved plans after the distribution changes."""
+        self._cache.clear()
+        self._path_cache.clear()
+
     # ------------------------------------------------------------------ #
     # Cycle detection helpers
     # ------------------------------------------------------------------ #
