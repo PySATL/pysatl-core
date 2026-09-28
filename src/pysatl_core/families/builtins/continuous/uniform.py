@@ -15,6 +15,7 @@ from typing import cast
 import numpy as np
 
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.estimation.formulas.builtins import register_builtin_estimation_formulas
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
@@ -325,6 +326,11 @@ def configure_uniform_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        # No 'param_bounds': the only restriction on these parameters is the
+        # relation 'lower_bound < upper_bound', and a box of per-parameter
+        # bounds cannot express a relation between two parameters. Each
+        # endpoint on its own ranges over the whole line. The family is fitted
+        # by the closed-form solution above in any case.
     )
     Uniform.__doc__ = UNIFORM_DOC
 
@@ -479,3 +485,4 @@ def configure_uniform_family() -> None:
             return np.stack([grad_minimum, grad_range], axis=-1)
 
     ParametricFamilyRegister.register(Uniform)
+    register_builtin_estimation_formulas({FamilyName.CONTINUOUS_UNIFORM: Uniform})
