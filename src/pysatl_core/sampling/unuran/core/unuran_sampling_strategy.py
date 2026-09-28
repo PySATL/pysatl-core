@@ -14,6 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Final
 
 from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
@@ -93,6 +94,54 @@ class DefaultUnuranSamplingStrategy:
                 return DefaultSamplingUnivariateStrategy().sample(n, distr, **options)
 
         return self._sampler.sample(n)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> DefaultUnuranSamplingStrategy:
+        """
+        Return an uninitialised copy with an independent configuration.
+
+        A cached sampler cannot be copied and must not be shared.  It holds the
+        CFFI handles for the UNU.RAN generator (``_ffi``, ``_lib`` and raw
+        ``_CDataBase`` pointers), which ``deepcopy`` cannot duplicate -- it
+        falls back to the pickle protocol and fails with ``TypeError: cannot
+        pickle '_cffi_backend.FFI' object``.  That failure is the lesser evil:
+        two Python objects owning one C generator would run its teardown twice.
+
+        Dropping the sampler is also the right semantics rather than a
+        workaround.  A clone is made because something about the distribution
+        is changing (see ``Distribution.with_strategies``), so a generator
+        built on the original's characteristics would be stale anyway; the
+        clone builds its own on first :meth:`sample`.
+
+        Notes
+        -----
+        The configuration is deep-copied with ``memo`` because its frozen
+        dataclass still contains mutable ``method_params``. Registering the
+        new strategy first also preserves references back to it, if any are
+        held inside those parameters.
+        """
+        new = object.__new__(DefaultUnuranSamplingStrategy)
+        memo[id(self)] = new
+        DefaultUnuranSamplingStrategy.__init__(new, config=deepcopy(self._config_value, memo))
+        return new
+
+    def invalidate(self) -> None:
+        """
+        Drop the cached UNURAN sampler.
+
+        The next call to :meth:`sample` will rebuild a fresh sampler from the
+        distribution's current characteristics. Use this when the underlying
+        distribution state has changed (e.g. an empirical method has been
+        swapped) and the existing UNURAN generator was built on stale data —
+        keeping it would silently produce samples from the old distribution.
+
+        Notes
+        -----
+        Releases the only strong reference held by the strategy. Any external
+        code that captured ``self._sampler`` directly will keep its old sampler
+        alive and continue sampling from the previous distribution; such
+        references must be re-acquired by the caller.
+        """
+        self._sampler = None
 
     @property
     def config(self) -> UnuranMethodConfig:
