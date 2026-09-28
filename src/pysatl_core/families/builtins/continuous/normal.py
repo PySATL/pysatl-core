@@ -17,6 +17,7 @@ import numpy as np
 from scipy.special import erf, erfinv
 
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.estimation.formulas.builtins import register_builtin_estimation_formulas
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
@@ -287,6 +288,7 @@ def configure_normal_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        param_bounds={"sigma": (0, None)},
     )
     Normal.__doc__ = NORMAL_DOC
 
@@ -503,3 +505,4 @@ def configure_normal_family() -> None:
             return np.stack([grad_a, grad_b], axis=-1)
 
     ParametricFamilyRegister.register(Normal)
+    register_builtin_estimation_formulas({FamilyName.NORMAL: Normal})
