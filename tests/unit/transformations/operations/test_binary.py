@@ -19,7 +19,7 @@ from pysatl_core.transformations.operations.distributions.binary import (
     binary,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     BinaryOperationName,
     CharacteristicName,
     ComputationFunc,
@@ -75,7 +75,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PDF: AnalyticalComputation[float, float](
                     target=CharacteristicName.PDF,
                     func=cast(ComputationFunc[float, float], _pdf),
@@ -124,7 +124,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PMF: AnalyticalComputation[float, float](
                     target=CharacteristicName.PMF,
                     func=cast(ComputationFunc[float, float], _pmf),
@@ -141,7 +141,7 @@ class TestBinaryDistribution(DistributionTestBase):
         skewness: float | None = None,
         kurtosis: float | None = None,
     ) -> StandaloneEuclideanUnivariateDistribution:
-        analytical_computations: dict[str, AnalyticalComputation[Any, Any]] = {
+        entry_computations: dict[str, AnalyticalComputation[Any, Any]] = {
             CharacteristicName.PPF: AnalyticalComputation[float, float](
                 target=CharacteristicName.PPF,
                 func=cast(ComputationFunc[float, float], lambda data, **_options: float(data)),
@@ -149,22 +149,22 @@ class TestBinaryDistribution(DistributionTestBase):
         }
 
         if mean is not None:
-            analytical_computations[CharacteristicName.MEAN] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.MEAN] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.MEAN,
                 func=cast(ComputationFunc[Any, float], lambda **_options: mean),
             )
         if variance is not None:
-            analytical_computations[CharacteristicName.VAR] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.VAR] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.VAR,
                 func=cast(ComputationFunc[Any, float], lambda **_options: variance),
             )
         if skewness is not None:
-            analytical_computations[CharacteristicName.SKEW] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.SKEW] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.SKEW,
                 func=cast(ComputationFunc[Any, float], lambda **_options: skewness),
             )
         if kurtosis is not None:
-            analytical_computations[CharacteristicName.KURT] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.KURT] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.KURT,
                 func=cast(
                     ComputationFunc[Any, float],
@@ -174,7 +174,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
         )
 
     def test_add_continuous_exposes_full_characteristic_set(self) -> None:
@@ -184,7 +184,7 @@ class TestBinaryDistribution(DistributionTestBase):
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
         assert transformed.parent_roles == ("left", "right")
-        assert set(transformed.analytical_computations) == {
+        assert set(transformed.entry_computations) == {
             CharacteristicName.CF,
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
@@ -258,7 +258,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {CharacteristicName.MEAN}
+        assert set(transformed.entry_computations) == {CharacteristicName.MEAN}
         assert transformed.query_method(CharacteristicName.MEAN)() == pytest.approx(1.25)
 
     def test_linear_var_requires_only_mean_and_variance(self) -> None:
@@ -267,7 +267,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {
+        assert set(transformed.entry_computations) == {
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
         }
@@ -279,7 +279,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {CharacteristicName.VAR}
+        assert set(transformed.entry_computations) == {CharacteristicName.VAR}
         assert transformed.query_method(CharacteristicName.VAR)() == pytest.approx(1.25)
 
     def test_linear_skew_can_be_built_without_parent_means(self) -> None:
@@ -288,7 +288,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {
+        assert set(transformed.entry_computations) == {
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
         }
@@ -300,7 +300,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {
+        assert set(transformed.entry_computations) == {
             CharacteristicName.VAR,
             CharacteristicName.KURT,
         }
@@ -316,7 +316,7 @@ class TestBinaryDistribution(DistributionTestBase):
                 CharacteristicName.PMF,
                 CharacteristicName.CDF,
                 CharacteristicName.PPF,
-            }.issubset(set(transformed.analytical_computations))
+            }.issubset(set(transformed.entry_computations))
 
             pmf = transformed.query_method(CharacteristicName.PMF)
             cdf = transformed.query_method(CharacteristicName.CDF)
@@ -338,14 +338,14 @@ class TestBinaryDistribution(DistributionTestBase):
 
         left = ApproximatedDistribution(
             distribution_type=left_base.distribution_type,
-            analytical_computations=left_base.analytical_computations,
+            entry_computations=left_base.entry_computations,
             support=left_base.support,
         )
         transformed = binary(left, right, operation=BinaryOperationName.ADD)
 
         assert not transformed.loop_is_analytical(
             CharacteristicName.MEAN,
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+            DEFAULT_ENTRY_COMPUTATION_LABEL,
         )
 
     @pytest.mark.parametrize(
@@ -424,7 +424,7 @@ class TestBinaryDistribution(DistributionTestBase):
 
         methods: TransformationMethodSpecsMap = {
             CharacteristicName.CDF: {
-                DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+                DEFAULT_ENTRY_COMPUTATION_LABEL: (
                     {"left": (CharacteristicName.CDF,)},
                     _custom_cdf,
                 )
@@ -433,5 +433,5 @@ class TestBinaryDistribution(DistributionTestBase):
         transformed = binary(left, right, operation=BinaryOperationName.ADD, methods=methods)
 
         assert isinstance(transformed, LinearBinaryDistribution)
-        assert set(transformed.analytical_computations) == {CharacteristicName.CDF}
+        assert set(transformed.entry_computations) == {CharacteristicName.CDF}
         assert transformed.query_method(CharacteristicName.CDF)(0.5) == pytest.approx(0.5)

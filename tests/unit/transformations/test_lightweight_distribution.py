@@ -13,7 +13,7 @@ from pysatl_core.distributions.distribution import Distribution
 from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.transformations.lightweight_distribution import LightweightDistribution
 from pysatl_core.transformations.operations.distributions.affine import affine
-from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, CharacteristicName
+from pysatl_core.types import DEFAULT_ENTRY_COMPUTATION_LABEL, CharacteristicName
 from tests.unit.distributions.test_basic import DistributionTestBase
 
 _BASE_ROLE = "base"
@@ -65,7 +65,7 @@ class TestLightweightBaseStorage(DistributionTestBase):
 
         view = characteristic_registry().view(second)
         cdf_loop = view.variants(CharacteristicName.CDF, CharacteristicName.CDF)[
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL
+            DEFAULT_ENTRY_COMPUTATION_LABEL
         ]
 
         assert cdf_loop.edge_kind() == "transformation_loop"

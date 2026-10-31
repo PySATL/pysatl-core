@@ -14,7 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -27,7 +27,7 @@ from pysatl_core.distributions.support import (
 )
 from pysatl_core.sampling.unuran.core.unuran_sampler import DefaultUnuranSampler
 from pysatl_core.sampling.unuran.method_config import UnuranMethod, UnuranMethodConfig
-from pysatl_core.types import CharacteristicName, Kind, NumericArray
+from pysatl_core.types import CharacteristicName, ComputationFunc, Kind, NumericArray
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
@@ -47,7 +47,7 @@ def _continuous_distr(
     ]
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.CONTINUOUS,
-        analytical_computations=acs,
+        entry_computations=acs,
         support=support or ContinuousSupport(0.0, 1.0),
     )
 
@@ -76,7 +76,7 @@ def _discrete_distr(
             )
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.DISCRETE,
-        analytical_computations=acs,
+        entry_computations=acs,
         support=ExplicitTableDiscreteSupport([0, 1]),
     )
 
@@ -206,8 +206,8 @@ class TestSelectBestMethod:
 class TestResolveAvailableChars:
     """Tests for DefaultUnuranSampler._resolve_available_chars static method."""
 
-    def test_returns_chars_present_in_analytical_computations(self) -> None:
-        """Without registry, only characteristics in analytical_computations are returned."""
+    def test_returns_chars_present_in_entry_computations(self) -> None:
+        """Without registry, only characteristics in entry_computations are returned."""
         distr = _continuous_distr(chars=[CharacteristicName.PDF, CharacteristicName.CDF])
 
         result = DefaultUnuranSampler._resolve_available_chars(
@@ -217,10 +217,17 @@ class TestResolveAvailableChars:
         assert CharacteristicName.PDF in result
         assert CharacteristicName.CDF in result
 
-    def test_returns_empty_set_when_no_analytical_computations(self) -> None:
-        """A distribution with no analytical computations returns an empty set."""
+    def test_returns_empty_set_when_no_unuran_entry_computations(self) -> None:
+        """An unrelated entry characteristic is not a UNU.RAN input."""
         distr = StandaloneEuclideanUnivariateDistribution(
-            kind=Kind.CONTINUOUS, analytical_computations=[], support=None
+            kind=Kind.CONTINUOUS,
+            entry_computations={
+                "custom": AnalyticalComputation(
+                    target="custom",
+                    func=cast(ComputationFunc[Any, Any], lambda x, **_options: x),
+                )
+            },
+            support=None,
         )
 
         result = DefaultUnuranSampler._resolve_available_chars(
@@ -232,7 +239,7 @@ class TestResolveAvailableChars:
     def test_uses_query_method_when_registry_chars_enabled(self) -> None:
         """With use_registry_characteristics=True, query_method is used for probing."""
         mock_distr = MagicMock()
-        mock_distr.analytical_computations = {}
+        mock_distr.entry_computations = {}
 
         def query_method(char):
             if char == CharacteristicName.PDF:
@@ -251,7 +258,7 @@ class TestResolveAvailableChars:
     def test_runtime_error_from_query_method_is_silently_skipped(self) -> None:
         """Characteristics that raise RuntimeError from query_method are excluded."""
         mock_distr = MagicMock()
-        mock_distr.analytical_computations = {}
+        mock_distr.entry_computations = {}
         mock_distr.query_method.side_effect = RuntimeError("not available")
 
         result = DefaultUnuranSampler._resolve_available_chars(

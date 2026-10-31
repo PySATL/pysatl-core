@@ -18,7 +18,7 @@ from pysatl_core.transformations.operations.distributions.mixture import (
     finite_mixture,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComplexArray,
     ComputationFunc,
@@ -78,7 +78,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PDF: AnalyticalComputation[NumericArray, NumericArray](
                     target=CharacteristicName.PDF,
                     func=cast(ComputationFunc[NumericArray, NumericArray], _pdf),
@@ -131,7 +131,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PMF: AnalyticalComputation[NumericArray, NumericArray](
                     target=CharacteristicName.PMF,
                     func=cast(ComputationFunc[NumericArray, NumericArray], _pmf),
@@ -148,7 +148,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         skewness: float | None = None,
         kurtosis: float | None = None,
     ) -> StandaloneEuclideanUnivariateDistribution:
-        analytical_computations: dict[str, AnalyticalComputation[Any, Any]] = {
+        entry_computations: dict[str, AnalyticalComputation[Any, Any]] = {
             CharacteristicName.PPF: AnalyticalComputation[float, float](
                 target=CharacteristicName.PPF,
                 func=cast(ComputationFunc[float, float], lambda data, **_options: float(data)),
@@ -156,22 +156,22 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         }
 
         if mean is not None:
-            analytical_computations[CharacteristicName.MEAN] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.MEAN] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.MEAN,
                 func=cast(ComputationFunc[Any, float], lambda **_options: mean),
             )
         if variance is not None:
-            analytical_computations[CharacteristicName.VAR] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.VAR] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.VAR,
                 func=cast(ComputationFunc[Any, float], lambda **_options: variance),
             )
         if skewness is not None:
-            analytical_computations[CharacteristicName.SKEW] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.SKEW] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.SKEW,
                 func=cast(ComputationFunc[Any, float], lambda **_options: skewness),
             )
         if kurtosis is not None:
-            analytical_computations[CharacteristicName.KURT] = AnalyticalComputation[Any, float](
+            entry_computations[CharacteristicName.KURT] = AnalyticalComputation[Any, float](
                 target=CharacteristicName.KURT,
                 func=cast(
                     ComputationFunc[Any, float],
@@ -181,7 +181,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
         )
 
     def test_discrete_mixture_with_arbitrary_number_of_components(self) -> None:
@@ -193,7 +193,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
             [(0.2, first), (0.5, second), (0.3, third)],
         )
         assert isinstance(mixture, FiniteMixtureDistribution)
-        assert set(mixture.analytical_computations) == {
+        assert set(mixture.entry_computations) == {
             CharacteristicName.PMF,
             CharacteristicName.CDF,
             CharacteristicName.PPF,
@@ -232,20 +232,20 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         assert float(pdf(1.5)) == pytest.approx(0.75)
         assert float(cdf(0.5)) == pytest.approx(0.125)
         assert float(cdf(1.5)) == pytest.approx(0.625)
-        assert CharacteristicName.PPF not in mixture.analytical_computations
+        assert CharacteristicName.PPF not in mixture.entry_computations
 
     def test_mixture_mean_requires_only_component_means(self) -> None:
         first = self._make_statistics_distribution(mean=-1.0)
         second = self._make_statistics_distribution(mean=3.0)
         mixture = finite_mixture([(0.25, first), (0.75, second)])
-        assert set(mixture.analytical_computations) == {CharacteristicName.MEAN}
+        assert set(mixture.entry_computations) == {CharacteristicName.MEAN}
         assert mixture.query_method(CharacteristicName.MEAN)() == pytest.approx(2.0)
 
     def test_mixture_var_requires_only_mean_and_variance(self) -> None:
         first = self._make_statistics_distribution(mean=0.0, variance=1.0)
         second = self._make_statistics_distribution(mean=2.0, variance=2.0)
         mixture = finite_mixture([(0.4, first), (0.6, second)])
-        assert set(mixture.analytical_computations) == {
+        assert set(mixture.entry_computations) == {
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
         }
@@ -255,7 +255,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         first = self._make_statistics_distribution(mean=0.0, variance=1.0, skewness=0.5)
         second = self._make_statistics_distribution(mean=1.0, variance=0.5, skewness=-0.2)
         mixture = finite_mixture([(0.5, first), (0.5, second)])
-        assert set(mixture.analytical_computations) == {
+        assert set(mixture.entry_computations) == {
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -276,7 +276,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
             kurtosis=2.8,
         )
         mixture = finite_mixture([(0.5, first), (0.5, second)])
-        assert set(mixture.analytical_computations) == {
+        assert set(mixture.entry_computations) == {
             CharacteristicName.MEAN,
             CharacteristicName.VAR,
             CharacteristicName.SKEW,
@@ -290,14 +290,14 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         right = self._make_uniform_full_distribution(1.0, 2.0)
         left = ApproximatedDistribution(
             distribution_type=left_base.distribution_type,
-            analytical_computations=left_base.analytical_computations,
+            entry_computations=left_base.entry_computations,
             support=left_base.support,
         )
 
         mixture = finite_mixture([(0.5, left), (0.5, right)])
         assert not mixture.loop_is_analytical(
             CharacteristicName.MEAN,
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+            DEFAULT_ENTRY_COMPUTATION_LABEL,
         )
 
     def test_component_and_weight_accessors_are_safe(self) -> None:
@@ -316,7 +316,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         assert components[0] is not components[1]
         assert components[0].distribution_type == first.distribution_type
         assert components[1].distribution_type == second.distribution_type
-        assert components[1].analytical_computations == second.analytical_computations
+        assert components[1].entry_computations == second.entry_computations
 
     def test_manual_methods_replace_builtin_mixture_set(self) -> None:
         first = self._make_uniform_full_distribution(0.0, 1.0)
@@ -337,7 +337,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
 
         methods: TransformationMethodSpecsMap = {
             CharacteristicName.CDF: {
-                DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+                DEFAULT_ENTRY_COMPUTATION_LABEL: (
                     {
                         "component_0": (CharacteristicName.CDF,),
                         "component_1": (CharacteristicName.CDF,),
@@ -348,7 +348,7 @@ class TestFiniteMixtureDistribution(DistributionTestBase):
         }
         mixture = finite_mixture([(0.25, first), (0.75, second)], methods=methods)
 
-        assert set(mixture.analytical_computations) == {CharacteristicName.CDF}
+        assert set(mixture.entry_computations) == {CharacteristicName.CDF}
         np.testing.assert_allclose(
             np.asarray(mixture.query_method(CharacteristicName.CDF)(np.asarray([0.5]))),
             np.asarray([0.5]),

@@ -31,7 +31,7 @@ class TestInterpolationApproximator(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PDF: AnalyticalComputation[np.ndarray, np.ndarray](
                     target=CharacteristicName.PDF,
                     func=cast(ComputationFunc[np.ndarray, np.ndarray], _pdf),
@@ -49,7 +49,7 @@ class TestInterpolationApproximator(DistributionTestBase):
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.CDF: AnalyticalComputation[np.ndarray, np.ndarray](
                     target=CharacteristicName.CDF,
                     func=cast(ComputationFunc[np.ndarray, np.ndarray], _cdf),
@@ -145,7 +145,7 @@ class TestInterpolationApproximator(DistributionTestBase):
             },
         )
 
-        assert set(approximated.analytical_computations) == {CharacteristicName.CDF}
+        assert set(approximated.entry_computations) == {CharacteristicName.CDF}
 
     def test_raises_when_distribution_cannot_provide_requested_characteristic(self) -> None:
         def _mean(**_kwargs: object) -> float:
@@ -153,7 +153,7 @@ class TestInterpolationApproximator(DistributionTestBase):
 
         source = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.MEAN: AnalyticalComputation[object, float](
                     target=CharacteristicName.MEAN,
                     func=_mean,
@@ -169,7 +169,7 @@ class TestInterpolationApproximator(DistributionTestBase):
         )
         transformed = affine(source, scale=1.0)
 
-        with pytest.raises(ValueError, match="requires an analytical method"):
+        with pytest.raises(ValueError, match="requires an entry method"):
             transformed.approximate(
                 methods={
                     CharacteristicName.PDF: PDFLinearInterpolationApproximation(),

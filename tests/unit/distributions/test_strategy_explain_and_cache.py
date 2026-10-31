@@ -33,6 +33,7 @@ from pysatl_core.distributions.strategies import (
     _freeze_options,
 )
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.transformations.lightweight_distribution import LightweightDistribution
 from pysatl_core.types import EvaluatorFunc, Kind
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
@@ -105,7 +106,7 @@ def _make_pdf_distribution() -> StandaloneEuclideanUnivariateDistribution:
     pdf_func = cast(Callable[[float, KwArg(Any)], float], lambda _x, **_o: 1.0)
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.CONTINUOUS,
-        analytical_computations={
+        entry_computations={
             "pdf": {"default": AnalyticalComputation[float, float](target="pdf", func=pdf_func)}
         },
         support=ContinuousSupport(),
@@ -594,6 +595,27 @@ class TestMultiEdgePaths:
 
 
 class TestNonRegistryAndErrors:
+    def test_non_registry_entry_plan_preserves_non_analytical_status(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        reg = CharacteristicRegistry()
+        reg.add_characteristic("pdf", is_definitive=True)
+        monkeypatch.setattr(strategies_module, "characteristic_registry", lambda: reg)
+
+        method = AnalyticalComputation[Any, Any](
+            target="custom_metric", func=lambda **_options: 42.0
+        )
+        distr = LightweightDistribution(
+            distribution_type=_make_pdf_distribution().distribution_type,
+            entry_computations={"custom_metric": {"approximate": method}},
+            loop_analytical_flags={"custom_metric": {"approximate": False}},
+        )
+
+        plan = distr.explain_computation_path("custom_metric")
+        assert len(plan.steps) == 1
+        assert plan.steps[0].edge_kind == "transformation_loop"
+        assert distr.query_method("custom_metric") is method
+
     def test_explain_for_non_registry_analytical_characteristic(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -608,7 +630,7 @@ class TestNonRegistryAndErrors:
         pdf_func = cast(Callable[[float, KwArg(Any)], float], lambda _x, **_o: 1.0)
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 "pdf": {
                     "default": AnalyticalComputation[float, float](target="pdf", func=pdf_func)
                 },
@@ -690,7 +712,7 @@ class TestNonRegistryAndErrors:
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 "unrelated": {
                     "default": AnalyticalComputation[Any, Any](target="unrelated", func=custom_func)
                 },
@@ -769,7 +791,7 @@ class TestHyperedgePlan:
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 "A": {"default": AnalyticalComputation[Any, Any](target="A", func=a_func)},
                 "B": {"default": AnalyticalComputation[Any, Any](target="B", func=b_func)},
             },

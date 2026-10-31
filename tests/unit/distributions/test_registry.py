@@ -77,7 +77,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.CDF: {
                     "primary": AnalyticalComputation[np.ndarray, np.ndarray](
                         target=CharacteristicName.CDF,
@@ -108,7 +108,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.CDF: {
                     "first": AnalyticalComputation[np.ndarray, np.ndarray](
                         target=CharacteristicName.CDF,
@@ -331,7 +331,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 "A": {"default": AnalyticalComputation[Any, Any](target="A", func=a_func)},
                 "B": {"default": AnalyticalComputation[Any, Any](target="B", func=b_func)},
             },
@@ -471,7 +471,7 @@ class TestCharacteristicRegistry(DistributionTestBase):
         pdf_func = cast(Callable[[float, KwArg(Any)], float], lambda _x, **_opts: 1.0)
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 "pdf": {"default": AnalyticalComputation[Any, Any](target="pdf", func=pdf_func)}
             },
             support=ContinuousSupport(),

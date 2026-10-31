@@ -12,7 +12,7 @@ from pysatl_core.distributions.computations.computation import AnalyticalComputa
 from pysatl_core.distributions.registry import characteristic_registry
 from pysatl_core.transformations.distribution import ApproximatedDistribution, DerivedDistribution
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComputationFunc,
     Kind,
@@ -30,7 +30,7 @@ class TestDerivedDistribution(DistributionTestBase):
             _ = derived_distribution_cls(
                 distribution_type=base.distribution_type,
                 bases={},
-                analytical_computations=base.analytical_computations,
+                entry_computations=base.entry_computations,
                 transformation_name=TransformationName.AFFINE,
             )
 
@@ -43,11 +43,14 @@ class TestApproximatedDistribution(DistributionTestBase):
         source = self.make_logistic_cdf_distribution()
         approx = ApproximatedDistribution(
             distribution_type=source.distribution_type,
-            analytical_computations={
-                CharacteristicName.CDF: AnalyticalComputation[float, float](
-                    target=CharacteristicName.CDF,
-                    func=cast(ComputationFunc[float, float], _cdf),
-                )
+            entry_computations={
+                CharacteristicName.CDF: {
+                    label: AnalyticalComputation[float, float](
+                        target=CharacteristicName.CDF,
+                        func=cast(ComputationFunc[float, float], _cdf),
+                    )
+                    for label in (DEFAULT_ENTRY_COMPUTATION_LABEL, "alternate")
+                }
             },
             support=source.support,
         )
@@ -55,12 +58,11 @@ class TestApproximatedDistribution(DistributionTestBase):
         assert getattr(approx.distribution_type, "kind", None) == Kind.CONTINUOUS
         assert approx.parent_roles == ()
         assert not approx.loop_is_analytical(
-            CharacteristicName.CDF, DEFAULT_ANALYTICAL_COMPUTATION_LABEL
+            CharacteristicName.CDF, DEFAULT_ENTRY_COMPUTATION_LABEL
         )
+        assert not approx.loop_is_analytical(CharacteristicName.CDF, "alternate")
 
         view = characteristic_registry().view(approx)
-        cdf_loop = view.variants(CharacteristicName.CDF, CharacteristicName.CDF)[
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL
-        ]
-        assert cdf_loop.edge_kind() == "transformation_loop"
-        assert not cdf_loop.is_analytical
+        for cdf_loop in view.variants(CharacteristicName.CDF, CharacteristicName.CDF).values():
+            assert cdf_loop.edge_kind() == "transformation_loop"
+            assert not cdf_loop.is_analytical

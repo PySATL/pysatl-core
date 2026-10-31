@@ -24,7 +24,7 @@ from pysatl_core.distributions.support import (
 )
 from pysatl_core.sampling.unuran.core._unuran_sampler.dgt import DGTSetup
 from pysatl_core.sampling.unuran.core._unuran_sampler.domain import UnuranDomain
-from pysatl_core.types import CharacteristicName, Kind
+from pysatl_core.types import CharacteristicName, ComputationFunc, Kind
 from tests.utils.mocks import StandaloneEuclideanUnivariateDistribution
 
 
@@ -48,7 +48,7 @@ class DGTTestBase:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations=[
+            entry_computations=[
                 AnalyticalComputation[float, float](target=CharacteristicName.PMF, func=pmf_func)
             ],
             support=support,
@@ -191,7 +191,12 @@ class TestCalculatePmfSum(DGTTestBase):
         """_calculate_pmf_sum raises RuntimeError when PMF is not registered."""
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations=[],  # No PMF
+            entry_computations=[
+                AnalyticalComputation[float, float](
+                    target=CharacteristicName.CDF,
+                    func=cast(ComputationFunc[float, float], lambda x, **_options: x),
+                )
+            ],  # No PMF
             support=None,
         )
         setup, _, _ = self._make_dgt_setup(distr)

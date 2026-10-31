@@ -9,10 +9,17 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+from pysatl_core.distributions.computations.computation import AnalyticalComputation
+from pysatl_core.distributions.registry import characteristic_registry
+from pysatl_core.distributions.registry.graph import RegistryView
+from pysatl_core.distributions.registry.graph_primitives import EdgeMeta
+from pysatl_core.distributions.strategies import DefaultComputationStrategy
+from pysatl_core.transformations.lightweight_distribution import LightweightDistribution
 from pysatl_core.transformations.transformation_method import TransformationMethod
 from pysatl_core.types import (
     CharacteristicName,
     ComputationFunc,
+    GenericCharacteristicName,
     Method,
     NumericArray,
     ResolvedSourceMethods,
@@ -23,7 +30,105 @@ from tests.unit.distributions.test_basic import DistributionTestBase
 _BASE_ROLE = "base"
 
 
+class LastLoopStrategy(DefaultComputationStrategy):
+    @staticmethod
+    def _pick_loop_edge(state: GenericCharacteristicName, view: RegistryView) -> EdgeMeta | None:
+        loops = tuple(view.variants(state, state).values())
+        return loops[-1] if loops else None
+
+
 class TestTransformationMethod(DistributionTestBase):
+    @pytest.mark.parametrize(
+        ("strategy", "expected_analytical", "expected_value"),
+        [
+            (DefaultComputationStrategy(), False, 1.0),
+            (LastLoopStrategy(), True, 2.0),
+        ],
+    )
+    def test_analytical_status_follows_selected_parent_label(
+        self,
+        strategy: DefaultComputationStrategy,
+        expected_analytical: bool,
+        expected_value: float,
+    ) -> None:
+        source = self.make_logistic_cdf_distribution()
+        base = LightweightDistribution(
+            distribution_type=source.distribution_type,
+            entry_computations={
+                CharacteristicName.CDF: {
+                    "approximate": AnalyticalComputation(
+                        target=CharacteristicName.CDF,
+                        func=cast(ComputationFunc[float, float], lambda _x, **_options: 1.0),
+                    ),
+                    "exact": AnalyticalComputation(
+                        target=CharacteristicName.CDF,
+                        func=cast(ComputationFunc[float, float], lambda _x, **_options: 2.0),
+                    ),
+                }
+            },
+            computation_strategy=strategy,
+            loop_analytical_flags={CharacteristicName.CDF: {"approximate": False, "exact": True}},
+        )
+        loops = (
+            characteristic_registry()
+            .view(base)
+            .variants(CharacteristicName.CDF, CharacteristicName.CDF)
+        )
+        assert not loops["approximate"].is_analytical
+        assert loops["exact"].is_analytical
+
+        def evaluator(
+            _owner: object, sources: ResolvedSourceMethods
+        ) -> ComputationFunc[float, float]:
+            return cast(ComputationFunc[float, float], sources[_BASE_ROLE][CharacteristicName.CDF])
+
+        method = TransformationMethod[float, float](
+            target=CharacteristicName.CDF,
+            transformation=TransformationName.AFFINE,
+            bases={_BASE_ROLE: base},
+            source_requirements={_BASE_ROLE: (CharacteristicName.CDF,)},
+            evaluator=evaluator,
+            owner=object(),
+        )
+
+        assert method.is_analytical is expected_analytical
+        assert method(0.0) == pytest.approx(expected_value)
+
+    def test_analytical_status_uses_selected_label_when_labels_share_a_method(self) -> None:
+        source = self.make_logistic_cdf_distribution()
+        shared_method = AnalyticalComputation[float, float](
+            target=CharacteristicName.CDF,
+            func=cast(ComputationFunc[float, float], lambda _x, **_options: 2.0),
+        )
+        base = LightweightDistribution(
+            distribution_type=source.distribution_type,
+            entry_computations={
+                CharacteristicName.CDF: {
+                    "approximate": shared_method,
+                    "exact": shared_method,
+                }
+            },
+            computation_strategy=LastLoopStrategy(),
+            loop_analytical_flags={CharacteristicName.CDF: {"approximate": False, "exact": True}},
+        )
+
+        def evaluator(
+            _owner: object, sources: ResolvedSourceMethods
+        ) -> ComputationFunc[float, float]:
+            return cast(ComputationFunc[float, float], sources[_BASE_ROLE][CharacteristicName.CDF])
+
+        method = TransformationMethod[float, float](
+            target=CharacteristicName.CDF,
+            transformation=TransformationName.AFFINE,
+            bases={_BASE_ROLE: base},
+            source_requirements={_BASE_ROLE: (CharacteristicName.CDF,)},
+            evaluator=evaluator,
+            owner=object(),
+        )
+
+        assert method.is_analytical
+        assert method(0.0) == pytest.approx(2.0)
+
     def test_constructor_marks_non_analytical_for_mixed_sources(self) -> None:
         base = self.make_logistic_cdf_distribution()
 

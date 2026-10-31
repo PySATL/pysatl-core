@@ -139,9 +139,9 @@ class TestUniformFamily(BaseDistributionTest):
             abs(base_params.parameters["upper_bound"] - expected_upper) < self.CALCULATION_PRECISION
         )
 
-    def test_analytical_computations_availability(self):
+    def test_entry_computations_availability(self):
         """Test that analytical computations are available for exponential distribution."""
-        comp = self.uniform_family(lower_bound=0.0, upper_bound=1.0).analytical_computations
+        comp = self.uniform_family(lower_bound=0.0, upper_bound=1.0).entry_computations
 
         expected_chars = {
             CharacteristicName.PDF,
