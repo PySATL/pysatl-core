@@ -24,12 +24,12 @@ The library is designed as a **foundational kernel** rather than a ready-to-use 
   (e.g. Normal: `meanStd`, `meanPrec`).
 - A global **family registry** for configuring, querying, and extending available distribution families.
 - **Characteristic computation graph** (`CharacteristicRegistry`) that allows computing
-  arbitrary characteristics by specifying only a minimal analytical subset.
+  reachable characteristics from distribution-provided entry computations.
 - **Transformations module** for derived distributions:
   affine transformations (`aX + b`), binary operations (`X ± Y`, `X * Y`, `X / Y`),
   finite weighted mixtures, and characteristic-level approximations.
 - Distribution objects exposing common probabilistic operations
-  (sampling, analytical and fitted computations).
+  (sampling, entry methods, and fitted computations).
 - Clear separation between *distribution definitions*, *parametrizations*,
   *computation strategies*, and *characteristics*.
 - Modern Python with strict static typing (PEP 695).
@@ -124,6 +124,11 @@ PySATL Core also supports defining custom families, parametrizations,
 and characteristic graphs.
 
 For transformation workflows, see `examples/transformations_overview.ipynb`.
+
+When updating code written for the previous API, replace the
+`analytical_computations` constructor argument and property with
+`entry_computations`. The old mapping name is no longer accepted; the
+`AnalyticalComputation` class and the old default-label constant remain available.
 
 ---
 
