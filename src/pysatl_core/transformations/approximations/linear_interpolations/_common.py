@@ -12,56 +12,47 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from pysatl_core.distributions.computations.computation import AnalyticalComputation
-from pysatl_core.types import Kind, NumericArray
+from pysatl_core.types import Kind, Method, NumericArray
 
 if TYPE_CHECKING:
     from pysatl_core.transformations.distribution import DerivedDistribution
     from pysatl_core.types import GenericCharacteristicName
 
 
-def get_analytical_method(
+def get_entry_method(
     distribution: DerivedDistribution,
     characteristic_name: GenericCharacteristicName,
-) -> AnalyticalComputation[Any, Any]:
+) -> Method[Any, Any]:
     """
-    Get the first analytical method for a characteristic.
+    Get the strategy-selected method for an entry characteristic.
 
     Parameters
     ----------
     distribution : DerivedDistribution
-        Distribution containing analytical methods.
+        Distribution containing entry methods.
     characteristic_name : GenericCharacteristicName
         Characteristic name to fetch.
 
     Returns
     -------
-    AnalyticalComputation[Any, Any]
-        First available analytical method for the requested
-        characteristic.
+    Method[Any, Any]
+        Method selected by the distribution's computation strategy.
 
     Raises
     ------
     ValueError
-        If characteristic is not available analytically.
+        If the characteristic has no entry computation.
     """
-    methods = distribution.analytical_computations.get(characteristic_name)
+    methods = distribution.entry_computations.get(characteristic_name)
     if methods is None:
         raise ValueError(
-            "Approximation requires an analytical method for "
-            f"characteristic '{characteristic_name}'."
+            f"Approximation requires an entry method for characteristic '{characteristic_name}'."
         )
-
-    try:
-        return next(iter(methods.values()))
-    except StopIteration as exc:
-        raise ValueError(
-            f"Characteristic '{characteristic_name}' provides no analytical methods."
-        ) from exc
+    return distribution.query_method(characteristic_name)
 
 
 def evaluate_on_grid(
-    computation: AnalyticalComputation[Any, Any],
+    computation: Method[Any, Any],
     grid: NumericArray,
     *,
     characteristic_name: GenericCharacteristicName,
@@ -72,8 +63,8 @@ def evaluate_on_grid(
 
     Parameters
     ----------
-    computation : AnalyticalComputation[Any, Any]
-        Source analytical computation.
+    computation : Method[Any, Any]
+        Source method selected by the strategy.
     grid : NumericArray
         One-dimensional interpolation grid.
     characteristic_name : GenericCharacteristicName

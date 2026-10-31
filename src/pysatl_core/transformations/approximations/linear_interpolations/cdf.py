@@ -17,10 +17,10 @@ from pysatl_core.distributions.computations.computation import AnalyticalComputa
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.transformations.approximations.linear_interpolations._common import (
     evaluate_on_grid,
-    get_analytical_method,
+    get_entry_method,
     validate_univariate_continuous,
 )
-from pysatl_core.types import CharacteristicName, ComputationFunc, NumericArray
+from pysatl_core.types import CharacteristicName, ComputationFunc, Method, NumericArray
 
 if TYPE_CHECKING:
     from pysatl_core.transformations.distribution import DerivedDistribution
@@ -76,7 +76,7 @@ class CDFMonotoneSplineApproximation:
         Approximate CDF for a distribution.
         """
         validate_univariate_continuous(distribution)
-        source_method = get_analytical_method(distribution, CharacteristicName.CDF)
+        source_method = get_entry_method(distribution, CharacteristicName.CDF)
         lower_limit, upper_limit = self._resolve_limits(distribution, source_method, **options)
 
         grid = np.linspace(lower_limit, upper_limit, self._n_grid, dtype=float)
@@ -110,7 +110,7 @@ class CDFMonotoneSplineApproximation:
     def _resolve_limits(
         self,
         distribution: DerivedDistribution,
-        cdf_method: AnalyticalComputation[Any, Any],
+        cdf_method: Method[Any, Any],
         **options: Any,
     ) -> tuple[float, float]:
         """
@@ -134,9 +134,7 @@ class CDFMonotoneSplineApproximation:
 
         return left, right
 
-    def _search_lower_limit(
-        self, cdf_method: AnalyticalComputation[Any, Any], **options: Any
-    ) -> float:
+    def _search_lower_limit(self, cdf_method: Method[Any, Any], **options: Any) -> float:
         """
         Find finite lower bound satisfying tail-probability constraint.
         """
@@ -155,9 +153,7 @@ class CDFMonotoneSplineApproximation:
             )
         return float(candidates[int(np.argmax(mask))])
 
-    def _search_upper_limit(
-        self, cdf_method: AnalyticalComputation[Any, Any], **options: Any
-    ) -> float:
+    def _search_upper_limit(self, cdf_method: Method[Any, Any], **options: Any) -> float:
         """
         Find finite upper bound satisfying tail-probability constraint.
         """

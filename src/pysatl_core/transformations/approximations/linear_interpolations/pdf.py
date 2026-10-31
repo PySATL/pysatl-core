@@ -16,7 +16,7 @@ from pysatl_core.distributions.computations.computation import AnalyticalComputa
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.transformations.approximations.linear_interpolations._common import (
     evaluate_on_grid,
-    get_analytical_method,
+    get_entry_method,
     validate_univariate_continuous,
 )
 from pysatl_core.types import CharacteristicName, ComputationFunc, NumericArray
@@ -69,7 +69,7 @@ class PDFLinearInterpolationApproximation:
 
         lower_limit, upper_limit = self._resolve_limits(distribution)
         grid = np.linspace(lower_limit, upper_limit, self._n_grid, dtype=float)
-        source_method = get_analytical_method(distribution, CharacteristicName.PDF)
+        source_method = get_entry_method(distribution, CharacteristicName.PDF)
         values = evaluate_on_grid(
             source_method,
             grid,

@@ -87,7 +87,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
         self._transformation_methods = methods
         transformed_support = self._transform_support(left_snapshot.support, right_snapshot.support)
         self._precomputed_support = transformed_support
-        analytical_computations, loop_analytical_flags = self._build_analytical_computations(
+        entry_computations, loop_analytical_flags = self._build_entry_computations(
             distribution_type=distribution_type,
             bases=bases,
             methods=self._transformation_methods,
@@ -96,7 +96,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
         super().__init__(
             distribution_type=distribution_type,
             bases=bases,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             transformation_name=TransformationName.BINARY,
             support=transformed_support,
             sampling_strategy=sampling_strategy,
@@ -156,7 +156,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
         """Apply binary operation to broadcast-compatible arrays."""
         return cast(NumericArray, np.asarray(self._operation_value(left, right), dtype=float))
 
-    def _build_analytical_computations(
+    def _build_entry_computations(
         self,
         *,
         distribution_type: DistributionType,
@@ -167,7 +167,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
         Mapping[GenericCharacteristicName, Mapping[LabelName, bool]],
     ]:
         """
-        Build analytical computations for the concrete binary transformation.
+        Build entry computations for the concrete binary transformation.
         """
         kind = cast(Kind | None, getattr(distribution_type, "kind", None))
         if kind not in {Kind.CONTINUOUS, Kind.DISCRETE}:
@@ -178,9 +178,9 @@ class BinaryDistribution(DerivedDistribution, ABC):
         def _source_validator(role: ParentRole, characteristic: GenericCharacteristicName) -> bool:
             if characteristic in declared_registry_characteristics:
                 return True
-            return characteristic in bases[role].analytical_computations
+            return characteristic in bases[role].entry_computations
 
-        computations, loop_analytical_flags = self._build_transformation_analytical_computations(
+        computations, loop_analytical_flags = self._build_transformation_entry_computations(
             transformation_name=TransformationName.BINARY,
             bases=bases,
             methods=methods,
@@ -191,7 +191,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
             return computations, loop_analytical_flags
 
         raise RuntimeError(
-            "Binary transformation produced no analytical computations. "
+            "Binary transformation produced no entry computations. "
             "At least one source characteristic must be present."
         )
 

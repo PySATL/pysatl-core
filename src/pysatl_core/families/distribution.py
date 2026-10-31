@@ -70,7 +70,7 @@ class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
         self,
         family_name: str,
         distribution_type: DistributionType,
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             Mapping[LabelName, AnalyticalComputation[Any, Any]],
         ],
@@ -81,7 +81,7 @@ class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
     ):
         super().__init__(
             distribution_type=distribution_type,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             support=support,
             sampling_strategy=sampling_strategy,
             computation_strategy=computation_strategy,
@@ -164,7 +164,7 @@ class ParametricFamilyDistribution(TransformationOperatorsMixin, Distribution):
         return ParametricFamilyDistribution(
             family_name=self._family_name,
             distribution_type=self.distribution_type,
-            analytical_computations=self.analytical_computations,
+            entry_computations=self.entry_computations,
             parametrization=self._parametrization,
             support=self.support,
             sampling_strategy=self._new_sampling_strategy(sampling_strategy=sampling_strategy),

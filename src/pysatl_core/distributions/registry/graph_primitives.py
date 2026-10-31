@@ -96,7 +96,7 @@ class TransformationLoopEdgeMeta(EdgeMeta):
     """
     Edge metadata for transformation-provided self-loops.
 
-    Such loops are attached from ``analytical_computations`` as regular
+    Such loops are attached from ``entry_computations`` as regular
     stopping points for the strategy, but they are not considered fully
     analytical by the graph semantics.
     """

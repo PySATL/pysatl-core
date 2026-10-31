@@ -199,7 +199,7 @@ class DefaultUnuranSampler:
         use_registry_characteristics : bool
             If ``True``, include characteristics derivable via the registry graph
             (delegates to ``query_method``). If ``False``, include only those
-            present in ``analytical_computations``.
+            present in ``entry_computations``.
 
         Returns
         -------
@@ -223,7 +223,7 @@ class DefaultUnuranSampler:
                     pass
         else:
             for char in _unuran_chars:
-                if char in distr.analytical_computations:
+                if char in distr.entry_computations:
                     chars.add(char)
         return chars
 

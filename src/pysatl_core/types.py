@@ -253,8 +253,10 @@ type GenericCharacteristicName = str
 type LabelName = str
 """Type alias for labels that distinguish computation variants."""
 
-DEFAULT_ANALYTICAL_COMPUTATION_LABEL: LabelName = "PySATL_default_analytical_computation"
-"""Default label for analytical methods when a label is not explicitly provided."""
+DEFAULT_ENTRY_COMPUTATION_LABEL: LabelName = "PySATL_default_analytical_computation"
+"""Default label for entry methods when a label is not explicitly provided."""
+DEFAULT_ANALYTICAL_COMPUTATION_LABEL: LabelName = DEFAULT_ENTRY_COMPUTATION_LABEL
+"""Compatibility alias retaining the original default label value."""
 
 type ParametrizationName = str
 """Type alias for parametrization names."""
@@ -450,6 +452,7 @@ __all__ = [
     "GenericCharacteristicName",
     "LabelName",
     "DEFAULT_ANALYTICAL_COMPUTATION_LABEL",
+    "DEFAULT_ENTRY_COMPUTATION_LABEL",
     "ParametrizationName",
     "ComputationFunc",
     "FitterFunc",

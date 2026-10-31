@@ -327,7 +327,7 @@ class CharacteristicRegistry:
         return distr.loop_is_analytical(characteristic_name, label_name)
 
     @staticmethod
-    def _attach_analytical_loops(
+    def _attach_entry_loops(
         adj: dict[
             GenericCharacteristicName,
             dict[GenericCharacteristicName, dict[LabelName, EdgeMeta]],
@@ -341,11 +341,11 @@ class CharacteristicRegistry:
         Notes
         -----
         Loops are only added for characteristics present in this view.
-        Each labeled computation in ``analytical_computations`` becomes one
+        Each labeled computation in ``entry_computations`` becomes one
         loop edge ``char -> char``. The loop class is selected via
         ``distr.loop_is_analytical(...)``.
         """
-        for characteristic_name, labeled_methods in distr.analytical_computations.items():
+        for characteristic_name, labeled_methods in distr.entry_computations.items():
             if characteristic_name not in present_nodes:
                 continue
 
@@ -381,7 +381,7 @@ class CharacteristicRegistry:
         -----
         1. Computes present nodes for the distribution
         2. Filters edges by node presence and edge constraints
-        3. Adds analytical self-loops from distribution analytical computations
+        3. Adds entry self-loops from distribution entry computations
         4. Computes definitive nodes from the remaining present nodes
         5. Validates graph invariants
         """
@@ -410,8 +410,8 @@ class CharacteristicRegistry:
                 if kept:
                     adj[src][dst] = kept
 
-        # 3) Attach analytical loops
-        self._attach_analytical_loops(adj, distr, present_nodes)
+        # 3) Attach entry loops
+        self._attach_entry_loops(adj, distr, present_nodes)
 
         # 4) Compute definitive nodes (must be present)
         definitive_nodes = self._compute_definitive_nodes(distr) & present_nodes

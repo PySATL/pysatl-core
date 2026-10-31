@@ -16,7 +16,7 @@ from scipy.interpolate import PchipInterpolator
 from pysatl_core.distributions.computations.computation import AnalyticalComputation
 from pysatl_core.transformations.approximations.linear_interpolations._common import (
     evaluate_on_grid,
-    get_analytical_method,
+    get_entry_method,
     validate_univariate_continuous,
 )
 from pysatl_core.types import CharacteristicName, ComputationFunc, NumericArray
@@ -64,7 +64,7 @@ class PPFMonotoneSplineApproximation:
         Approximate PPF for a distribution.
         """
         validate_univariate_continuous(distribution)
-        source_method = get_analytical_method(distribution, CharacteristicName.PPF)
+        source_method = get_entry_method(distribution, CharacteristicName.PPF)
 
         grid = np.linspace(self._lower_limit, self._upper_limit, self._n_grid, dtype=float)
         values = evaluate_on_grid(

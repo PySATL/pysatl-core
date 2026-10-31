@@ -18,7 +18,7 @@ from pysatl_core.transformations.operations.methods._utils import (
     _source_requirements_for_roles,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComplexArray,
     ComputationFunc,
@@ -213,31 +213,31 @@ def _make_kurt(
 
 DEFAULT_AFFINE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.CF),
             _make_cf,
         )
     },
     CharacteristicName.MEAN: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.MEAN),
             _make_mean,
         )
     },
     CharacteristicName.VAR: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.VAR),
             _make_var,
         )
     },
     CharacteristicName.SKEW: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.SKEW),
             _make_skew,
         )
     },
     CharacteristicName.KURT: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.KURT),
             _make_kurt,
         )
@@ -246,19 +246,19 @@ DEFAULT_AFFINE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
 
 DEFAULT_AFFINE_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.CDF),
             _make_continuous_cdf,
         )
     },
     CharacteristicName.PDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.PDF),
             _make_continuous_pdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.PPF),
             _make_continuous_ppf,
         )
@@ -267,13 +267,13 @@ DEFAULT_AFFINE_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSpecsMap =
 
 DEFAULT_AFFINE_DISCRETE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.PMF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.PMF),
             _make_discrete_pmf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.PPF),
             _make_discrete_ppf,
         )
@@ -282,7 +282,7 @@ DEFAULT_AFFINE_DISCRETE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
 
 DEFAULT_AFFINE_DISCRETE_POSITIVE_SCALE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.CDF),
             _make_discrete_cdf,
         )
@@ -291,7 +291,7 @@ DEFAULT_AFFINE_DISCRETE_POSITIVE_SCALE_TRANSFORMATION_METHODS: TransformationMet
 
 DEFAULT_AFFINE_DISCRETE_NEGATIVE_SCALE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _base_requirements(CharacteristicName.CDF, CharacteristicName.PMF),
             _make_discrete_cdf_negative_scale,
         )

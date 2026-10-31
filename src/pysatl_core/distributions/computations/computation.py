@@ -8,7 +8,7 @@ This module provides:
 - ``FittedComputationMethod``: fitted conversion method ready for use
 - ``FitterMethod``: cacheable computation that performs expensive precomputation
 - ``EvaluatorMethod``: lightweight direct computation called on every query
-- ``AnalyticalComputation``: analytical computation provided directly by a distribution
+- ``AnalyticalComputation``: callable adapter for a distribution entry method
 - ``Computation``: protocol for computations that evaluate a single characteristic
 """
 
@@ -234,14 +234,17 @@ class Computation[In, Out](Protocol):
 @dataclass(frozen=True, slots=True)
 class AnalyticalComputation[In, Out]:
     """
-    Analytical computation provided directly by a distribution.
+    Callable adapter used for distribution entry methods.
+
+    The historical class name does not certify an analytical derivation.
+    Graph loop metadata records that property for each labeled method.
 
     Parameters
     ----------
     target : str
         Characteristic name (e.g., "pdf", "cdf").
     func : ComputationFunc[In, Out]
-        Analytical function that computes the characteristic.
+        Callable that computes the characteristic.
     """
 
     target: GenericCharacteristicName
@@ -254,7 +257,7 @@ class AnalyticalComputation[In, Out]:
     def __call__(self, data: In, **options: Any) -> Out: ...
 
     def __call__(self, *args: Any, **options: Any) -> Out:
-        """Evaluate the analytical function."""
+        """Evaluate the wrapped function."""
         return self.func(*args, **options)
 
 

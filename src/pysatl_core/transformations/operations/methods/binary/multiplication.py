@@ -34,7 +34,7 @@ from pysatl_core.transformations.operations.methods.binary.base import (
     _requirements_both,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComplexArray,
     ComputationFunc,
@@ -269,19 +269,19 @@ def _make_continuous_ppf_for_multiplication(
 
 DEFAULT_BINARY_MULTIPLICATION_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.MEAN: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.MEAN),
             _make_mean,
         )
     },
     CharacteristicName.VAR: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.MEAN, CharacteristicName.VAR),
             _make_var,
         )
     },
     CharacteristicName.SKEW: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(
                 CharacteristicName.MEAN,
                 CharacteristicName.VAR,
@@ -291,7 +291,7 @@ DEFAULT_BINARY_MULTIPLICATION_COMMON_TRANSFORMATION_METHODS: TransformationMetho
         )
     },
     CharacteristicName.KURT: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(
                 CharacteristicName.MEAN,
                 CharacteristicName.VAR,
@@ -305,7 +305,7 @@ DEFAULT_BINARY_MULTIPLICATION_COMMON_TRANSFORMATION_METHODS: TransformationMetho
 
 DEFAULT_BINARY_MULTIPLICATION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -314,7 +314,7 @@ DEFAULT_BINARY_MULTIPLICATION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationM
         )
     },
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CDF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -323,13 +323,13 @@ DEFAULT_BINARY_MULTIPLICATION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationM
         )
     },
     CharacteristicName.PDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PDF),
             _make_continuous_pdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CDF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -341,7 +341,7 @@ DEFAULT_BINARY_MULTIPLICATION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationM
 
 DEFAULT_BINARY_MULTIPLICATION_DISCRETE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CF,),
                 _RIGHT_ROLE: (CharacteristicName.PMF,),
@@ -350,19 +350,19 @@ DEFAULT_BINARY_MULTIPLICATION_DISCRETE_TRANSFORMATION_METHODS: TransformationMet
         )
     },
     CharacteristicName.PMF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_pmf,
         )
     },
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_cdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_ppf,
         )
