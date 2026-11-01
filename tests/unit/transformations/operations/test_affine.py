@@ -14,7 +14,7 @@ from pysatl_core.distributions.strategies import DefaultComputationStrategy
 from pysatl_core.distributions.support import ContinuousSupport
 from pysatl_core.transformations.operations.distributions.affine import affine
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComputationFunc,
     Kind,
@@ -39,10 +39,10 @@ class TestAffineDistribution(DistributionTestBase):
 
         view = characteristic_registry().view(transformed)
         cdf_loop = view.variants(CharacteristicName.CDF, CharacteristicName.CDF)[
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL
+            DEFAULT_ENTRY_COMPUTATION_LABEL
         ]
         pmf_loop = view.variants(CharacteristicName.PMF, CharacteristicName.PMF)[
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL
+            DEFAULT_ENTRY_COMPUTATION_LABEL
         ]
 
         assert cdf_loop.edge_kind() == "transformation_loop"
@@ -59,10 +59,10 @@ class TestAffineDistribution(DistributionTestBase):
         base = self.make_logistic_cdf_distribution()
         transformed = affine(base, scale=2.0, shift=1.0)
 
-        assert set(transformed.analytical_computations) == {CharacteristicName.CDF}
+        assert set(transformed.entry_computations) == {CharacteristicName.CDF}
         view = characteristic_registry().view(transformed)
         cdf_loop = view.variants(CharacteristicName.CDF, CharacteristicName.CDF)[
-            DEFAULT_ANALYTICAL_COMPUTATION_LABEL
+            DEFAULT_ENTRY_COMPUTATION_LABEL
         ]
         assert cdf_loop.is_analytical
 
@@ -120,7 +120,7 @@ class TestAffineDistribution(DistributionTestBase):
 
         base = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.CDF: AnalyticalComputation[float, float](
                     target=CharacteristicName.CDF,
                     func=cast(ComputationFunc[float, float], _cdf),
@@ -150,7 +150,7 @@ class TestAffineDistribution(DistributionTestBase):
 
         methods: TransformationMethodSpecsMap = {
             CharacteristicName.CDF: {
-                DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+                DEFAULT_ENTRY_COMPUTATION_LABEL: (
                     {"base": (CharacteristicName.CDF,)},
                     _custom_cdf,
                 )
@@ -159,5 +159,5 @@ class TestAffineDistribution(DistributionTestBase):
 
         transformed = affine(base, scale=2.0, shift=0.5, methods=methods)
 
-        assert set(transformed.analytical_computations) == {CharacteristicName.CDF}
+        assert set(transformed.entry_computations) == {CharacteristicName.CDF}
         assert transformed.query_method(CharacteristicName.CDF)(0.5) == pytest.approx(0.0)

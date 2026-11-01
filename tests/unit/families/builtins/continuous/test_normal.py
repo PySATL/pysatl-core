@@ -140,9 +140,9 @@ class TestNormalFamily(BaseDistributionTest):
         assert abs(base_params.parameters["mu"] - expected_mu) < self.CALCULATION_PRECISION
         assert abs(base_params.parameters["sigma"] - expected_sigma) < self.CALCULATION_PRECISION
 
-    def test_analytical_computations_availability(self):
+    def test_entry_computations_availability(self):
         """Test that analytical computations are available for exponential distribution."""
-        comp = self.normal_family(mu=0.0, sigma=1.0).analytical_computations
+        comp = self.normal_family(mu=0.0, sigma=1.0).entry_computations
 
         expected_chars = {
             CharacteristicName.PDF,

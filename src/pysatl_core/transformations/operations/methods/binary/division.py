@@ -34,7 +34,7 @@ from pysatl_core.transformations.operations.methods.binary.base import (
     _requirements_both,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComplexArray,
     ComputationFunc,
@@ -320,7 +320,7 @@ def _make_continuous_ppf_for_division(
 
 DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -329,7 +329,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: Transformation
         )
     },
     CharacteristicName.MEAN: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.MEAN,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -338,7 +338,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: Transformation
         )
     },
     CharacteristicName.VAR: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.MEAN, CharacteristicName.VAR),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -347,7 +347,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: Transformation
         )
     },
     CharacteristicName.SKEW: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (
                     CharacteristicName.MEAN,
@@ -360,7 +360,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: Transformation
         )
     },
     CharacteristicName.KURT: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (
                     CharacteristicName.MEAN,
@@ -377,7 +377,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_COMMON_TRANSFORMATION_METHODS: Transformation
 
 DEFAULT_BINARY_DIVISION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CDF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -386,13 +386,13 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodS
         )
     },
     CharacteristicName.PDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PDF),
             _make_continuous_pdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CDF,),
                 _RIGHT_ROLE: (CharacteristicName.PDF,),
@@ -404,7 +404,7 @@ DEFAULT_BINARY_DIVISION_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodS
 
 DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.CF,),
                 _RIGHT_ROLE: (CharacteristicName.PMF,),
@@ -413,7 +413,7 @@ DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMe
         )
     },
     CharacteristicName.MEAN: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.MEAN,),
                 _RIGHT_ROLE: (CharacteristicName.PMF,),
@@ -422,7 +422,7 @@ DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMe
         )
     },
     CharacteristicName.VAR: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (CharacteristicName.MEAN, CharacteristicName.VAR),
                 _RIGHT_ROLE: (CharacteristicName.PMF,),
@@ -431,7 +431,7 @@ DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMe
         )
     },
     CharacteristicName.SKEW: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (
                     CharacteristicName.MEAN,
@@ -444,7 +444,7 @@ DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMe
         )
     },
     CharacteristicName.KURT: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             {
                 _LEFT_ROLE: (
                     CharacteristicName.MEAN,
@@ -461,19 +461,19 @@ DEFAULT_BINARY_DIVISION_DISCRETE_COMMON_TRANSFORMATION_METHODS: TransformationMe
 
 DEFAULT_BINARY_DIVISION_DISCRETE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.PMF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_pmf,
         )
     },
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_cdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_both(CharacteristicName.PMF),
             _make_discrete_ppf,
         )

@@ -83,7 +83,7 @@ def _make_continuous_distr(
 
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.CONTINUOUS,
-        analytical_computations=acs,
+        entry_computations=acs,
         support=support or ContinuousSupport(0.0, 1.0),
     )
 
@@ -164,7 +164,7 @@ class TestRequiresFiniteSupport:
         pmf_func = cast(Callable[[float, KwArg(Any)], float], lambda x, **_: 0.33)
         discrete_distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations=[
+            entry_computations=[
                 AnalyticalComputation[float, float](target=CharacteristicName.PMF, func=pmf_func)
             ],
             support=support,
@@ -190,7 +190,7 @@ class TestApplyContinuousDomainConstraints:
         pmf_func = cast(Callable[[float, KwArg(Any)], float], lambda x, **_: 0.5)
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations=[
+            entry_computations=[
                 AnalyticalComputation[float, float](target=CharacteristicName.PMF, func=pmf_func)
             ],
             support=support,

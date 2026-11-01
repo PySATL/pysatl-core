@@ -115,9 +115,9 @@ class TestGammaFamily(BaseDistributionTest):
         assert abs(base_params.parameters["k"] - expected_k) < self.CALCULATION_PRECISION
         assert abs(base_params.parameters["theta"] - expected_theta) < self.CALCULATION_PRECISION
 
-    def test_analytical_computations_availability(self):
+    def test_entry_computations_availability(self):
         """Test that analytical computations are available for gamma distribution."""
-        comp = self.gamma_family(k=1.0, theta=1.0).analytical_computations
+        comp = self.gamma_family(k=1.0, theta=1.0).entry_computations
 
         expected_chars = {
             CharacteristicName.PDF,

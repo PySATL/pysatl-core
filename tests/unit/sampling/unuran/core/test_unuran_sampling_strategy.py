@@ -39,7 +39,7 @@ def _make_continuous_distr() -> StandaloneEuclideanUnivariateDistribution:
     pdf_func = cast(Callable[[float, KwArg(Any)], float], lambda x, **_: 1.0)
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.CONTINUOUS,
-        analytical_computations=[
+        entry_computations=[
             AnalyticalComputation[float, float](target=CharacteristicName.PDF, func=pdf_func)
         ],
         support=ContinuousSupport(0.0, 1.0),
@@ -194,7 +194,7 @@ class TestSampleMethod:
         ppf_func = cast(Callable[[float, KwArg(Any)], float], lambda q, **_: q)
         distr_with_ppf = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations=[
+            entry_computations=[
                 AnalyticalComputation[float, float](target=CharacteristicName.PPF, func=ppf_func)
             ],
             support=ContinuousSupport(0.0, 1.0),

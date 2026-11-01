@@ -42,7 +42,7 @@ class TestFamilyRegistrationAndSampling(TestBaseFamily):
 
         assert ((flat >= 0.0) & (flat <= 1.0)).all()
 
-        computations = distr.analytical_computations
+        computations = distr.entry_computations
         assert set(computations) == {
             CharacteristicName.PDF,
             CharacteristicName.CDF,

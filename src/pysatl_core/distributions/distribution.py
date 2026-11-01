@@ -14,6 +14,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Self, cast
 
 from pysatl_core.distributions.strategies import (
@@ -21,7 +22,7 @@ from pysatl_core.distributions.strategies import (
     ComputationStrategy,
     SamplingStrategy,
 )
-from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
+from pysatl_core.types import DEFAULT_ENTRY_COMPUTATION_LABEL, NumericArray
 
 _KEEP: object = object()
 
@@ -53,11 +54,10 @@ class Distribution(ABC):
     ----------
     distribution_type : DistributionType
         Type information about the distribution (kind, dimension, etc.).
-    analytical_computations : Mapping
-        Distribution-provided characteristic methods.
-        For non-transformed distributions every method in this mapping is
-        fully analytical, so this mapping matches the set of loops with
-        ``is_analytical=True`` in the graph view.
+    entry_computations : Mapping
+        Read-only view of distribution-provided starting methods, keyed by
+        characteristic and label. Presence does not imply an analytical
+        derivation chain.
     sampling_strategy : SamplingStrategy
         Strategy for generating random samples.
     computation_strategy : ComputationStrategy
@@ -83,7 +83,7 @@ class Distribution(ABC):
     def __init__(
         self,
         distribution_type: DistributionType,
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
         ],
@@ -98,7 +98,7 @@ class Distribution(ABC):
         ----------
         distribution_type : DistributionType
             Type information about the distribution (kind, dimension, etc.).
-        analytical_computations : Mapping
+        entry_computations : Mapping
             Distribution-provided characteristic methods.
             For non-transformed distributions these methods are fully
             analytical.
@@ -119,28 +119,31 @@ class Distribution(ABC):
         from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 
         self._distribution_type = distribution_type
-        normalized_analytical: dict[
+        normalized_entries: dict[
             GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
         ] = {}
-        for characteristic_name, methods in analytical_computations.items():
+        for characteristic_name, methods in entry_computations.items():
             if isinstance(methods, Mapping):
-                normalized_analytical[characteristic_name] = dict(methods)
+                normalized_entries[characteristic_name] = dict(methods)
             else:
-                normalized_analytical[characteristic_name] = {
-                    DEFAULT_ANALYTICAL_COMPUTATION_LABEL: methods
-                }
+                normalized_entries[characteristic_name] = {DEFAULT_ENTRY_COMPUTATION_LABEL: methods}
 
-        if not normalized_analytical:
-            raise ValueError("Distribution requires at least one analytical computation.")
+        if not normalized_entries:
+            raise ValueError("Distribution requires at least one entry computation.")
 
-        for characteristic_name, labeled_methods in normalized_analytical.items():
+        for characteristic_name, labeled_methods in normalized_entries.items():
             if not labeled_methods:
                 raise ValueError(
                     f"Characteristic '{characteristic_name}' must provide at least one "
-                    "analytical computation."
+                    "entry computation."
                 )
 
-        self._analytical_computations = normalized_analytical
+        self._entry_computations = MappingProxyType(
+            {
+                characteristic_name: MappingProxyType(labeled_methods)
+                for characteristic_name, labeled_methods in normalized_entries.items()
+            }
+        )
         self._support = support
         self._sampling_strategy = sampling_strategy or DefaultSamplingUnivariateStrategy()
         self._computation_strategy = computation_strategy or DefaultComputationStrategy()
@@ -151,16 +154,16 @@ class Distribution(ABC):
         return self._distribution_type
 
     @property
-    def analytical_computations(
+    def entry_computations(
         self,
     ) -> Mapping[GenericCharacteristicName, Mapping[LabelName, AnalyticalComputation[Any, Any]]]:
         """
-        Return distribution-provided characteristic methods.
+        Return the read-only mapping of distribution-provided entry methods.
 
-        For non-transformed distributions this mapping coincides with
-        graph loops marked as ``is_analytical=True``.
+        Both mapping levels are immutable views. The methods themselves are
+        created when the distribution is constructed.
         """
-        return self._analytical_computations
+        return self._entry_computations
 
     def loop_is_analytical(
         self,
@@ -175,7 +178,7 @@ class Distribution(ABC):
         characteristic_name : GenericCharacteristicName
             Characteristic name of the self-loop.
         label_name : LabelName
-            Label of the analytical computation variant.
+            Label of the entry computation variant.
 
         Returns
         -------
@@ -185,12 +188,11 @@ class Distribution(ABC):
 
         Notes
         -----
-        Presence in ``analytical_computations`` means that a characteristic
-        has at least one analytical ancestor in its derivation chain.
-        For non-transformed distributions these notions coincide, therefore
-        this method always returns ``True``.
+        Base distributions provide analytical entry methods, so every valid
+        label returns ``True``. Derived distributions override this method.
         """
-        _ = characteristic_name, label_name
+        if label_name not in self.entry_computations[characteristic_name]:
+            raise KeyError(label_name)
         return True
 
     @property

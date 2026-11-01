@@ -121,7 +121,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
                 kind=getattr(distribution_type, "kind", None)
             ),
         )
-        analytical_computations, loop_analytical_flags = self._build_analytical_computations(
+        entry_computations, loop_analytical_flags = self._build_entry_computations(
             distribution_type=distribution_type,
             bases=bases,
             methods=self._transformation_methods,
@@ -130,7 +130,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
         super().__init__(
             distribution_type=distribution_type,
             bases=bases,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             transformation_name=TransformationName.FINITE_MIXTURE,
             support=self._transform_support(distribution_type),
             sampling_strategy=sampling_strategy,
@@ -286,7 +286,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
 
         return None
 
-    def _build_analytical_computations(
+    def _build_entry_computations(
         self,
         *,
         distribution_type: DistributionType,
@@ -296,7 +296,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
         Mapping[GenericCharacteristicName, Mapping[LabelName, TransformationMethod[Any, Any]]],
         Mapping[GenericCharacteristicName, Mapping[LabelName, bool]],
     ]:
-        """Build analytical computations for finite mixture transformation."""
+        """Build entry computations for finite mixture transformation."""
         kind = getattr(distribution_type, "kind", None)
         if kind not in {Kind.CONTINUOUS, Kind.DISCRETE}:
             raise TypeError("Unsupported distribution kind for finite mixture.")
@@ -306,9 +306,9 @@ class FiniteMixtureDistribution(DerivedDistribution):
         def _source_validator(role: ParentRole, characteristic: GenericCharacteristicName) -> bool:
             if characteristic in declared_registry_characteristics:
                 return True
-            return characteristic in bases[role].analytical_computations
+            return characteristic in bases[role].entry_computations
 
-        computations, loop_analytical_flags = self._build_transformation_analytical_computations(
+        computations, loop_analytical_flags = self._build_transformation_entry_computations(
             transformation_name=TransformationName.FINITE_MIXTURE,
             bases=bases,
             methods=methods,
@@ -318,7 +318,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
             return computations, loop_analytical_flags
 
         raise RuntimeError(
-            "Finite mixture produced no analytical computations. "
+            "Finite mixture produced no entry computations. "
             "At least one source characteristic must be present."
         )
 

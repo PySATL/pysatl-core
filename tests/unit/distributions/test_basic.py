@@ -21,7 +21,7 @@ from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     Kind,
     NumericArray,
@@ -45,7 +45,7 @@ class DistributionTestBase:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PPF: {
                     DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                         target=CharacteristicName.PPF,
@@ -65,7 +65,7 @@ class DistributionTestBase:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.CDF: {
                     DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                         target=CharacteristicName.CDF,
@@ -85,7 +85,7 @@ class DistributionTestBase:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PDF: {
                     DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                         target=CharacteristicName.PDF,
@@ -112,7 +112,7 @@ class DistributionTestBase:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PMF: {
                     DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                         target=CharacteristicName.PMF,
@@ -137,7 +137,7 @@ class DistributionTestBase:
 
 
 class TestDistributionInitialization:
-    def test_distribution_accepts_unlabeled_analytical_mapping(self) -> None:
+    def test_distribution_accepts_unlabeled_entry_mapping(self) -> None:
         ppf_func = cast(Callable[[float, KwArg(Any)], float], lambda q, **_kwargs: q)
         ppf_method = AnalyticalComputation[float, float](
             target=CharacteristicName.PPF, func=ppf_func
@@ -145,20 +145,48 @@ class TestDistributionInitialization:
 
         distr = StandaloneEuclideanUnivariateDistribution(
             kind=Kind.CONTINUOUS,
-            analytical_computations={CharacteristicName.PPF: ppf_method},
+            entry_computations={CharacteristicName.PPF: ppf_method},
             support=ContinuousSupport(0, 1),
         )
 
-        methods = distr.analytical_computations[CharacteristicName.PPF]
-        assert set(methods.keys()) == {DEFAULT_ANALYTICAL_COMPUTATION_LABEL}
-        assert methods[DEFAULT_ANALYTICAL_COMPUTATION_LABEL](0.42) == pytest.approx(0.42)
+        methods = distr.entry_computations[CharacteristicName.PPF]
+        assert set(methods.keys()) == {DEFAULT_ENTRY_COMPUTATION_LABEL}
+        assert methods[DEFAULT_ENTRY_COMPUTATION_LABEL](0.42) == pytest.approx(0.42)
 
-    def test_distribution_rejects_empty_labeled_analytical_computations(self) -> None:
+    def test_distribution_rejects_empty_labeled_entry_computations(self) -> None:
         with pytest.raises(
             ValueError,
-            match="Characteristic 'cdf' must provide at least one analytical computation.",
+            match="Characteristic 'cdf' must provide at least one entry computation.",
         ):
             StandaloneEuclideanUnivariateDistribution(
                 kind=Kind.CONTINUOUS,
-                analytical_computations={CharacteristicName.CDF: {}},
+                entry_computations={CharacteristicName.CDF: {}},
             )
+
+    def test_distribution_rejects_empty_entry_computations(self) -> None:
+        with pytest.raises(
+            ValueError, match="Distribution requires at least one entry computation"
+        ):
+            StandaloneEuclideanUnivariateDistribution(
+                kind=Kind.CONTINUOUS,
+                entry_computations={},
+            )
+
+    def test_entry_computations_are_read_only_at_both_levels(self) -> None:
+        distr = DistributionTestBase().make_uniform_ppf_distribution()
+        entries = distr.entry_computations
+
+        with pytest.raises(TypeError):
+            entries[CharacteristicName.CDF] = entries[CharacteristicName.PPF]  # type: ignore[index]
+        with pytest.raises(TypeError):
+            entries[CharacteristicName.PPF]["other"] = entries[CharacteristicName.PPF][  # type: ignore[index]
+                DEFAULT_ANALYTICAL_LABEL
+            ]
+
+    def test_loop_status_rejects_unknown_characteristic_or_label(self) -> None:
+        distr = DistributionTestBase().make_uniform_ppf_distribution()
+
+        with pytest.raises(KeyError):
+            distr.loop_is_analytical(CharacteristicName.CDF, DEFAULT_ANALYTICAL_LABEL)
+        with pytest.raises(KeyError):
+            distr.loop_is_analytical(CharacteristicName.PPF, "unknown")

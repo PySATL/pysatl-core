@@ -40,7 +40,7 @@ class LightweightDistribution(Distribution):
     ----------
     distribution_type : DistributionType
         Type descriptor of the distribution.
-    analytical_computations : Mapping[
+    entry_computations : Mapping[
         GenericCharacteristicName,
         (
             AnalyticalComputation[Any, Any]
@@ -67,7 +67,7 @@ class LightweightDistribution(Distribution):
         self,
         *,
         distribution_type: DistributionType,
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
         ],
@@ -85,7 +85,7 @@ class LightweightDistribution(Distribution):
         }
         super().__init__(
             distribution_type=distribution_type,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             support=support,
             sampling_strategy=sampling_strategy,
             computation_strategy=computation_strategy,
@@ -133,7 +133,7 @@ class LightweightDistribution(Distribution):
 
         snapshot = cls(
             distribution_type=distribution.distribution_type,
-            analytical_computations=distribution.analytical_computations,
+            entry_computations=distribution.entry_computations,
             support=distribution.support,
             sampling_strategy=distribution.sampling_strategy,
             computation_strategy=distribution.computation_strategy,
@@ -154,7 +154,7 @@ class LightweightDistribution(Distribution):
                 label_name: distribution.loop_is_analytical(characteristic_name, label_name)
                 for label_name in labeled_methods
             }
-            for characteristic_name, labeled_methods in distribution.analytical_computations.items()
+            for characteristic_name, labeled_methods in distribution.entry_computations.items()
         }
 
     @classmethod
@@ -187,6 +187,8 @@ class LightweightDistribution(Distribution):
         label_name: LabelName,
     ) -> bool:
         """Return preserved loop analytical flag for the snapshot."""
+        if label_name not in self.entry_computations[characteristic_name]:
+            raise KeyError(label_name)
         return self._loop_analytical_flags.get(characteristic_name, {}).get(label_name, True)
 
     def _clone_with_strategies(
@@ -198,7 +200,7 @@ class LightweightDistribution(Distribution):
         """Return a copy of the snapshot with updated strategies."""
         return LightweightDistribution(
             distribution_type=self.distribution_type,
-            analytical_computations=self.analytical_computations,
+            entry_computations=self.entry_computations,
             support=self.support,
             sampling_strategy=self._new_sampling_strategy(sampling_strategy),
             computation_strategy=self._new_computation_strategy(computation_strategy),

@@ -20,26 +20,26 @@ class TestAnalyticalComputationCache(TestBaseFamily):
             CharacteristicName.CDF: {"base": {"default": lambda params, x: params.value}},
         }
 
-    def test_analytical_computations_are_built_at_distribution_creation(self) -> None:
+    def test_entry_computations_are_built_at_distribution_creation(self) -> None:
         family = self.make_default_family(distr_characteristics=self._fallback_characteristics())
         ParametricFamilyRegister.register(family)
 
         # alt(value=2.0) → Base(value=2.0) via transform_to_base_parametrization
         distribution = family.distribution("alt", value=2.0)
 
-        computations1 = distribution.analytical_computations
-        computations1_again = distribution.analytical_computations
+        computations1 = distribution.entry_computations
+        computations1_again = distribution.entry_computations
         assert computations1 is computations1_again
 
         # Replacing with a *new* object of the same parametrization does not
         # rebuild computations because they are now materialized at creation time.
         distribution._parametrization = family.parametrizations["alt"](value=5.0)  # type: ignore[call-arg]
-        computations2 = distribution.analytical_computations
+        computations2 = distribution.entry_computations
         assert computations2 is computations1
 
         # Switching to the base parametrization also does not rebuild computations.
         distribution._parametrization = family.parametrizations["base"](value=7.0)  # type: ignore[call-arg]
-        computations3 = distribution.analytical_computations
+        computations3 = distribution.entry_computations
         assert computations3 is computations2
 
         # Both mappings must contain PDF and CDF and be callable
@@ -60,7 +60,7 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         ParametricFamilyRegister.register(family)
 
         distribution = family.distribution("alt", value=2.0)
-        computations = distribution.analytical_computations
+        computations = distribution.entry_computations
 
         # Both characteristics are present via fallback
         assert CharacteristicName.PDF in computations and CharacteristicName.CDF in computations
@@ -69,12 +69,12 @@ class TestAnalyticalComputationCache(TestBaseFamily):
         assert computations[CharacteristicName.PDF]["default"](1.23) == pytest.approx(2.0)
         assert computations[CharacteristicName.CDF]["default"](0.5) == pytest.approx(2.0)
 
-    def test_distribution_creation_requires_analytical_computations(self) -> None:
+    def test_distribution_creation_requires_entry_computations(self) -> None:
         family = self.make_default_family(distr_characteristics={})
         ParametricFamilyRegister.register(family)
 
         with pytest.raises(
-            ValueError, match="Distribution requires at least one analytical computation."
+            ValueError, match="Distribution requires at least one entry computation."
         ):
             family.distribution("alt", value=2.0)
 

@@ -84,7 +84,7 @@ class ComputationPlan:
         Characteristic the plan resolves.
     source : GenericCharacteristicName
         Starting characteristic of the plan (a self-loop characteristic
-        in :attr:`Distribution.analytical_computations`).
+        in :attr:`Distribution.entry_computations`).
     steps : tuple[ComputationStep, ...]
         Ordered sequence of steps.  For a single-loop plan there is
         exactly one step ``source -> source``; for a conversion plan
@@ -382,9 +382,9 @@ class DefaultComputationStrategy:
     """
     Default strategy for resolving characteristic computation methods.
 
-    This strategy first checks for analytical implementations provided by
+    This strategy first checks for entry methods provided by
     the distribution. If none exists, it walks the characteristic graph
-    to find a conversion path from an analytical characteristic to the
+    to find a conversion path from an entry characteristic to the
     target characteristic.
 
     Parameters
@@ -474,7 +474,7 @@ class DefaultComputationStrategy:
         if state in seen:
             raise RuntimeError(
                 f"Cycle detected while resolving '{state}'. "
-                "Provide at least one analytical base characteristic in the distribution."
+                "Provide at least one entry characteristic in the distribution."
             )
         seen.add(state)
 
@@ -492,23 +492,23 @@ class DefaultComputationStrategy:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _pick_analytical_method(
+    def _pick_entry_method(
         state: GenericCharacteristicName,
         methods: Mapping[LabelName, AnalyticalComputation[Any, Any]],
-    ) -> AnalyticalComputation[Any, Any]:
+    ) -> tuple[LabelName, AnalyticalComputation[Any, Any]]:
         """
-        Pick the first available analytical method for a characteristic.
+        Pick the first available entry method for a characteristic.
 
         Raises
         ------
         RuntimeError
-            If no labeled analytical methods are available for the characteristic.
+            If no labeled entry methods are available for the characteristic.
         """
         try:
-            return next(iter(methods.values()))
+            return next(iter(methods.items()))
         except StopIteration as exc:
             raise RuntimeError(
-                f"Characteristic '{state}' provides no labeled analytical computations."
+                f"Characteristic '{state}' provides no labeled entry computations."
             ) from exc
 
     @staticmethod
@@ -568,21 +568,23 @@ class DefaultComputationStrategy:
         if cached is not None:
             return cached
 
-        if not distr.analytical_computations:
-            raise RuntimeError(
-                "Distribution provides no analytical computations to ground conversions."
-            )
+        if not distr.entry_computations:
+            raise RuntimeError("Distribution provides no entry computations to ground conversions.")
 
         registry = characteristic_registry()
 
-        # Non-registry characteristics: use the distribution-supplied analytical method.
+        # Non-registry characteristics: use the distribution-supplied entry method.
         if state not in registry.declared_characteristics:
-            if state in distr.analytical_computations:
-                method = self._pick_analytical_method(state, distr.analytical_computations[state])
+            if state in distr.entry_computations:
+                label, method = self._pick_entry_method(state, distr.entry_computations[state])
                 step = ComputationStep(
                     target=state,
                     sources=(state,),
-                    edge_kind="analytical_loop",
+                    edge_kind=(
+                        "analytical_loop"
+                        if distr.loop_is_analytical(state, label)
+                        else "transformation_loop"
+                    ),
                     method_name=getattr(method, "target", state),
                     options_descriptor=EdgeOptionsDescriptor(),
                 )
@@ -595,7 +597,7 @@ class DefaultComputationStrategy:
                 return plan
             raise RuntimeError(
                 f"Characteristic '{state}' is not declared in the registry and has no "
-                "analytical implementation in the distribution."
+                "entry method in the distribution."
             )
 
         view = registry.view(distr)
@@ -613,7 +615,7 @@ class DefaultComputationStrategy:
             return plan
 
         # Otherwise: try each loop characteristic as a source.
-        for src in distr.analytical_computations:
+        for src in distr.entry_computations:
             if not view.variants(src, src):
                 continue
 
@@ -631,7 +633,7 @@ class DefaultComputationStrategy:
             return plan
 
         raise RuntimeError(
-            f"No conversion path from any characteristic in analytical_computations to '{state}'."
+            f"No conversion path from any characteristic in entry_computations to '{state}'."
         )
 
     # ------------------------------------------------------------------ #
@@ -667,7 +669,7 @@ class DefaultComputationStrategy:
 
         Resolution order:
         1. Cached fitted method (if caching enabled)
-        2. Analytical implementation for non-registry characteristics
+        2. Entry method for non-registry characteristics
         3. First self-loop from the registry view
         4. Conversion path from loop characteristics via the graph
 
@@ -704,7 +706,7 @@ class DefaultComputationStrategy:
         Raises
         ------
         RuntimeError
-            If no analytical base exists, no conversion path is found,
+            If no entry computation exists, no conversion path is found,
             or a cycle is detected.
         """
         cached_plan = self._build_plan(distr, state)

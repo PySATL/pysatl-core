@@ -19,7 +19,6 @@ from pysatl_core.distributions import (
 from pysatl_core.distributions.distribution import _KEEP
 from pysatl_core.distributions.support import Support
 from pysatl_core.types import (
-    CharacteristicName,
     EuclideanDistributionType,
     GenericCharacteristicName,
     Kind,
@@ -27,7 +26,7 @@ from pysatl_core.types import (
     NumericArray,
 )
 
-type MockAnalyticalComputations = Mapping[
+type MockEntryComputations = Mapping[
     GenericCharacteristicName,
     AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]],
 ]
@@ -50,40 +49,24 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
     """
 
     _distribution_type: EuclideanDistributionType
-    _analytical_computations: dict[
-        GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
-    ]
     _support: Support | None
 
     def __init__(
         self,
         kind: Kind,
-        analytical_computations: MockAnalyticalComputations
-        | Sequence[AnalyticalComputation[Any, Any]],
+        entry_computations: MockEntryComputations | Sequence[AnalyticalComputation[Any, Any]],
         support: Support | None = None,
     ) -> None:
-        force_empty_analytical = False
-        if isinstance(analytical_computations, Mapping):
-            normalized_analytical: MockAnalyticalComputations = analytical_computations
+        if isinstance(entry_computations, Mapping):
+            normalized_entries: MockEntryComputations = entry_computations
         else:
-            normalized_analytical = {comp.target: comp for comp in analytical_computations}
-            if not normalized_analytical:
-                # Keep backward compatibility with legacy tests that passed an empty list.
-                normalized_analytical = {
-                    CharacteristicName.CDF: AnalyticalComputation[Any, float](
-                        target=CharacteristicName.CDF,
-                        func=lambda *_args, **_kwargs: 0.0,
-                    )
-                }
-                force_empty_analytical = True
+            normalized_entries = {comp.target: comp for comp in entry_computations}
 
         super(StandaloneEuclideanUnivariateDistribution, self).__init__(
             distribution_type=EuclideanDistributionType(kind, 1),
-            analytical_computations=normalized_analytical,
+            entry_computations=normalized_entries,
             support=support,
         )
-        if force_empty_analytical:
-            self._analytical_computations = {}
 
     def _clone_with_strategies(
         self,
@@ -94,5 +77,5 @@ class StandaloneEuclideanUnivariateDistribution(Distribution):
         # Actually a stub
         return StandaloneEuclideanUnivariateDistribution(
             Kind.CONTINUOUS,
-            analytical_computations=self.analytical_computations,
+            entry_computations=self.entry_computations,
         )

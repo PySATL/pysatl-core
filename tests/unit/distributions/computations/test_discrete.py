@@ -43,7 +43,7 @@ from pysatl_core.distributions.support import (
     IntegerLatticeDiscreteSupport,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL as DEFAULT_ANALYTICAL_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL as DEFAULT_ANALYTICAL_LABEL,
     CharacteristicName,
     Kind,
     NumericArray,
@@ -66,7 +66,7 @@ def _make_discrete_cdf_distribution() -> StandaloneEuclideanUnivariateDistributi
 
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.DISCRETE,
-        analytical_computations={
+        entry_computations={
             CharacteristicName.CDF: {
                 DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                     target=CharacteristicName.CDF,
@@ -240,7 +240,7 @@ def _make_right_unbounded_pmf_distribution() -> StandaloneEuclideanUnivariateDis
 
     return StandaloneEuclideanUnivariateDistribution(
         kind=Kind.DISCRETE,
-        analytical_computations={
+        entry_computations={
             CharacteristicName.PMF: {
                 DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                     target=CharacteristicName.PMF,
@@ -456,7 +456,7 @@ class TestPpfToCdfRightOpen:
 
         return StandaloneEuclideanUnivariateDistribution(
             kind=Kind.DISCRETE,
-            analytical_computations={
+            entry_computations={
                 CharacteristicName.PPF: {
                     DEFAULT_ANALYTICAL_LABEL: AnalyticalComputation[NumericArray, NumericArray](
                         target=CharacteristicName.PPF,

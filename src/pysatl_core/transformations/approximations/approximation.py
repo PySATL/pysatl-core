@@ -30,7 +30,7 @@ class CharacteristicApproximationMethod(Protocol):
         **options: Any,
     ) -> AnalyticalComputation[Any, Any]:
         """
-        Build an analytical computation for a target characteristic.
+        Build an approximate entry computation for a target characteristic.
 
         Parameters
         ----------
@@ -42,8 +42,7 @@ class CharacteristicApproximationMethod(Protocol):
         Returns
         -------
         AnalyticalComputation[Any, Any]
-            Approximate analytical computation for the target
-            characteristic.
+            Callable adapter for the approximated target characteristic.
         """
         ...
 

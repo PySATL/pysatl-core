@@ -55,7 +55,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         Parent distributions participating in the transformation.
         Internally, they are stored as lightweight snapshots to avoid
         retaining full parent distribution objects.
-    analytical_computations : Mapping[
+    entry_computations : Mapping[
         GenericCharacteristicName,
         (
             AnalyticalComputation[Any, Any]
@@ -63,8 +63,8 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         ),
     ]
         Derived characteristic methods exposed by the transformation.
-        Presence here means that at least one ancestor in the derivation
-        chain is analytical.
+        Presence means a transformation method can start computation for
+        this characteristic. The complete chain may be numerical.
     transformation_name : TransformationName
         Logical name of the transformation.
     support : Support | None, optional
@@ -87,7 +87,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         *,
         distribution_type: DistributionType,
         bases: Mapping[ParentRole, Distribution],
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
         ],
@@ -105,7 +105,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         }
         super().__init__(
             distribution_type=distribution_type,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             support=support,
             sampling_strategy=sampling_strategy,
             computation_strategy=computation_strategy,
@@ -138,10 +138,11 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         """
         Return transformation-aware analytical flag for a loop method.
 
-        The method returns ``True`` only when all required predecessors are
-        analytical. A method can still be present in
-        ``analytical_computations`` when this returns ``False``.
+        The method returns ``True`` only when the bound predecessors of this
+        labeled method are analytical. An entry may return ``False``.
         """
+        if label_name not in self.entry_computations[characteristic_name]:
+            raise KeyError(label_name)
         return self._loop_analytical_flags.get(characteristic_name, {}).get(label_name, True)
 
     @staticmethod
@@ -153,7 +154,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         """Resolve transformation methods from user input or defaults."""
         return default_methods if methods is None else methods
 
-    def _build_transformation_analytical_computations(
+    def _build_transformation_entry_computations(
         self,
         *,
         transformation_name: TransformationName,
@@ -165,7 +166,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         Mapping[GenericCharacteristicName, Mapping[LabelName, bool]],
     ]:
         """
-        Build analytical computations from transformation method specifications.
+        Build entry computations from transformation method specifications.
         """
         computations: dict[
             GenericCharacteristicName, dict[LabelName, TransformationMethod[Any, Any]]
@@ -228,9 +229,7 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
         if not methods:
             raise ValueError("At least one characteristic approximation method must be provided.")
 
-        analytical_computations: dict[
-            GenericCharacteristicName, AnalyticalComputation[Any, Any]
-        ] = {}
+        entry_computations: dict[GenericCharacteristicName, AnalyticalComputation[Any, Any]] = {}
         for characteristic_name, method in methods.items():
             computation = method.approximate(
                 self,
@@ -241,11 +240,11 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
                     "Approximation method returned computation for a mismatched "
                     f"target: expected '{characteristic_name}', got '{computation.target}'."
                 )
-            analytical_computations[characteristic_name] = computation
+            entry_computations[characteristic_name] = computation
 
         return ApproximatedDistribution(
             distribution_type=self.distribution_type,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             support=self.support,
             sampling_strategy=self.sampling_strategy,
             computation_strategy=self.computation_strategy,
@@ -270,14 +269,14 @@ class DerivedDistribution(TransformationOperatorsMixin, Distribution):
 
 class ApproximatedDistribution(DerivedDistribution):
     """
-    Derived distribution whose analytical computations were materialized by an
+    Derived distribution whose entry computations were materialized by an
     external approximator.
 
     Parameters
     ----------
     distribution_type : DistributionType
         Type descriptor of the approximated distribution.
-    analytical_computations : Mapping[
+    entry_computations : Mapping[
         GenericCharacteristicName,
         (
             AnalyticalComputation[Any, Any]
@@ -285,7 +284,7 @@ class ApproximatedDistribution(DerivedDistribution):
         ),
     ]
         Materialized methods produced by the approximator.
-        They are exposed in ``analytical_computations`` for strategy
+        They are exposed in ``entry_computations`` for strategy
         resolution, but are never treated as fully analytical.
     support : Support | None, optional
         Support of the approximated distribution.
@@ -299,7 +298,7 @@ class ApproximatedDistribution(DerivedDistribution):
         self,
         *,
         distribution_type: DistributionType,
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
         ],
@@ -310,20 +309,18 @@ class ApproximatedDistribution(DerivedDistribution):
         super().__init__(
             distribution_type=distribution_type,
             bases={},
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             transformation_name=TransformationName.APPROXIMATION,
             support=support,
             sampling_strategy=sampling_strategy,
             computation_strategy=computation_strategy,
             loop_analytical_flags={},
         )
-        self._loop_analytical_flags = self._build_non_analytical_loop_flags(
-            self.analytical_computations
-        )
+        self._loop_analytical_flags = self._build_non_analytical_loop_flags(self.entry_computations)
 
     @staticmethod
     def _build_non_analytical_loop_flags(
-        analytical_computations: Mapping[
+        entry_computations: Mapping[
             GenericCharacteristicName,
             Mapping[LabelName, AnalyticalComputation[Any, Any]],
         ],
@@ -331,7 +328,7 @@ class ApproximatedDistribution(DerivedDistribution):
         """Build loop flags where every approximation loop is non-analytical."""
         return {
             characteristic_name: dict.fromkeys(labeled_methods, False)
-            for characteristic_name, labeled_methods in analytical_computations.items()
+            for characteristic_name, labeled_methods in entry_computations.items()
         }
 
     @property
@@ -348,7 +345,7 @@ class ApproximatedDistribution(DerivedDistribution):
         """Return a copy of the approximated distribution with updated strategies."""
         return ApproximatedDistribution(
             distribution_type=self.distribution_type,
-            analytical_computations=self.analytical_computations,
+            entry_computations=self.entry_computations,
             support=self.support,
             sampling_strategy=self._new_sampling_strategy(sampling_strategy),
             computation_strategy=self._new_computation_strategy(computation_strategy),

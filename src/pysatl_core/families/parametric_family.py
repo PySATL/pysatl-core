@@ -24,7 +24,7 @@ from pysatl_core.distributions.computations.computation import AnalyticalComputa
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization, ParametrizationConstraint
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     ComputationFunc,
     DistributionType,
 )
@@ -91,7 +91,7 @@ class ParametricFamily:
 
         Providers are grouped by parametrization and may define multiple labeled methods.
         If a single callable is provided, it is treated as the base-parametrization method
-        under ``DEFAULT_ANALYTICAL_COMPUTATION_LABEL``.
+        under ``DEFAULT_ENTRY_COMPUTATION_LABEL``.
     support_by_parametrization : Callable or None, optional
         Function that returns support for given parameters.
     """
@@ -132,7 +132,7 @@ class ParametricFamily:
             normalized = (
                 dict(provider)
                 if isinstance(provider, Mapping)
-                else {DEFAULT_ANALYTICAL_COMPUTATION_LABEL: provider}
+                else {DEFAULT_ENTRY_COMPUTATION_LABEL: provider}
             )
             if not normalized:
                 raise ValueError(
@@ -291,8 +291,7 @@ class ParametricFamily:
         a dummy first argument (e.g. ``def skew_func()`` or ``def kurt_func(*, excess=False)``),
         while still supporting the usual ``def f(parameters, ...)`` style.
 
-        It means that we will always make any other analytical_computation params like
-        ``excess`` as keyword-only
+        Other characteristic options such as ``excess`` remain keyword-only.
         """
 
         sig = inspect.signature(func)
@@ -310,11 +309,11 @@ class ParametricFamily:
             else func,
         )
 
-    def _build_analytical_computations(
+    def _build_entry_computations(
         self, parameters: Parametrization
     ) -> dict[GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]]:
         """
-        Build analytical computations for given parameters.
+        Build entry computations for given parameters.
 
         Uses precomputed provider plan for efficient computation.
         """
@@ -386,11 +385,11 @@ class ParametricFamily:
         parameters.validate()
         base_parameters = self.to_base(parameters)
         distribution_type = self._distr_type(base_parameters)
-        analytical_computations = self._build_analytical_computations(parameters)
+        entry_computations = self._build_entry_computations(parameters)
         return ParametricFamilyDistribution(
             family_name=self.name,
             distribution_type=distribution_type,
-            analytical_computations=analytical_computations,
+            entry_computations=entry_computations,
             parametrization=parameters,
             support=self.support_resolver(parameters),
             sampling_strategy=sampling_strategy,

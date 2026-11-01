@@ -26,7 +26,7 @@ from pysatl_core.transformations.operations.methods._utils import (
     _source_requirements_for_distribution_roles,
 )
 from pysatl_core.types import (
-    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    DEFAULT_ENTRY_COMPUTATION_LABEL,
     CharacteristicName,
     ComplexArray,
     ComputationFunc,
@@ -234,19 +234,19 @@ def _make_continuous_cdf(
 
 DEFAULT_FINITE_MIXTURE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.CF),
             _make_cf,
         )
     },
     CharacteristicName.MEAN: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.MEAN),
             _make_mean,
         )
     },
     CharacteristicName.VAR: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(
                 CharacteristicName.MEAN,
                 CharacteristicName.VAR,
@@ -255,7 +255,7 @@ DEFAULT_FINITE_MIXTURE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsM
         )
     },
     CharacteristicName.SKEW: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(
                 CharacteristicName.MEAN,
                 CharacteristicName.VAR,
@@ -265,7 +265,7 @@ DEFAULT_FINITE_MIXTURE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsM
         )
     },
     CharacteristicName.KURT: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(
                 CharacteristicName.MEAN,
                 CharacteristicName.VAR,
@@ -279,13 +279,13 @@ DEFAULT_FINITE_MIXTURE_COMMON_TRANSFORMATION_METHODS: TransformationMethodSpecsM
 
 DEFAULT_FINITE_MIXTURE_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.CDF),
             _make_continuous_cdf,
         )
     },
     CharacteristicName.PDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.PDF),
             _make_continuous_pdf,
         )
@@ -294,19 +294,19 @@ DEFAULT_FINITE_MIXTURE_CONTINUOUS_TRANSFORMATION_METHODS: TransformationMethodSp
 
 DEFAULT_FINITE_MIXTURE_DISCRETE_TRANSFORMATION_METHODS: TransformationMethodSpecsMap = {
     CharacteristicName.PMF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.PMF),
             _make_discrete_pmf,
         )
     },
     CharacteristicName.CDF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.PMF),
             _make_discrete_cdf,
         )
     },
     CharacteristicName.PPF: {
-        DEFAULT_ANALYTICAL_COMPUTATION_LABEL: (
+        DEFAULT_ENTRY_COMPUTATION_LABEL: (
             _requirements_for_all(CharacteristicName.PMF),
             _make_discrete_ppf,
         )
