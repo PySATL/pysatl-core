@@ -1,0 +1,36 @@
+name: Task
+description: Track implementation, maintenance, documentation, or other work
+type: task
+
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What needs to be done, and why?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Describe the expected work or relevant components.
+    validations:
+      required: false
+
+  - type: textarea
+    id: completion
+    attributes:
+      label: Definition of Done
+      description: How will we know this task is complete?
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Context
+      description: References, dependencies, or implementation notes.
+    validations:
+      required: false

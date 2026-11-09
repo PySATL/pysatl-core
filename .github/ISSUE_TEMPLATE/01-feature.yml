@@ -1,0 +1,38 @@
+name: Feature
+description: Introduce a new capability or improve existing behavior
+type: feature
+
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem are we solving, and why does it matter?
+      placeholder: Describe the need or use case.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should become possible after this feature is implemented?
+      placeholder: Describe the desired API or behavior, if known.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What would make this feature complete?
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Context
+      description: Design ideas, references, constraints, or anything else worth mentioning.
+    validations:
+      required: false

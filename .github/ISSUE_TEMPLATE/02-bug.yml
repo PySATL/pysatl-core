@@ -1,0 +1,29 @@
+name: Bug
+description: Report incorrect or unexpected behavior
+type: bug
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: What happens, and what behavior did you expect instead?
+      placeholder: Describe the actual and expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to Reproduce
+      description: Provide steps, a minimal code example, or failing test, if possible.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Relevant errors, versions, mathematical examples, or related issues.
+    validations:
+      required: false
