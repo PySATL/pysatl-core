@@ -1,0 +1,45 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "schema_version": "1.0",
+  "comparison_group": "sweep-normal-cdf-npoints",
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "on-demand-scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "cdf",
+      "grid_hint": {
+        "n_points": 33
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [
+        -3.0,
+        3.0
+      ]
+    }
+  ],
+  "sweep_spec": {
+    "param": "queries.0.grid_hint.n_points",
+    "values": [
+      33,
+      65,
+      129
+    ]
+  }
+}

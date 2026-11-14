@@ -47,7 +47,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Mathematics",
   "Typing :: Typed",
 ]
-packages = [ { include = "pysatl_core", from = "src" } ]
+packages = [
+  { include = "pysatl_core", from = "src" },
+  { include = "pysatl_core_bench", from = "src" },
+]
 include = [
   { path = "src/pysatl_core/**/*.pyi", format = "wheel" },
   { path = "src/pysatl_core/**/*.pyi", format = "sdist" },
@@ -121,7 +124,7 @@ lint.fixable = [ "ALL" ]
 lint.unfixable = []
 lint.isort.combine-as-imports = true
 lint.isort.force-single-line = false
-lint.isort.known-first-party = [ "pysatl_core" ]
+lint.isort.known-first-party = [ "pysatl_core", "pysatl_core_bench" ]
 lint.isort.order-by-type = true
 
 [tool.codespell]
@@ -160,18 +163,19 @@ warn_return_any = false
 implicit_reexport = true
 
 [tool.pytest.ini_options]
+addopts = "-q --cov=pysatl_core --cov=pysatl_core_bench --cov-report=term-missing"
 testpaths = [ "tests" ]
-addopts = "-q --cov=pysatl_core --cov-report=term-missing"
-
-[tool.coverage.run]
-source = [ "pysatl_core" ]
-branch = true
-parallel = true
+pythonpath = [ "src" ]
 
 [tool.coverage.report]
-exclude_lines = [
-  "if __name__ == .__main__.:",
-  "pragma: no cover",
-]
-skip_covered = false
 show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
+
+[tool.coverage.run]
+source = [ "pysatl_core", "pysatl_core_bench" ]
+branch = true
+parallel = true

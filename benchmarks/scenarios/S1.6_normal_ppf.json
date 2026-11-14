@@ -1,0 +1,43 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "scenario_id": "S1.6-normal-ppf",
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "ppf",
+      "grid_hint": {
+        "n_points": 65
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "levels_bulk",
+      "interval": [
+        0.05,
+        0.95
+      ]
+    },
+    {
+      "name": "levels_edges",
+      "interval": [
+        0.001,
+        0.999
+      ]
+    }
+  ]
+}

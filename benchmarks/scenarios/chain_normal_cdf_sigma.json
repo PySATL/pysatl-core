@@ -1,0 +1,84 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 0.5
+    }
+  },
+  "schema_version": "1.0",
+  "comparison_group": "chain-normal-cdf-sigma",
+  "queries": [
+    {
+      "characteristic": "cdf",
+      "grid_hint": {
+        "n_points": 65
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [
+        -3.0,
+        3.0
+      ]
+    }
+  ],
+  "chain_spec": {
+    "stages": [
+      {
+        "id": "sigma-0.5",
+        "participant": {
+          "source_id": "pysatl-core"
+        },
+        "reference": {
+          "source_id": "on-demand-scipy-norm"
+        },
+        "distribution": {
+          "family": "Normal",
+          "parametrization": "meanStd",
+          "parameters": {
+            "mu": 0.0,
+            "sigma": 0.5
+          }
+        }
+      },
+      {
+        "id": "sigma-1.0",
+        "participant": {
+          "source_id": "pysatl-core"
+        },
+        "reference": {
+          "source_id": "on-demand-scipy-norm"
+        },
+        "distribution": {
+          "family": "Normal",
+          "parametrization": "meanStd",
+          "parameters": {
+            "mu": 0.0,
+            "sigma": 1.0
+          }
+        }
+      },
+      {
+        "id": "sigma-2.0",
+        "participant": {
+          "source_id": "pysatl-core"
+        },
+        "reference": {
+          "source_id": "on-demand-scipy-norm"
+        },
+        "distribution": {
+          "family": "Normal",
+          "parametrization": "meanStd",
+          "parameters": {
+            "mu": 0.0,
+            "sigma": 2.0
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "schema_version": "1.0",
+  "scenario_id": "S1.5-normal-cdf",
+  "comparison_group": "S1.5-normal-cdf-vs-mpmath-table",
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "mpmath-normal-cdf"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "cdf",
+      "grid_hint": {
+        "n_points": 257
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [
+        -3.0,
+        3.0
+      ]
+    },
+    {
+      "name": "tail_left",
+      "interval": [
+        null,
+        -3.0
+      ]
+    },
+    {
+      "name": "tail_right",
+      "interval": [
+        3.0,
+        null
+      ]
+    }
+  ]
+}

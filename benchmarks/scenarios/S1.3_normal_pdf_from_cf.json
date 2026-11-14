@@ -1,0 +1,58 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "schema_version": "1.0",
+  "scenario_id": "S1.3-normal-pdf-from-cf",
+  "comparison_group": "S1.3-normal-pdf-from-cf-vs-reference",
+  "subject": {
+    "source_id": "pysatl-core",
+    "strategy": {
+      "name": "ForcedGraphStrategy",
+      "params": {
+        "from": "cf"
+      }
+    }
+  },
+  "references": [
+    {
+      "source_id": "scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "pdf",
+      "grid_hint": {
+        "n_points": 257
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [
+        -3.0,
+        3.0
+      ]
+    },
+    {
+      "name": "tail_left",
+      "interval": [
+        null,
+        -3.0
+      ]
+    },
+    {
+      "name": "tail_right",
+      "interval": [
+        3.0,
+        null
+      ]
+    }
+  ]
+}
