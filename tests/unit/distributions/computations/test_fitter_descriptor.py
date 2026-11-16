@@ -140,6 +140,21 @@ class TestFitterDescriptor:
         with pytest.raises(AttributeError):
             desc.name = "other"  # type: ignore[misc]
 
+    def test_required_fields_do_not_shift_positional_fitter(self) -> None:
+        desc = FitterDescriptor(
+            "test_fitter",
+            CharacteristicName.CDF,
+            [CharacteristicName.PDF],
+            (),
+            (),
+            frozenset({"continuous"}),
+            "Test fitter.",
+            self._dummy_fitter,
+        )
+
+        assert desc.fitter is self._dummy_fitter
+        assert desc.required_operations == frozenset()
+
     def test_to_computation_method_returns_fitter_method(self) -> None:
         from pysatl_core.distributions.computations.computation import FitterMethod
 

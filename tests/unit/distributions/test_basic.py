@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from mypy_extensions import KwArg
 
+from pysatl_core.arrays import ForeignArrayError
 from pysatl_core.distributions.computations.computation import (
     AnalyticalComputation,
     FittedComputationMethod,
@@ -162,3 +163,19 @@ class TestDistributionInitialization:
                 kind=Kind.CONTINUOUS,
                 analytical_computations={CharacteristicName.CDF: {}},
             )
+
+
+class TestPublicArrayInput(DistributionTestBase):
+    def test_query_method_normalizes_list_input(self) -> None:
+        method = self.make_logistic_cdf_distribution().query_method(CharacteristicName.CDF)
+
+        result = method([0.0, 1.0])
+
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (2,)
+
+    def test_query_method_rejects_tuple_input(self) -> None:
+        method = self.make_logistic_cdf_distribution().query_method(CharacteristicName.CDF)
+
+        with pytest.raises(ForeignArrayError, match="Tuple inputs"):
+            method((0.0, 1.0))

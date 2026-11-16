@@ -14,6 +14,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from pysatl_core.arrays import ArrayValidator, resolve_array_context
 from pysatl_core.distributions.computations.options import (
     EdgeOptionsDescriptor,
     ResolvedEdgeOptions,
@@ -574,11 +575,20 @@ class DefaultComputationStrategy:
             )
 
         registry = characteristic_registry()
+        array_context = resolve_array_context()
+        operation_validator = ArrayValidator(array_context)
 
         # Non-registry characteristics: use the distribution-supplied analytical method.
         if state not in registry.declared_characteristics:
             if state in distr.analytical_computations:
                 method = self._pick_analytical_method(state, distr.analytical_computations[state])
+                missing = operation_validator.missing_operations(method.required_operations)
+                if missing:
+                    raise RuntimeError(
+                        f"Characteristic '{state}' requires missing array operations "
+                        f"{sorted(missing)}."
+                    )
+
                 step = ComputationStep(
                     target=state,
                     sources=(state,),
@@ -598,7 +608,7 @@ class DefaultComputationStrategy:
                 "analytical implementation in the distribution."
             )
 
-        view = registry.view(distr)
+        view = registry.view(distr, array_context)
 
         # Direct self-loop hit first.
         loop_edge = self._pick_loop_edge(state, view)

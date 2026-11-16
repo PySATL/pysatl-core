@@ -64,7 +64,7 @@ def resolve(
         If the characteristic function is scalar (does not accept or return
         NumPy arrays).
     """
-    fn = distribution.query_method(name)
+    fn = distribution._query_method(name)
 
     _probe = np.array([0.5])
     try:

@@ -17,6 +17,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 import numpy as np
 import pytest
 
+from pysatl_core.arrays.numpy import numpy_array_backend
 from pysatl_core.distributions.computations.continuous import (
     _build_cdf_to_pdf_1C,
     _build_cdf_to_ppf_1C,
@@ -142,6 +143,23 @@ class TestFitCdfToPdf1C(DistributionTestBase):
         assert desc.target == CharacteristicName.PDF
         assert desc.sources == [CharacteristicName.CDF]
         assert desc.option_names() == ("h",)
+        assert desc.to_computation_method().required_operations == frozenset(
+            {"add", "asarray", "atleast_1d", "clip", "divide", "multiply", "subtract"}
+        )
+
+    def test_uses_only_declared_array_operations(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        used: set[str] = set()
+        backend_call = numpy_array_backend.call
+
+        def recording_call(name: str, /, *args: object, **kwargs: object) -> object:
+            used.add(name)
+            return backend_call(name, *args, **kwargs)
+
+        monkeypatch.setattr(numpy_array_backend, "call", recording_call)
+        fitted = _fit_cdf_to_pdf_1C(self.make_logistic_cdf_distribution())
+        fitted.func(np.asarray([0.0]))  # type: ignore[call-arg]
+
+        assert used == _build_cdf_to_pdf_1C().required_operations
 
 
 class TestFitCdfToPpf1C(DistributionTestBase):

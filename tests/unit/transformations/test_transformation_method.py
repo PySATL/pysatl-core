@@ -9,6 +9,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+from pysatl_core.distributions import requires_array_operations
 from pysatl_core.transformations.transformation_method import TransformationMethod
 from pysatl_core.types import (
     CharacteristicName,
@@ -27,6 +28,7 @@ class TestTransformationMethod(DistributionTestBase):
     def test_constructor_marks_non_analytical_for_mixed_sources(self) -> None:
         base = self.make_logistic_cdf_distribution()
 
+        @requires_array_operations("asarray")
         def _evaluator(
             _owner: object,
             sources: ResolvedSourceMethods,
@@ -56,6 +58,7 @@ class TestTransformationMethod(DistributionTestBase):
         )
 
         assert not method.is_analytical
+        assert method.required_operations == frozenset({"asarray"})
         result = method(np.array([0.0]))
         assert float(np.asarray(result, dtype=float).flat[0]) == pytest.approx(0.5)
 
