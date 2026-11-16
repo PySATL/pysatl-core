@@ -18,6 +18,8 @@ from .computations.computation import (
     EvaluatorMethod,
     FittedComputationMethod,
     FitterMethod,
+    required_array_operations,
+    requires_array_operations,
 )
 from .distribution import Distribution
 from .registry import *
@@ -37,6 +39,8 @@ __all__ = [
     "FittedComputationMethod",
     "FitterMethod",
     "EvaluatorMethod",
+    "required_array_operations",
+    "requires_array_operations",
     # distribution
     "Distribution",
     # strategies

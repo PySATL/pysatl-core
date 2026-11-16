@@ -20,7 +20,10 @@ from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
 
 import numpy as np
 
-from pysatl_core.distributions.computations.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import (
+    AnalyticalComputation,
+    required_array_operations,
+)
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization, ParametrizationConstraint
 from pysatl_core.types import (
@@ -336,6 +339,7 @@ class ParametricFamily:
                 label_name: AnalyticalComputation(
                     target=characteristic,
                     func=self._bind_parametrization(func_factory, params_obj),
+                    required_operations=required_array_operations(func_factory),
                 )
                 for label_name, func_factory in labeled_providers.items()
             }

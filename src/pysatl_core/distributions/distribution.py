@@ -14,14 +14,20 @@ __license__ = "SPDX-License-Identifier: MIT"
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
+from pysatl_core.arrays import normalize_value
+from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.distributions.strategies import (
     ComputationPlan,
     ComputationStrategy,
     SamplingStrategy,
 )
-from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
+from pysatl_core.types import (
+    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    ComputationFunc,
+    NumericArray,
+)
 
 _KEEP: object = object()
 
@@ -281,6 +287,23 @@ class Distribution(ABC):
             ),
         )
 
+    def _query_method(
+        self,
+        characteristic_name: GenericCharacteristicName,
+        options: StepOptions | None = None,
+        *,
+        characteristic_options: Mapping[str, Any] | None = None,
+        computation_defaults: Mapping[str, Any] | None = None,
+    ) -> Method[Any, Any]:
+        """Resolve an unwrapped computation method for internal calls."""
+        return self.computation_strategy.query_method(
+            characteristic_name,
+            self,
+            options,
+            characteristic_options=characteristic_options,
+            computation_defaults=computation_defaults,
+        )
+
     def query_method(
         self,
         characteristic_name: GenericCharacteristicName,
@@ -315,12 +338,23 @@ class Distribution(ABC):
         Method
             Callable method that computes the characteristic.
         """
-        return self.computation_strategy.query_method(
+        method = self._query_method(
             characteristic_name,
-            self,
             options,
             characteristic_options=characteristic_options,
             computation_defaults=computation_defaults,
+        )
+
+        def validated(*args: Any, **kwargs: Any) -> Any:
+            if not args:
+                return method(**kwargs)
+            normalized = normalize_value(args[0])
+            return method(normalized, *args[1:], **kwargs)
+
+        return FittedComputationMethod[Any, Any](
+            target=method.target,
+            sources=(characteristic_name,),
+            func=cast(ComputationFunc[Any, Any], validated),
         )
 
     def explain_computation_path(
