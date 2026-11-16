@@ -4,20 +4,26 @@ __author__ = "Myznikov Fedor"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
 import pytest
 
+from pysatl_core.arrays import ForeignArrayError
 from pysatl_core.distributions.strategies import DefaultComputationStrategy
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.families.builtins.continuous.uniform import configure_uniform_family
 from pysatl_core.families.parametric_family import ParametricFamily, PartialParametricFamily
 from pysatl_core.families.parametrizations import Parametrization, constraint
+from pysatl_core.families.registry import ParametricFamilyRegister
 from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 from pysatl_core.types import (
     CharacteristicName,
     DistributionType,
+    FamilyName,
+    NumericArray,
     UnivariateContinuous,
     UnivariateDiscrete,
 )
@@ -62,6 +68,58 @@ TypeSwitchingParams.__param_name__ = "base"
 
 class TestPartialParametricFamily(TestBaseFamily):
     """Tests for PartialParametricFamily view with partially fixed parameters."""
+
+    def test_view_accepts_native_keyword_array_input(self) -> None:
+        configure_uniform_family()
+        family = ParametricFamilyRegister.get(FamilyName.CONTINUOUS_UNIFORM)
+        distribution = family.view(lower_bound=0.0).distribution(upper_bound=1.0)
+        pdf = distribution.query_method(CharacteristicName.PDF)
+
+        np.testing.assert_array_equal(pdf(x=np.array([0.25, 0.5])), [1.0, 1.0])
+
+    @pytest.mark.parametrize("parametrization", ["base", "alt"])
+    def test_view_normalizes_and_validates_keyword_input(self, parametrization: str) -> None:
+        def pdf(_parameters: object, q: Any) -> Any:
+            assert isinstance(q, np.ndarray)
+            return q
+
+        family = self.make_default_family(
+            distr_characteristics={CharacteristicName.PDF: {"base": {"default": pdf}}}
+        )
+        distribution = family.view(parametrization_name=parametrization).distribution(value=2.0)
+        method = distribution.query_method(CharacteristicName.PDF)
+        value = np.array([0.25, 0.5])
+
+        np.testing.assert_array_equal(method(q=[0.25, 0.5]), value)
+        assert method(q=value) is value
+        with pytest.raises(ForeignArrayError, match="Tuple inputs"):
+            method(q=(0.25, 0.5))
+
+    def test_view_provider_injects_fixed_parameters(self) -> None:
+        family = self._make_two_param_family()
+        view = family.view(a=2.0)
+        distribution = view.distribution(b=3.0)
+        provider = cast(
+            Callable[[Parametrization, NumericArray], float],
+            view.distr_characteristics[CharacteristicName.PDF]["base"]["default"],
+        )
+
+        assert provider(distribution.parametrization, np.array([0.0])) == 5.0
+        assert distribution.calculate_characteristic(CharacteristicName.PDF, 0.0) == 5.0
+
+    def test_family_and_view_bind_callable_providers(self) -> None:
+        class Provider:
+            def __call__(self, parameters: Any, data: Any) -> float:
+                return float(parameters.a + parameters.b)
+
+        family = self._make_two_param_family()
+        family.distr_characteristics[CharacteristicName.PDF]["base"]["default"] = Provider()
+
+        for distribution in (
+            family.distribution(a=2.0, b=3.0),
+            family.view(a=2.0).distribution(b=3.0),
+        ):
+            assert distribution.calculate_characteristic(CharacteristicName.PDF, 0.0) == 5.0
 
     def _make_two_param_family(self) -> ParametricFamily:
         fam = ParametricFamily(
@@ -322,7 +380,10 @@ class TestPartialParametricFamily(TestBaseFamily):
         cdf_val = dist.calculate_characteristic(CharacteristicName.CDF, 0.0)
         assert cdf_val == 2.0
 
-    def test_characteristic_with_nullary_provider_is_wrapped_correctly(self) -> None:
+    @pytest.mark.parametrize("parametrization", ["base", "alt"])
+    def test_characteristic_with_nullary_provider_is_wrapped_correctly(
+        self, parametrization: str
+    ) -> None:
         """A characteristic that does not accept a parametrization argument
         (e.g., skew) must work through the wrapper that uses _bind_parametrization."""
         fam = ParametricFamily(
@@ -340,8 +401,12 @@ class TestPartialParametricFamily(TestBaseFamily):
         fam.register_parametrization("base", TwoParam)
         fam.register_parametrization("alt", AltParam)
 
-        partial = fam.view(parametrization_name="alt", mean=2.0)
-        dist = partial.distribution(var=3.0)
+        if parametrization == "base":
+            partial = fam.view(a=2.0)
+            dist = partial.distribution(b=3.0)
+        else:
+            partial = fam.view(parametrization_name="alt", mean=2.0)
+            dist = partial.distribution(var=3.0)
 
         skew_func = dist.query_method(CharacteristicName.SKEW)
         val = skew_func()

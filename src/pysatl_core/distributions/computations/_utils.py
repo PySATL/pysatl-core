@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from pysatl_core.arrays import DType, asarray
 from pysatl_core.distributions.support import (
     ExplicitTableDiscreteSupport,
     IntegerLatticeDiscreteSupport,
@@ -35,7 +36,7 @@ def resolve(
     """
     Obtain an array-semantic callable for *name* from *distribution*.
 
-    The callable must accept a 1-D NumPy array and return a NumPy array of the
+    The callable must accept a native 1-D array and return a native array of the
     same length.  If the underlying method is a scalar function (returns a
     0-dimensional result when given a 1-D array, or raises :class:`TypeError`),
     a :class:`TypeError` is raised immediately.
@@ -66,20 +67,16 @@ def resolve(
     """
     fn = distribution.query_method(name)
 
-    _probe = np.array([0.5])
-    try:
-        result = fn(_probe)
-        if np.ndim(result) == 0:
-            raise TypeError
-    except TypeError:
+    result = fn(asarray([0.5], dtype=DType.FLOAT64))
+    if getattr(result, "ndim", 0) == 0:
         raise TypeError(
             f"Characteristic '{name}' of distribution "
             f"'{type(distribution).__name__}' is implemented as a scalar "
             "function.  Scalar functions are not supported — implement the "
-            "function to accept and return NumPy arrays directly.  "
+            "function to accept and return native arrays directly.  "
             "Scalar functions incur a per-element Python call overhead and "
             "are significantly slower for large inputs."
-        ) from None
+        )
 
     return fn
 

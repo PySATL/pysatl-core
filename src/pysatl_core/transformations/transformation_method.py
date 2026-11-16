@@ -16,7 +16,10 @@ __license__ = "SPDX-License-Identifier: MIT"
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from pysatl_core.distributions.computations.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import (
+    AnalyticalComputation,
+    required_array_operations,
+)
 from pysatl_core.types import (
     GenericCharacteristicName,
     ParentRole,
@@ -97,6 +100,7 @@ class TransformationMethod[In, Out](AnalyticalComputation[In, Out]):
         source_requirements: SourceRequirements,
         evaluator: TransformationEvaluator[In, Out],
         owner: object,
+        required_operations: frozenset[str] | None = None,
     ) -> None:
         """
         Build a transformation method with source-semantics metadata.
@@ -116,6 +120,9 @@ class TransformationMethod[In, Out](AnalyticalComputation[In, Out]):
             parent methods.
         owner : object
             Transformation object passed to ``evaluator``.
+        required_operations : frozenset[str] | None
+            Array operations used by the transformed computation. When omitted,
+            requirements declared on ``evaluator`` are used.
 
         Raises
         ------
@@ -150,6 +157,15 @@ class TransformationMethod[In, Out](AnalyticalComputation[In, Out]):
         }
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "func", evaluator(owner, resolved))
+
+        object.__setattr__(
+            self,
+            "required_operations",
+            required_operations
+            if required_operations is not None
+            else required_array_operations(evaluator),
+        )
+
         object.__setattr__(self, "transformation", transformation)
         object.__setattr__(self, "source_requirements", normalized_requirements)
         object.__setattr__(self, "_is_analytical", is_analytical)

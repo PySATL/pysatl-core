@@ -6,12 +6,20 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, cast
 
 import numpy as np
 import pytest
 from mypy_extensions import KwArg
 
+from pysatl_core.arrays import (
+    ArrayBackend,
+    ArrayContext,
+    ArrayValidator,
+    Backend,
+    array_operation,
+)
 from pysatl_core.distributions import strategies as strategies_module
 from pysatl_core.distributions.computations.computation import (
     AnalyticalComputation,
@@ -195,6 +203,90 @@ class TestCharacteristicRegistry(DistributionTestBase):
 
         with pytest.raises(GraphInvariantError):
             reg.view(self.distr_example)
+
+    def test_array_validator_reports_missing_operations(self) -> None:
+        method = replace(
+            self.make_fictitious_computation_method(target="B", sources=["A"]),
+            required_operations=frozenset({"add", "multiply"}),
+        )
+        backend = ArrayBackend("test")
+
+        @array_operation(backend)
+        def add(left: object, right: object) -> object:
+            return left + right  # type: ignore[operator]
+
+        validator = ArrayValidator(ArrayContext(Backend("test", backend)))
+
+        assert validator.missing_operations(method.required_operations) == frozenset({"multiply"})
+
+    def test_view_filters_edges_by_array_backend_operations(self) -> None:
+        supported_backend = ArrayBackend("supported")
+
+        @array_operation(supported_backend)
+        def add(left: object, right: object) -> object:
+            return left + right  # type: ignore[operator]
+
+        missing_backend = ArrayBackend("missing")
+        reg = CharacteristicRegistry()
+        reg.add_characteristic("A", is_definitive=True)
+        reg.add_characteristic("B", is_definitive=True)
+        reg.add_computation(
+            replace(
+                self.make_fictitious_computation_method(target="B", sources=["A"]),
+                required_operations=frozenset({"add"}),
+            )
+        )
+        reg.add_computation(
+            replace(
+                self.make_fictitious_computation_method(target="A", sources=["B"]),
+                required_operations=frozenset({"add"}),
+            )
+        )
+
+        assert (
+            reg.view(
+                self.distr_example, ArrayContext(Backend("supported", supported_backend))
+            ).find_path("A", "B")
+            is not None
+        )
+        with pytest.raises(GraphInvariantError, match=r"missing operations \['add'\]"):
+            reg.view(self.distr_example, ArrayContext(Backend("missing", missing_backend)))
+
+    def test_view_filters_analytical_loops_by_array_backend_operations(self) -> None:
+        supported_backend = ArrayBackend("supported")
+
+        @array_operation(supported_backend)
+        def add(left: object, right: object) -> object:
+            return left + right  # type: ignore[operator]
+
+        def identity(value: Any, /, **_options: Any) -> Any:
+            return value
+
+        method = AnalyticalComputation[Any, Any](
+            target="A",
+            func=identity,
+            required_operations=frozenset({"add"}),
+        )
+        distr = StandaloneEuclideanUnivariateDistribution(
+            kind=Kind.CONTINUOUS,
+            analytical_computations={"A": {"default": method}},
+            support=ContinuousSupport(),
+        )
+        reg = CharacteristicRegistry()
+        reg.add_characteristic("A", is_definitive=True)
+
+        assert "default" in reg.view(
+            distr, ArrayContext(Backend("supported", supported_backend))
+        ).variants("A", "A")
+        assert not reg.view(
+            distr,
+            ArrayContext(
+                Backend(
+                    "missing",
+                    ArrayBackend("missing"),
+                )
+            ),
+        ).variants("A", "A")
 
     def test_add_computation_validation_and_duplicate_rules(self) -> None:
         reg = CharacteristicRegistry()

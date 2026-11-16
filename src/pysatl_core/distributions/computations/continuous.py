@@ -34,11 +34,22 @@ __author__ = "Irina Sergeeva"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from scipy import integrate as _sp_integrate, optimize as _sp_optimize
 
+from pysatl_core.arrays import (
+    DType,
+    NativeArray,
+    add,
+    asarray,
+    atleast_1d,
+    clip,
+    divide,
+    multiply,
+    subtract,
+)
 from pysatl_core.distributions.computations._utils import (
     estimate_support_bounds,
     resolve,
@@ -49,7 +60,7 @@ from pysatl_core.distributions.computations.options import (
     CharacteristicOption,
     ComputationOption,
 )
-from pysatl_core.types import CharacteristicName, NumericArray
+from pysatl_core.types import CharacteristicName, FitterFunc, NumericArray
 
 if TYPE_CHECKING:
     from pysatl_core.distributions.distribution import Distribution
@@ -147,7 +158,7 @@ def _fit_cdf_to_pdf_1C(
     distribution: Distribution,
     /,
     h: float = 1e-5,
-) -> FittedComputationMethod[NumericArray, NumericArray]:
+) -> FittedComputationMethod[NativeArray, NativeArray]:
     """
     Fit a ``cdf -> pdf`` conversion via five-point central finite difference.
 
@@ -160,24 +171,32 @@ def _fit_cdf_to_pdf_1C(
 
     Returns
     -------
-    FittedComputationMethod[NumericArray, NumericArray]
+    FittedComputationMethod[NativeArray, NativeArray]
         Array-semantic ``pdf`` callable.
     """
     cdf_func = resolve(distribution, CharacteristicName.CDF)
 
-    def _pdf(x: NumericArray, **options: Any) -> NumericArray:
-        x_arr = np.atleast_1d(np.asarray(x, dtype=float))
+    def _pdf(x: NativeArray, **options: Any) -> NativeArray:
+        x_arr = atleast_1d(asarray(x, dtype=DType.FLOAT64))
 
-        cdf_ph1 = np.asarray(cdf_func(x_arr + h, **options), dtype=float)
-        cdf_mh1 = np.asarray(cdf_func(x_arr - h, **options), dtype=float)
-        cdf_ph2 = np.asarray(cdf_func(x_arr + 2.0 * h, **options), dtype=float)
-        cdf_mh2 = np.asarray(cdf_func(x_arr - 2.0 * h, **options), dtype=float)
+        def evaluate(offset: float) -> NativeArray:
+            shifted = add(x_arr, offset)
 
-        derivative = (-cdf_ph2 + 8.0 * cdf_ph1 - 8.0 * cdf_mh1 + cdf_mh2) / (12.0 * h)
-        result: NumericArray = np.clip(derivative, 0.0, None)
-        return result
+            return asarray(cdf_func(shifted, **options), dtype=DType.FLOAT64)
 
-    return FittedComputationMethod[NumericArray, NumericArray](
+        cdf_ph1 = evaluate(h)
+        cdf_mh1 = evaluate(-h)
+        cdf_ph2 = evaluate(2.0 * h)
+        cdf_mh2 = evaluate(-2.0 * h)
+
+        positive = add(multiply(8.0, cdf_ph1), cdf_mh2)
+        negative = add(cdf_ph2, multiply(8.0, cdf_mh1))
+
+        derivative = divide(subtract(positive, negative), 12.0 * h)
+
+        return cast(NativeArray, clip(derivative, 0.0, None))
+
+    return FittedComputationMethod[NativeArray, NativeArray](
         target=CharacteristicName.PDF,
         sources=[CharacteristicName.CDF],
         func=_pdf,  # type: ignore[arg-type]
@@ -189,7 +208,7 @@ def _build_cdf_to_pdf_1C() -> FitterDescriptor:
         name="cdf_to_pdf_1C",
         target=CharacteristicName.PDF,
         sources=[CharacteristicName.CDF],
-        fitter=_fit_cdf_to_pdf_1C,
+        fitter=cast(FitterFunc, _fit_cdf_to_pdf_1C),
         characteristic_options=(),
         computation_options=(
             ComputationOption(
@@ -205,6 +224,9 @@ def _build_cdf_to_pdf_1C() -> FitterDescriptor:
         ),
         constraint_tags=frozenset({"continuous", "univariate"}),
         description="CDF -> PDF via five-point central finite difference.",
+        required_operations=frozenset(
+            {"add", "asarray", "atleast_1d", "clip", "divide", "multiply", "subtract"}
+        ),
     )
 
 
