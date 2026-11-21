@@ -209,6 +209,14 @@ class _CachedPlan:
     edges: tuple[ComputationEdgeMeta, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedMethod:
+    """Prepared result and its stable, identity-based dependency token."""
+
+    method: FittedComputationMethod[Any, Any]
+    token: object = field(default_factory=object)
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -416,8 +424,8 @@ class DefaultComputationStrategy:
         Strategy-level computation option defaults.
     _cache : dict
         Cache of fitted computation methods keyed by
-        ``(distr_id, edge_id, target, frozen_all_options)`` so that
-        different option sets (both characteristic and computation) produce
+        ``(distr_id, edge_id, target, frozen_all_options, input_tokens)`` so that
+        different prepared inputs and option sets (both characteristic and computation) produce
         independent cache entries.  Characteristic options affect the
         *meaning* of the result; computation options affect the *accuracy*
         of the fitted callable — both must be part of the key.
@@ -445,8 +453,14 @@ class DefaultComputationStrategy:
         self._enable_caching = enable_caching
         self._computation_defaults: dict[str, Any] = dict(computation_defaults or {})
         self._cache: dict[
-            tuple[int, int, GenericCharacteristicName, frozenset[tuple[str, Hashable]]],
-            FittedComputationMethod[Any, Any],
+            tuple[
+                int,
+                int,
+                GenericCharacteristicName,
+                frozenset[tuple[str, Hashable]],
+                tuple[tuple[GenericCharacteristicName, object], ...],
+            ],
+            _PreparedMethod,
         ] = {}
         self._path_cache: dict[tuple[int, GenericCharacteristicName], _CachedPlan] = {}
         self._resolving: dict[int, set[GenericCharacteristicName]] = {}
@@ -729,6 +743,7 @@ class DefaultComputationStrategy:
         injected_keys: list[tuple[int, GenericCharacteristicName]] = []
         try:
             last_fitted: FittedComputationMethod[Any, Any] | None = None
+            prepared_inputs: dict[GenericCharacteristicName, object] = {}
             for step_idx, edge in enumerate(cached_plan.edges):
                 method = edge.method
 
@@ -746,18 +761,23 @@ class DefaultComputationStrategy:
                     id(edge),
                     method.target,
                     _freeze_options(all_resolved),
+                    tuple(
+                        (source, prepared_inputs[source])
+                        for source in method.sources
+                        if source in prepared_inputs
+                    ),
                 )
-                cached_fitted: FittedComputationMethod[Any, Any] | None = None
-                if self._enable_caching:
-                    cached_fitted = self._cache.get(cache_key)
-
-                if cached_fitted is not None:
-                    fitted = cached_fitted
-                else:
-                    fitted = method.prepare(distr, **all_resolved)
+                prepared = self._cache.get(cache_key) if self._enable_caching else None
+                if prepared is None:
+                    prepared = _PreparedMethod(method.prepare(distr, **all_resolved))
                     if self._enable_caching and method.cacheable:
-                        self._cache[cache_key] = fitted
+                        self._cache[cache_key] = prepared
 
+                # Cache hits retain their token; fresh preparations (including
+                # evaluators) get a new one. Keys retain the token itself, so
+                # dependency identity cannot be confused by object-id reuse.
+                prepared_inputs[method.target] = prepared.token
+                fitted = prepared.method
                 last_fitted = fitted
 
                 # Expose the fitted result as a loop plan for the intermediate
