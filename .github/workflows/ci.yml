@@ -28,7 +28,10 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          # Hooks require 3.12; keep the matrix version last as the default.
+          python-version: |
+            3.12
+            ${{ matrix.python-version }}
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
