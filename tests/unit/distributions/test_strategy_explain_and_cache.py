@@ -449,12 +449,17 @@ class TestMultiEdgePaths:
         assert fit_calls["pdf_to_cdf"] == 1, "first edge should be cached (cdf_bias unchanged)"
         assert fit_calls["cdf_to_ppf"] == 2, "second edge should be re-fitted (eps changed)"
 
+    @pytest.mark.parametrize("enable_caching", [True, False])
+    @pytest.mark.parametrize("option_type", [ComputationOption, CharacteristicOption])
     def test_second_edge_consumes_fitted_output_of_first_edge(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        enable_caching: bool,
+        option_type: type[ComputationOption] | type[CharacteristicOption],
     ) -> None:
         """
         In a two-hop path ``pdf -> cdf -> ppf``, the fitter for the second
-        edge (``cdf -> ppf``) calls ``strategy.query_method("cdf", distribution)``
+        edge (``cdf -> ppf``) calls ``distribution.query_method("cdf")``
         internally.  That call must return the *already-fitted* CDF produced
         by the first edge (with its ``cdf_bias`` applied), not a fresh CDF
         resolved from the original distribution.
@@ -470,6 +475,7 @@ class TestMultiEdgePaths:
             _distribution: Distribution, **kwargs: Any
         ) -> FittedComputationMethod[Any, Any]:
             fit_calls["pdf_to_cdf"] = fit_calls.get("pdf_to_cdf", 0) + 1
+            assert set(kwargs) == {"cdf_bias"}
             bias = kwargs.get("cdf_bias", 0.0)
 
             def cdf(_x: float, **_o: Any) -> float:
@@ -481,12 +487,8 @@ class TestMultiEdgePaths:
                 func=cast(Callable[[float, KwArg(Any)], float], cdf),
             )
 
-        # Capture strategy in a mutable cell so fit_cdf_to_ppf can reference
-        # it after the strategy is created below.
-        strategy_ref: list[DefaultComputationStrategy] = []
-
         def fit_cdf_to_ppf(
-            distribution: Distribution, **_kwargs: Any
+            distribution: Distribution, **kwargs: Any
         ) -> FittedComputationMethod[Any, Any]:
             """
             This fitter deliberately queries the strategy for 'cdf' so
@@ -497,13 +499,14 @@ class TestMultiEdgePaths:
             fit_calls["cdf_to_ppf"] = fit_calls.get("cdf_to_ppf", 0) + 1
             # Ask the strategy directly for the CDF method — it should
             # supply the already-fitted version from the first edge.
-            cdf_method = strategy_ref[0].query_method("cdf", distribution)
+            assert set(kwargs) == {"eps"}
+            cdf_method = distribution.query_method("cdf")
             # Capture the CDF value at 0.0 as the ppf constant so the test
             # can assert it reflects the cdf_bias from the first edge.
             captured_cdf_value = cdf_method(0.0)
 
             def ppf(_q: float, **_o: Any) -> float:
-                return captured_cdf_value
+                return captured_cdf_value + kwargs["eps"]
 
             return FittedComputationMethod(
                 target="ppf",
@@ -549,27 +552,119 @@ class TestMultiEdgePaths:
             pdf_to_cdf,
             options_descriptor=EdgeOptionsDescriptor(
                 name="pdf_to_cdf",
-                computation_options=(ComputationOption(name="cdf_bias", type=float, default=0.0),),
+                computation_options=(ComputationOption(name="cdf_bias", type=float, default=0.0),)
+                if option_type is ComputationOption
+                else (),
+                characteristic_options=(
+                    CharacteristicOption(name="cdf_bias", type=float, default=0.0),
+                )
+                if option_type is CharacteristicOption
+                else (),
             ),
         )
-        reg.add_computation(cdf_to_ppf)
+        reg.add_computation(
+            cdf_to_ppf,
+            options_descriptor=EdgeOptionsDescriptor(
+                computation_options=(ComputationOption(name="eps", type=float, default=0.0),),
+            ),
+        )
         reg.add_computation(_trivial_fitter("pdf", ("cdf",)))
         reg.add_computation(_trivial_fitter("cdf", ("ppf",)))
 
         distr = _make_pdf_distribution()
         monkeypatch.setattr(strategies_module, "characteristic_registry", lambda: reg)
-        strategy = DefaultComputationStrategy(enable_caching=True)
-        strategy_ref.append(strategy)
+        strategy = DefaultComputationStrategy(enable_caching=enable_caching)
+        monkeypatch.setattr(distr, "_computation_strategy", strategy)
 
-        plan = strategy.explain_computation_path("ppf", distr)
+        plan = distr.explain_computation_path("ppf")
         # Apply cdf_bias=0.25 on the first edge (pdf -> cdf).
         opts = plan.with_options(0, cdf_bias=0.25)
-        ppf = strategy.query_method("ppf", distr, opts)
+        ppf = distr.query_method("ppf", options=opts)
 
-        # The second fitter queried strategy.query_method("cdf", distribution) and
+        # The second fitter queried distribution.query_method("cdf") and
         # captured its value at 0.0.  With cdf_bias=0.25 the fitted CDF
         # returns 0.75, so ppf(anything) must equal 0.75.
         assert ppf(0.0) == pytest.approx(0.75)
+        assert fit_calls == {"pdf_to_cdf": 1, "cdf_to_ppf": 1}
+
+        # Equivalent resolved options supplied through another public route.
+        equivalent = {"cdf_bias": 0.25, "unused": 100}
+        ppf_again = distr.query_method(
+            "ppf",
+            characteristic_options=equivalent if option_type is CharacteristicOption else None,
+            computation_defaults=equivalent if option_type is ComputationOption else None,
+        )
+        assert ppf_again(0.0) == pytest.approx(0.75)
+        if enable_caching:
+            assert ppf_again is ppf
+        count = 1 if enable_caching else 2
+        assert fit_calls == {"pdf_to_cdf": count, "cdf_to_ppf": count}
+
+        changed_opts = plan.with_options(0, cdf_bias=0.40)
+        changed_ppf = distr.query_method("ppf", options=changed_opts)
+        assert changed_ppf(0.0) == pytest.approx(0.90)
+        assert fit_calls == {"pdf_to_cdf": count + 1, "cdf_to_ppf": count + 1}
+
+        # Changing only downstream options preserves the prepared CDF.
+        downstream_opts = changed_opts | plan.with_options(1, eps=0.1)
+        downstream_ppf = distr.query_method("ppf", options=downstream_opts)
+        assert downstream_ppf(0.0) == pytest.approx(1.0)
+        assert fit_calls == {
+            "pdf_to_cdf": count + (1 if enable_caching else 2),
+            "cdf_to_ppf": count + 2,
+        }
+
+        restored_ppf = distr.query_method("ppf", options=plan.with_options(0, cdf_bias=0.25))
+        assert restored_ppf(0.0) == pytest.approx(0.75)
+        if enable_caching:
+            assert restored_ppf is ppf
+        assert fit_calls == (
+            {"pdf_to_cdf": 2, "cdf_to_ppf": 3}
+            if enable_caching
+            else {"pdf_to_cdf": 5, "cdf_to_ppf": 5}
+        )
+
+    def test_failed_preparation_cleans_up_intermediate_methods(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fit_calls: dict[str, int] = {}
+        reg = _build_two_hop_registry(fit_calls)
+        distr = _make_pdf_distribution()
+        strategy = DefaultComputationStrategy(enable_caching=True)
+        monkeypatch.setattr(strategies_module, "characteristic_registry", lambda: reg)
+        monkeypatch.setattr(distr, "_computation_strategy", strategy)
+
+        original_prepare = FitterMethod.prepare
+        fail_next = True
+
+        def prepare(
+            method: FitterMethod, distribution: Distribution, **kwargs: Any
+        ) -> FittedComputationMethod[Any, Any]:
+            nonlocal fail_next
+            fitted = original_prepare(method, distribution, **kwargs)
+            if method.target == "ppf" and fail_next:
+                fail_next = False
+                raise RuntimeError("PPF preparation failed")
+            return fitted
+
+        monkeypatch.setattr(FitterMethod, "prepare", prepare)
+        plan = distr.explain_computation_path("ppf")
+        opts = plan.with_options(0, cdf_bias=0.4) | plan.with_options(1, eps=0.01)
+        with pytest.raises(RuntimeError, match="PPF preparation failed"):
+            distr.query_method("ppf", options=opts, characteristic_options={"unused": 1})
+        assert fit_calls == {"pdf_to_cdf": 1, "cdf_to_ppf": 1}
+        assert strategy._resolving == {}
+        assert strategy._char_options_stack == []
+
+        # A new query must not see the temporary CDF loop from the failed call.
+        assert distr.query_method("cdf")(0.0) == pytest.approx(0.5)
+        assert fit_calls == {"pdf_to_cdf": 2, "cdf_to_ppf": 1}
+
+        # The successfully prepared first step remains reusable on retry.
+        ppf = distr.query_method("ppf", options=opts)
+        assert ppf(0.0) == pytest.approx(0.01)
+        assert distr.query_method("ppf", options=opts) is ppf
+        assert fit_calls == {"pdf_to_cdf": 2, "cdf_to_ppf": 2}
 
     def test_explain_lists_all_options_along_multi_hop_path(
         self, monkeypatch: pytest.MonkeyPatch
@@ -842,6 +937,52 @@ class TestEvaluatorBypassCache:
         assert cdf_a(0.0) == pytest.approx(0.5)
         assert cdf_b(0.0) == pytest.approx(0.5)
         assert eval_calls["count"] == 2
+
+    def test_fitter_uses_fresh_upstream_evaluator(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        reg = CharacteristicRegistry()
+        reg.add_characteristic("pdf", is_definitive=True)
+        reg.add_characteristic("cdf", is_definitive=True)
+        reg.add_characteristic("ppf", is_definitive=False)
+        calls = {"evaluate_cdf": 0, "cdf_to_ppf": 0}
+
+        def evaluate_cdf(_distribution: Distribution, *_args: Any, **_kwargs: Any) -> float:
+            calls["evaluate_cdf"] += 1
+            return 0.5 + 0.1 * calls["evaluate_cdf"]
+
+        def fit_ppf(
+            distribution: Distribution, **_kwargs: Any
+        ) -> FittedComputationMethod[Any, Any]:
+            calls["cdf_to_ppf"] += 1
+            captured = distribution.query_method("cdf")(0.0)
+            return FittedComputationMethod(
+                target="ppf", sources=("cdf",), func=lambda *_a, **_k: captured
+            )
+
+        reg.add_computation(
+            EvaluatorMethod(
+                target="cdf", sources=("pdf",), evaluator=cast("EvaluatorFunc", evaluate_cdf)
+            )
+        )
+        reg.add_computation(
+            FitterMethod(
+                target="pdf",
+                sources=("cdf",),
+                fitter=lambda *_a, **_k: FittedComputationMethod(
+                    target="pdf", sources=("cdf",), func=lambda *_a, **_k: 1.0
+                ),
+            )
+        )
+        reg.add_computation(FitterMethod(target="ppf", sources=("cdf",), fitter=fit_ppf))
+        distr = _make_pdf_distribution()
+        strategy = DefaultComputationStrategy(enable_caching=True)
+        monkeypatch.setattr(strategies_module, "characteristic_registry", lambda: reg)
+        monkeypatch.setattr(distr, "_computation_strategy", strategy)
+
+        first = distr.query_method("ppf")
+        second = distr.query_method("ppf")
+        assert first(0.0) == pytest.approx(0.6)
+        assert second(0.0) == pytest.approx(0.7)
+        assert calls == {"evaluate_cdf": 2, "cdf_to_ppf": 2}
 
 
 # --------------------------------------------------------------------------- #
