@@ -8,7 +8,8 @@ __author__ = "Leonid Elkin"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from math import sqrt
 from typing import Any, cast
 
@@ -30,6 +31,27 @@ from pysatl_core.types import (
 )
 
 _MAX_MOMENT_ORDER = 4
+
+
+@dataclass(frozen=True, slots=True)
+class _CachedDiscreteMassTable:
+    """One no-options table for a fixed transformation configuration.
+
+    Keep a role-to-PMF snapshot, independent of the caller's ``sources`` mapping.
+    Compare methods by identity: methods need not be hashable or have meaningful
+    equality. Strong references prevent identities from being recycled while the
+    table is cached. Operation, supports and weights are fixed by the owning
+    distribution; calls with runtime options must bypass this cache.
+    """
+
+    methods: Mapping[ParentRole, Method[Any, Any]]
+    table: tuple[NumericArray, NumericArray, NumericArray]
+
+    def matches(self, methods: Mapping[ParentRole, Method[Any, Any]]) -> bool:
+        """Check the selected PMF in every cached parent role."""
+        return self.methods.keys() == methods.keys() and all(
+            self.methods[role] is method for role, method in methods.items()
+        )
 
 
 def _source_requirements_for_roles(

@@ -24,7 +24,10 @@ from pysatl_core.distributions.support import (
 )
 from pysatl_core.transformations.distribution import DerivedDistribution
 from pysatl_core.transformations.lightweight_distribution import LightweightDistribution
-from pysatl_core.transformations.operations.methods._utils import _eval_method_scalar
+from pysatl_core.transformations.operations.methods._utils import (
+    _CachedDiscreteMassTable,
+    _eval_method_scalar,
+)
 from pysatl_core.transformations.transformation_method import TransformationMethod
 from pysatl_core.types import (
     BinaryOperationName,
@@ -72,9 +75,7 @@ class BinaryDistribution(DerivedDistribution, ABC):
 
         self._left_distribution = left_snapshot
         self._right_distribution = right_snapshot
-        self._cached_discrete_mass_table: tuple[NumericArray, NumericArray, NumericArray] | None = (
-            None
-        )
+        self._cached_discrete_mass_table: _CachedDiscreteMassTable | None = None
 
         distribution_type = self._validate_distribution_types(
             left_snapshot.distribution_type,
@@ -249,11 +250,13 @@ class BinaryDistribution(DerivedDistribution, ABC):
         **options: Any,
     ) -> tuple[NumericArray, NumericArray, NumericArray]:
         """Build transformed finite PMF table for discrete parent supports."""
-        if not options and self._cached_discrete_mass_table is not None:
-            return self._cached_discrete_mass_table
+        pmf_methods = {role: sources[role][CharacteristicName.PMF] for role in self.parent_roles}
+        cached = self._cached_discrete_mass_table
+        if not options and cached is not None and cached.matches(pmf_methods):
+            return cached.table
 
-        left_pmf = sources[_LEFT_ROLE][CharacteristicName.PMF]
-        right_pmf = sources[_RIGHT_ROLE][CharacteristicName.PMF]
+        left_pmf = pmf_methods[_LEFT_ROLE]
+        right_pmf = pmf_methods[_RIGHT_ROLE]
         left_points = self._discrete_points_for_role(_LEFT_ROLE)
         right_points = self._discrete_points_for_role(_RIGHT_ROLE)
         left_masses = np.asarray(
@@ -301,7 +304,10 @@ class BinaryDistribution(DerivedDistribution, ABC):
         cdf_values[-1] = 1.0
         output = (points, masses, cdf_values)
         if not options:
-            self._cached_discrete_mass_table = output
+            self._cached_discrete_mass_table = _CachedDiscreteMassTable(
+                methods=pmf_methods,
+                table=output,
+            )
         return output
 
     def _transform_support(
