@@ -139,7 +139,7 @@ skip_wrap_for_keys = [ "tool.cibuildwheel.test-command" ]
 
 [tool.mypy]
 mypy_path = [ "src" ]
-files = [ "src", "tests" ]
+files = [ ".github/scripts/check_git_conventions.py", "src", "tests" ]
 namespace_packages = true
 explicit_package_bases = true
 python_version = "3.12"

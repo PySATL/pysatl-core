@@ -21,6 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
 
@@ -82,6 +83,10 @@ jobs:
         run: poetry install --with dev --no-interaction
 
       - name: Pre-commit (all files)
+        env:
+          PYSATL_BRANCH: ${{ github.head_ref || (github.ref_type == 'branch' && github.ref_name) || '' }}
+          PYSATL_COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          PYSATL_COMMIT_BASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
         run: poetry run pre-commit run --all-files
 
       - name: Pytest

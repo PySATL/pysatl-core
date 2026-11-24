@@ -1,8 +1,13 @@
 default_language_version:
   python: python3.12
 
+default_install_hook_types: [ pre-commit, commit-msg ]
+default_stages: [ pre-commit, pre-push, manual ]
+
 ci:
+  autofix_commit_msg: "chore: apply pre-commit fixes"
   autofix_prs: true
+  autoupdate_commit_msg: "ci: update pre-commit hooks"
   autoupdate_schedule: quarterly
   skip: [ pyproject-fmt, codespell, ruff, ruff-format, mypy ]
 
@@ -40,6 +45,20 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-git-conventions
+        name: check Git branch and commit conventions
+        entry: python .github/scripts/check_git_conventions.py
+        language: python
+        always_run: true
+        pass_filenames: false
+
+      - id: check-commit-message
+        name: check commit message
+        entry: python .github/scripts/check_git_conventions.py --commit-msg
+        language: python
+        stages: [ commit-msg ]
+        always_run: true
+
       - id: pyproject-fmt
         name: pyproject-fmt
         entry: pyproject-fmt
