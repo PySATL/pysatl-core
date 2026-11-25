@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+
+contact_links:
+  - name: Questions, Ideas & Feedback
+    url: https://github.com/PySATL/pysatl-core/discussions
+    about: Ask questions, share ideas, or provide general feedback.
+
+  - name: Security Vulnerability
+    url: https://github.com/PySATL/pysatl-core/security/advisories/new
+    about: Report security vulnerabilities privately.

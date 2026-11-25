@@ -8,10 +8,19 @@ contribute.
 ## Rules for adding commits
 
 Create a new branch, if you want to add something new.
-Recommended naming branch is `<type>/<name of stuff>`.
+The branch naming convention is `<type>/<name of stuff>`, for example
+`feat/variance-computation` or `docs/sampling-guide`.
+Use one of the types listed below. Additional `/`-separated blocks are allowed, for example
+`feat/distributions/registry/add-some-method`. Each block must contain alphanumeric words separated
+only by single hyphens (`-`); uppercase letters are allowed. Spaces, underscores, and dots are not
+allowed in new branch names.
+
+The `main` branch and branches created by Dependabot and pre-commit.ci are also exempt from
+branch naming checks, but their commit messages must follow the same rules.
 
 Commits are added according to conventional commits.
-Those `<type>(<scope>): <body>`.
+The commit header format is `<type>(<scope>): <description>` or `<type>: <description>`.
+The scope is optional; when supplied, it must be nonempty.
 
 The `<type>` field must take one of these values:
 
@@ -25,14 +34,21 @@ The `<type>` field must take one of these values:
 * `docs` for changes in documentation
 * `chore` for changes outside the code, for example, gitignore and reamde updates
 
-The `<body>` field contains the gist of the changes in the present imperative in English without the
-dot in at the end,
-the first word is a verb with a small letter.
+The `<description>` field contains the gist of the changes in the present imperative in English
+without a dot at the end. The first word is a verb starting with a lowercase letter.
+Subsequent letters may be capitalized to ensure that abbreviations and terms are displayed correctly.
+Keep commit messages concise, informative, and focused on the essence of the change. Prefer a single
+line; multiline messages are discouraged but allowed when additional context is necessary.
+Automated checks validate the header format, the lowercase first letter of the description, and the
+absence of a trailing period. They do not attempt to determine whether the first word is a verb.
 
 Examples:
 
 * Good: "feat: add module for future scrubber implementations"
+* Good: "feat(distributions): add variance computation"
+* Good: "fix: handle infinite ppf bounds"
 * Bad: "Added module for future scrubber implementations."
+* Bad: "feat: Add variance computation."
 
 ## Source code developers guide (members of PySATL)
 
