@@ -13,14 +13,18 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast, dataclass_transform, overload
 
 import numpy as np
 
-from pysatl_core.distributions.computations.computation import AnalyticalComputation
+from pysatl_core.distributions.computations.computation import (
+    AnalyticalComputation,
+    required_array_operations,
+    requires_array_operations,
+)
 from pysatl_core.families.distribution import ParametricFamilyDistribution
 from pysatl_core.families.parametrizations import Parametrization, ParametrizationConstraint
 from pysatl_core.types import (
@@ -30,8 +34,6 @@ from pysatl_core.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from pysatl_core.distributions.strategies import ComputationStrategy, SamplingStrategy
     from pysatl_core.distributions.support import Support
     from pysatl_core.types import (
@@ -336,6 +338,7 @@ class ParametricFamily:
                 label_name: AnalyticalComputation(
                     target=characteristic,
                     func=self._bind_parametrization(func_factory, params_obj),
+                    required_operations=required_array_operations(func_factory),
                 )
                 for label_name, func_factory in labeled_providers.items()
             }
@@ -625,13 +628,13 @@ class PartialParametricFamily(ParametricFamily):
             unexpected = set(kwargs) - set(free_field_names)
             if unexpected:
                 raise TypeError(
-                    f"__init__() got unexpected keyword arguments: "
+                    "__init__() got unexpected keyword arguments: "
                     f"{', '.join(repr(u) for u in unexpected)}"
                 )
             missing = set(free_field_names) - set(kwargs)
             if missing:
                 raise TypeError(
-                    f"__init__() missing required keyword arguments: "
+                    "__init__() missing required keyword arguments: "
                     f"{', '.join(repr(m) for m in missing)}"
                 )
             for name in free_field_names:
@@ -755,27 +758,50 @@ class PartialParametricFamily(ParametricFamily):
         return self._base_family.to_base(self._to_full_parametrization(parameters))
 
     def _build_view_characteristics(self, base_family: ParametricFamily) -> dict[str, Any]:
+        """Adapt original providers to this view's partially fixed parameters."""
         view_chars = {}
         original_base = base_family.base_parametrization_name
+
+        def provider_signature(
+            provider: ParametricFamilyCharacteristic[Any, Any],
+        ) -> inspect.Signature:
+            signature = inspect.signature(provider)
+            parameters = tuple(signature.parameters.values())
+            if parameters and parameters[0].kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                return signature
+
+            return signature.replace(
+                parameters=(
+                    inspect.Parameter("params", inspect.Parameter.POSITIONAL_ONLY),
+                    *parameters,
+                )
+            )
 
         def wrap_provider(
             provider: ParametricFamilyCharacteristic[Any, Any],
         ) -> ParametricFamilyCharacteristic[Any, Any]:
+            @requires_array_operations(*required_array_operations(provider))
             def wrapped(params: Parametrization, *args: Any, **kwargs: Any) -> Any:
                 base_params = base_family.to_base(params)
                 bound = ParametricFamily._bind_parametrization(provider, base_params)
                 return bound(*args, **kwargs)
 
+            wrapped.__signature__ = provider_signature(provider)  # type: ignore[attr-defined]
             return wrapped
 
         def wrap_fixed_provider(
             provider: ParametricFamilyCharacteristic[Any, Any],
         ) -> ParametricFamilyCharacteristic[Any, Any]:
+            @requires_array_operations(*required_array_operations(provider))
             def wrapped(params: Parametrization, *args: Any, **kwargs: Any) -> Any:
                 full_params = self._to_full_parametrization(params)
                 bound = ParametricFamily._bind_parametrization(provider, full_params)
                 return bound(*args, **kwargs)
 
+            wrapped.__signature__ = provider_signature(provider)  # type: ignore[attr-defined]
             return wrapped
 
         for char_name, char_map in base_family.distr_characteristics.items():

@@ -19,10 +19,21 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, overload, runtime_checkable
+from dataclasses import dataclass, field
+from functools import partial, wraps
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    cast,
+    overload,
+    runtime_checkable,
+)
 
+from pysatl_core.arrays.types import _Parameters, _ReturnType
 from pysatl_core.types import ComputationFunc, NumericArray
+
+_REQUIRED_OPERATIONS_ATTR = "__pysatl_required_operations__"
 
 if TYPE_CHECKING:
     from mypy_extensions import KwArg
@@ -82,11 +93,14 @@ class FitterMethod:
         Source characteristic names (typically length 1 for unary conversions).
     fitter : FitterFunc
         Function that fits the computation method to a distribution.
+    required_operations : frozenset[str]
+        Array operations that must be present in the active backend.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
     fitter: FitterFunc
+    required_operations: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def cacheable(self) -> bool:
@@ -136,11 +150,14 @@ class EvaluatorMethod:
         Source characteristic names (typically length 1 for unary conversions).
     evaluator : EvaluatorFunc
         Direct evaluator callable.
+    required_operations : frozenset[str]
+        Array operations that must be present in the active backend.
     """
 
     target: GenericCharacteristicName
     sources: Sequence[GenericCharacteristicName]
     evaluator: EvaluatorFunc
+    required_operations: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def cacheable(self) -> bool:
@@ -185,6 +202,7 @@ class EvaluatorMethod:
         as fitter-based methods when needed.
         """
 
+        @wraps(partial(self.evaluator, distribution))
         def _bound(*args: Any, **kwargs: Any) -> NumericArray:
             return self.evaluator(distribution, *args, **{**options, **kwargs})
 
@@ -206,6 +224,26 @@ if TYPE_CHECKING:
 else:
     type Fitter[In, Out] = Callable[..., Any]
     type Evaluator[In, Out] = Callable[..., Any]
+
+
+def requires_array_operations(
+    *operations: str,
+) -> Callable[[Callable[_Parameters, _ReturnType]], Callable[_Parameters, _ReturnType]]:
+    """Declare array operations used by a computation function."""
+    required = frozenset(operations)
+
+    def decorator(
+        function: Callable[_Parameters, _ReturnType],
+    ) -> Callable[_Parameters, _ReturnType]:
+        setattr(function, _REQUIRED_OPERATIONS_ATTR, required)
+        return function
+
+    return decorator
+
+
+def required_array_operations(function: Callable[..., Any]) -> frozenset[str]:
+    """Return array operations declared on a computation function."""
+    return cast(frozenset[str], getattr(function, _REQUIRED_OPERATIONS_ATTR, frozenset()))
 
 
 @runtime_checkable
@@ -242,10 +280,13 @@ class AnalyticalComputation[In, Out]:
         Characteristic name (e.g., "pdf", "cdf").
     func : ComputationFunc[In, Out]
         Analytical function that computes the characteristic.
+    required_operations : frozenset[str]
+        Array operations that must be present in the active backend.
     """
 
     target: GenericCharacteristicName
     func: ComputationFunc[In, Out]
+    required_operations: frozenset[str] = field(default_factory=frozenset)
 
     @overload
     def __call__(self, **options: Any) -> Out: ...
@@ -271,4 +312,6 @@ __all__ = [
     "FittedComputationMethod",
     "FitterMethod",
     "Method",
+    "required_array_operations",
+    "requires_array_operations",
 ]

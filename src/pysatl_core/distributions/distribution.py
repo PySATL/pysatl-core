@@ -11,24 +11,30 @@ __author__ = "Leonid Elkin, Mikhail Mikhailov"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
+from pysatl_core.arrays import normalize_value
+from pysatl_core.distributions.computations.computation import FittedComputationMethod
 from pysatl_core.distributions.strategies import (
     ComputationPlan,
     ComputationStrategy,
     SamplingStrategy,
 )
-from pysatl_core.types import DEFAULT_ANALYTICAL_COMPUTATION_LABEL, NumericArray
+from pysatl_core.types import (
+    DEFAULT_ANALYTICAL_COMPUTATION_LABEL,
+    ComputationFunc,
+    NumericArray,
+)
 
 _KEEP: object = object()
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from typing import Any
 
     from pysatl_core.distributions.computations.computation import AnalyticalComputation
     from pysatl_core.distributions.computations.options import StepOptions
@@ -313,14 +319,38 @@ class Distribution(ABC):
         Returns
         -------
         Method
-            Callable method that computes the characteristic.
+            Callable method that normalizes and validates its input, passed either
+            positionally or by name. Keyword-only options are forwarded unchanged.
+            Native values are validated without copying.
         """
-        return self.computation_strategy.query_method(
+        method = self.computation_strategy.query_method(
             characteristic_name,
             self,
             options,
             characteristic_options=characteristic_options,
             computation_defaults=computation_defaults,
+        )
+        input_parameter = next(iter(inspect.signature(method.func).parameters.values()), None)
+        input_name = (
+            input_parameter.name
+            if input_parameter is not None
+            and input_parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            else None
+        )
+
+        def validated(*args: Any, **kwargs: Any) -> Any:
+            if args:
+                return method(normalize_value(args[0]), *args[1:], **kwargs)
+
+            if input_name is not None and input_name in kwargs:
+                kwargs[input_name] = normalize_value(kwargs[input_name])
+
+            return method(**kwargs)
+
+        return FittedComputationMethod[Any, Any](
+            target=method.target,
+            sources=method.sources if isinstance(method, FittedComputationMethod) else (),
+            func=cast(ComputationFunc[Any, Any], validated),
         )
 
     def explain_computation_path(

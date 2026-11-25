@@ -59,6 +59,8 @@ class _BaseDescriptor:
         Options controlling the numerical algorithm.
     constraint_tags : frozenset[str]
         Constraint tags used for matching.
+    required_operations : frozenset[str]
+        Array operations required by the resulting computation method.
     description : str
         Human-readable summary.
     """
@@ -70,6 +72,7 @@ class _BaseDescriptor:
     computation_options: tuple[ComputationOption, ...] = ()
     constraint_tags: frozenset[str] = field(default_factory=frozenset)
     description: str = ""
+    required_operations: frozenset[str] = field(default_factory=frozenset, kw_only=True)
 
     @property
     def options(self) -> tuple[_BaseOption, ...]:
@@ -215,6 +218,7 @@ class FitterDescriptor(_BaseDescriptor):
             target=self.target,
             sources=list(self.sources),
             fitter=self.fitter,
+            required_operations=self.required_operations,
         )
 
 
@@ -267,6 +271,7 @@ class EvaluatorDescriptor(_BaseDescriptor):
             target=self.target,
             sources=list(self.sources),
             evaluator=self.evaluator,
+            required_operations=self.required_operations,
         )
 
 

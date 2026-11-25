@@ -37,6 +37,7 @@ from pysatl_core.distributions.registry.graph_primitives import (
 )
 
 if TYPE_CHECKING:
+    from pysatl_core.arrays import ArrayContext, ArrayValidator
     from pysatl_core.distributions.computations.computation import ComputationMethodUnion
     from pysatl_core.distributions.computations.options import EdgeOptionsDescriptor
     from pysatl_core.distributions.distribution import Distribution
@@ -334,6 +335,8 @@ class CharacteristicRegistry:
         ],
         distr: Distribution,
         present_nodes: set[GenericCharacteristicName],
+        operation_validator: ArrayValidator,
+        operation_rejections: set[str],
     ) -> None:
         """
         Attach distribution-provided self-loops to the view graph.
@@ -353,6 +356,15 @@ class CharacteristicRegistry:
                 characteristic_name, {}
             )
             for label_name, analytical_method in labeled_methods.items():
+                missing = operation_validator.missing_operations(
+                    analytical_method.required_operations
+                )
+                if missing:
+                    operation_rejections.add(
+                        f"{analytical_method.target}: missing operations {sorted(missing)}"
+                    )
+                    continue
+
                 loop_variants[label_name] = (
                     AnalyticalLoopEdgeMeta(method=analytical_method)
                     if CharacteristicRegistry._loop_is_analytical(
@@ -363,7 +375,7 @@ class CharacteristicRegistry:
                     else TransformationLoopEdgeMeta(method=analytical_method)
                 )
 
-    def view(self, distr: Distribution) -> RegistryView:
+    def view(self, distr: Distribution, array_context: ArrayContext | None = None) -> RegistryView:
         """
         Create a filtered view of the graph for the given distribution.
 
@@ -371,6 +383,8 @@ class CharacteristicRegistry:
         ----------
         distr : Distribution
             Distribution profile to filter for.
+        array_context : ArrayContext, optional
+            Active process context used to validate method requirements.
 
         Returns
         -------
@@ -385,11 +399,21 @@ class CharacteristicRegistry:
         4. Computes definitive nodes from the remaining present nodes
         5. Validates graph invariants
         """
+        if array_context is None:
+            from pysatl_core.arrays import resolve_array_context
+
+            array_context = resolve_array_context()
+
+        from pysatl_core.arrays import ArrayValidator
+
+        operation_validator = ArrayValidator(array_context)
+
         # 1) Compute present nodes once and pre-create adjacency.
         present_nodes = self._compute_present_nodes(distr)
         adj: dict[
             GenericCharacteristicName, dict[GenericCharacteristicName, dict[LabelName, EdgeMeta]]
         ] = {node: {} for node in present_nodes}
+        operation_rejections: set[str] = set()
 
         # 2) Filter edges by node presence and applicability.
         for src in present_nodes:
@@ -399,24 +423,48 @@ class CharacteristicRegistry:
                 kept: dict[LabelName, EdgeMeta] = {}
                 for label, metas in variants.items():
                     for edge in metas:
-                        if edge.constraint.allows(distr) and all(
+                        if not edge.constraint.allows(distr) or not all(
                             source in present_nodes for source in edge.method.sources
                         ):
-                            kept[label] = edge
-                            # TODO: It is possible that there are two edges under the same label
-                            #  that fit the same distribution, this should not be the case.
-                            #  Taking the first one for now
-                            break
+                            continue
+
+                        missing = operation_validator.missing_operations(
+                            edge.method.required_operations
+                        )
+                        if missing:
+                            operation_rejections.add(
+                                f"{edge.method.target}: missing operations {sorted(missing)}"
+                            )
+                            continue
+
+                        kept[label] = edge
+                        # TODO: It is possible that there are two edges under the same label
+                        #  that fit the same distribution, this should not be the case.
+                        #  Taking the first one for now
+                        break
                 if kept:
                     adj[src][dst] = kept
 
         # 3) Attach analytical loops
-        self._attach_analytical_loops(adj, distr, present_nodes)
+        self._attach_analytical_loops(
+            adj,
+            distr,
+            present_nodes,
+            operation_validator,
+            operation_rejections,
+        )
 
         # 4) Compute definitive nodes (must be present)
         definitive_nodes = self._compute_definitive_nodes(distr) & present_nodes
 
-        return RegistryView(adj, definitive_nodes, present_nodes)
+        try:
+            return RegistryView(adj, definitive_nodes, present_nodes)
+        except GraphInvariantError as exc:
+            if not operation_rejections:
+                raise
+
+            details = "; ".join(sorted(operation_rejections))
+            raise GraphInvariantError(f"{exc} Array operation rejections: {details}.") from exc
 
 
 # --------------------------------------------------------------------------- #

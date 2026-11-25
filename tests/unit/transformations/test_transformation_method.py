@@ -9,6 +9,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+from pysatl_core.distributions import requires_array_operations
 from pysatl_core.transformations.transformation_method import TransformationMethod
 from pysatl_core.types import (
     CharacteristicName,
@@ -24,9 +25,37 @@ _BASE_ROLE = "base"
 
 
 class TestTransformationMethod(DistributionTestBase):
+    def test_constructor_resolves_parents_through_public_query_method(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        base = self.make_logistic_cdf_distribution()
+        query_method = base.query_method
+        queried: list[str] = []
+
+        def recording_query(name: str) -> Method[Any, Any]:
+            queried.append(name)
+            return query_method(name)
+
+        def evaluator(_owner: object, sources: ResolvedSourceMethods) -> Any:
+            return sources[_BASE_ROLE][CharacteristicName.CDF]
+
+        monkeypatch.setattr(base, "query_method", recording_query)
+        method = TransformationMethod[Any, Any](
+            target=CharacteristicName.CDF,
+            transformation=TransformationName.AFFINE,
+            bases={_BASE_ROLE: base},
+            source_requirements={_BASE_ROLE: (CharacteristicName.CDF,)},
+            evaluator=evaluator,
+            owner=object(),
+        )
+
+        assert queried == [CharacteristicName.CDF]
+        np.testing.assert_allclose(method(np.array([0.0])), [0.5])
+
     def test_constructor_marks_non_analytical_for_mixed_sources(self) -> None:
         base = self.make_logistic_cdf_distribution()
 
+        @requires_array_operations("asarray")
         def _evaluator(
             _owner: object,
             sources: ResolvedSourceMethods,
@@ -56,6 +85,7 @@ class TestTransformationMethod(DistributionTestBase):
         )
 
         assert not method.is_analytical
+        assert method.required_operations == frozenset({"asarray"})
         result = method(np.array([0.0]))
         assert float(np.asarray(result, dtype=float).flat[0]) == pytest.approx(0.5)
 

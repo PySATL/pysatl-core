@@ -14,6 +14,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from pysatl_core.arrays import ArrayValidator, resolve_array_context
 from pysatl_core.distributions.computations.options import (
     EdgeOptionsDescriptor,
     ResolvedEdgeOptions,
@@ -497,19 +498,31 @@ class DefaultComputationStrategy:
         methods: Mapping[LabelName, AnalyticalComputation[Any, Any]],
     ) -> AnalyticalComputation[Any, Any]:
         """
-        Pick the first available analytical method for a characteristic.
+        Pick the first analytical method supported by the active backend.
 
         Raises
         ------
         RuntimeError
-            If no labeled analytical methods are available for the characteristic.
+            If no labeled analytical methods are available or supported.
         """
-        try:
-            return next(iter(methods.values()))
-        except StopIteration as exc:
+        if not methods:
             raise RuntimeError(
                 f"Characteristic '{state}' provides no labeled analytical computations."
-            ) from exc
+            )
+
+        validator = ArrayValidator(resolve_array_context())
+        missing: set[str] = set()
+
+        for method in methods.values():
+            method_missing = validator.missing_operations(method.required_operations)
+            if not method_missing:
+                return method
+
+            missing.update(method_missing)
+
+        raise RuntimeError(
+            f"Characteristic '{state}' requires missing array operations {sorted(missing)}."
+        )
 
     @staticmethod
     def _pick_loop_edge(
@@ -579,6 +592,7 @@ class DefaultComputationStrategy:
         if state not in registry.declared_characteristics:
             if state in distr.analytical_computations:
                 method = self._pick_analytical_method(state, distr.analytical_computations[state])
+
                 step = ComputationStep(
                     target=state,
                     sources=(state,),
