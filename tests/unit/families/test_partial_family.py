@@ -4,6 +4,7 @@ __author__ = "Myznikov Fedor"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -34,6 +35,19 @@ class TwoParam(Parametrization):
 
 
 TwoParam.__param_name__ = "base"
+
+
+@dataclass
+class ThreeParam(Parametrization):
+    a: float
+    b: float
+    c: float
+
+    def transform_to_base_parametrization(self) -> Parametrization:
+        return self
+
+
+ThreeParam.__param_name__ = "base"
 
 
 @dataclass
@@ -118,9 +132,12 @@ class TestPartialParametricFamily(TestBaseFamily):
         fam = self._make_two_param_family()
         partial = fam.view(a=2.0)
         assert partial.fixed_parameters == {"a": 2.0}
-        # MappingProxyType does not allow modification
+        # MappingProxyType does not allow modification. The cast only lifts the
+        # static type to one that declares __setitem__, so mypy can see this
+        # is a subscript assignment instead of a nonsensical expression; the
+        # object being assigned into is still the real, read-only proxy.
         with pytest.raises(TypeError):
-            partial.fixed_parameters["a"] = 3.0  # type: ignore[index]
+            cast(MutableMapping[str, float], partial.fixed_parameters)["a"] = 3.0
 
     def test_fixed_parameter_names(self) -> None:
         fam = self._make_two_param_family()
@@ -237,6 +254,22 @@ class TestPartialParametricFamily(TestBaseFamily):
         params = cast(Any, dist.parametrization)
         assert params.b == 2.0
         assert partial.fixed_parameters == {"a": 1.0}
+
+    def test_chained_views_combine_fixed_values(self) -> None:
+        fam = ParametricFamily(
+            name="ThreeParamFamily",
+            distr_type=UnivariateContinuous,
+            distr_parametrizations=["base"],
+            distr_characteristics={},
+        )
+        fam.register_parametrization("base", ThreeParam)
+
+        view = fam.view(a=1.0).view(b=2.0)
+
+        assert view.parent_family is fam
+        assert view.free_parameter_names == ("c",)
+        assert view.fixed_parameters == {"a": 1.0, "b": 2.0}
+        assert view.fixed_in_base_parametrization
 
     # Parametrization access (base, parametrizations, get_parametrization)
     def test_only_fixed_parametrization_visible(self) -> None:

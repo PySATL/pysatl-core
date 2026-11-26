@@ -15,6 +15,7 @@ from typing import cast
 import numpy as np
 
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.estimation.formulas.builtins import register_builtin_estimation_formulas
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
@@ -278,6 +279,7 @@ def configure_exponential_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        param_bounds={"lambda_": (0, None)},
     )
     Exponential.__doc__ = EXPONENTIAL_DOC
 
@@ -352,3 +354,4 @@ def configure_exponential_family() -> None:
             return grad_beta[..., np.newaxis].astype(np.float64)
 
     ParametricFamilyRegister.register(Exponential)
+    register_builtin_estimation_formulas({FamilyName.EXPONENTIAL: Exponential})

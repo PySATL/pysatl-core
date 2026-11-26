@@ -13,7 +13,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 from abc import ABC
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from inspect import isfunction
 from typing import TYPE_CHECKING, dataclass_transform
 
@@ -21,6 +21,7 @@ from pysatl_core.types import NumericArray, ParametrizationName
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from dataclasses import Field
     from typing import Any, ClassVar
 
     from pysatl_core.families.parametric_family import ParametricFamily
@@ -35,12 +36,12 @@ class ParametrizationConstraint:
     ----------
     description : str
         Human-readable description of the constraint.
-    check : Callable[[Any], bool]
+    check : Callable[[Parametrization], bool]
         Validation function that returns True if constraint is satisfied.
     """
 
     description: str
-    check: Callable[[Any], bool]
+    check: Callable[[Parametrization], bool]
 
 
 class Parametrization(ABC):
@@ -55,6 +56,15 @@ class Parametrization(ABC):
     __family__: ClassVar[ParametricFamily]
     __param_name__: ClassVar[ParametrizationName]
 
+    # Declared, not assigned: the @parametrization decorator turns every
+    # concrete subclass into a dataclass (and ``PartialParametricFamily``
+    # synthesises one for a view), so the attribute exists on every
+    # parametrization that can be instantiated — but not on this ABC, which
+    # never is.  Stating it here is what lets callers use ``dataclasses.
+    # fields()`` instead of probing ``__dataclass_fields__`` through ``getattr``
+    # with a string literal no checker can verify.
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+
     _constraints: ClassVar[list[ParametrizationConstraint]] = []
 
     @property
@@ -63,13 +73,9 @@ class Parametrization(ABC):
         return self.__class__.__param_name__
 
     @property
-    def parameters(self) -> dict[str, Any]:
+    def parameters(self) -> dict[str, float]:
         """Get parameters as a dictionary."""
-        fields = getattr(self, "__dataclass_fields__", None)
-        if fields:
-            return {f: getattr(self, f) for f in fields}
-        ann = getattr(self, "__annotations__", {})
-        return {k: getattr(self, k) for k in ann}
+        return {f.name: float(getattr(self, f.name)) for f in fields(self)}
 
     @property
     def constraints(self) -> list[ParametrizationConstraint]:

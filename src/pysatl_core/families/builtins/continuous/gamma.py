@@ -10,6 +10,7 @@ import numpy as np
 from scipy.special import digamma, gammainc, gammaincinv, gammaln
 
 from pysatl_core.distributions.support import ContinuousSupport
+from pysatl_core.estimation.formulas.builtins import register_builtin_estimation_formulas
 from pysatl_core.families.parametric_family import ParametricFamily
 from pysatl_core.families.parametrizations import (
     Parametrization,
@@ -260,6 +261,7 @@ def configure_gamma_family() -> None:
         },
         support_by_parametrization=_support,
         base_score=_base_score,
+        param_bounds={"k": (0, None), "theta": (0, None)},
     )
     Gamma.__doc__ = GAMMA_DOC
 
@@ -398,3 +400,4 @@ def configure_gamma_family() -> None:
             return np.stack([grad_k, grad_beta], axis=-1)
 
     ParametricFamilyRegister.register(Gamma)
+    register_builtin_estimation_formulas({FamilyName.GAMMA: Gamma})
