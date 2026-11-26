@@ -405,6 +405,7 @@ class FamilyName(StrEnum):
     CONTINUOUS_UNIFORM = "ContinuousUniform"
     EXPONENTIAL = "Exponential"
     GAMMA = "Gamma"
+    PARETO = "Pareto"
 
 
 # ============================================================================
