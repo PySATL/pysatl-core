@@ -1,0 +1,23 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "pdf"
+    }
+  ]
+}

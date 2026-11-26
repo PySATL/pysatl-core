@@ -1,0 +1,36 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "scenario_id": "NEG4-missing-reference",
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "no-such-source"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "pdf",
+      "grid_hint": {
+        "n_points": 33
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [
+        -3.0,
+        3.0
+      ]
+    }
+  ]
+}

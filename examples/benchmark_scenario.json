@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.2",
+  "scenario_id": "example-normal-accuracy",
+  "comparison_group": "example-normal-accuracy",
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {"mu": 0.0, "sigma": 1.0}
+  },
+  "subject": {"source_id": "pysatl-core"},
+  "references": [{"source_id": "scipy-norm"}],
+  "queries": [
+    {"characteristic": "pdf", "grid_hint": {"n_points": 65}},
+    {"characteristic": "cdf", "output_scale": "survival"}
+  ],
+  "regions": [
+    {"name": "bulk", "interval": [-3.0, 3.0]},
+    {"name": "tail_right", "interval": [3.0, null]}
+  ]
+}

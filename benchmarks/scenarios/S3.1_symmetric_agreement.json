@@ -1,0 +1,34 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "scenario_id": "S3.1-normal-agreement",
+  "pair_policy": "symmetric",
+  "participants": [
+    {
+      "source_id": "pysatl-core"
+    },
+    {
+      "source_id": "pysatl-core",
+      "strategy": {
+        "name": "ForcedGraphStrategy",
+        "params": {
+          "from": "cf"
+        }
+      }
+    },
+    {
+      "source_id": "scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "pdf"
+    }
+  ]
+}

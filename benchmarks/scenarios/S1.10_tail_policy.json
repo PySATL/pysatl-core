@@ -1,0 +1,52 @@
+{
+  "distribution": {
+    "family": "Exponential",
+    "parametrization": "rate",
+    "parameters": {
+      "lambda_": 0.5
+    }
+  },
+  "schema_version": "1.2",
+  "scenario_id": "S1.10-tail-policy",
+  "comparison_group": "S1.10-tail-policy-vs-reference",
+  "subject": {
+    "source_id": "pysatl-core"
+  },
+  "references": [
+    {
+      "source_id": "scipy-exp"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "pdf",
+      "grid_hint": {
+        "n_points": 41,
+        "densify": false
+      },
+      "points": [
+        -1.0,
+        2.71828,
+        60.0
+      ]
+    },
+    {
+      "characteristic": "cdf",
+      "output_scale": "survival",
+      "grid_hint": {
+        "n_points": 33,
+        "tail_extension": 15.0
+      }
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [-1.0, 4.0]
+    },
+    {
+      "name": "tail_right",
+      "interval": [1.0, null]
+    }
+  ]
+}

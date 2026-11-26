@@ -133,6 +133,11 @@ For transformation workflows, see `examples/transformations_overview.ipynb`.
 - `examples/transformations_overview.ipynb` — affine, binary, finite-mixture, and approximation workflows.
 - `examples/example_sampling_methods.ipynb` — sampling backends and UNURAN-oriented scenarios.
 
+The accuracy benchmark ships its own runnable example:
+`examples/benchmark_scenario.json` (a scenario file) with
+`examples/run_benchmark_scenario.py` (the runner script) — see
+[BENCHMARKING.md](BENCHMARKING.md).
+
 ---
 
 ## 📖 Documentation
@@ -141,6 +146,27 @@ For transformation workflows, see `examples/transformations_overview.ipynb`.
 https://pysatl.github.io/pysatl-core/
 
 Documentation previews are automatically generated for pull requests and can be inspected via CI artifacts.
+
+---
+
+## 📊 Accuracy benchmarking
+
+The repository also ships an accuracy benchmark framework
+(`src/pysatl_core_bench`, see [benchmarks/README.md](benchmarks/README.md)):
+it measures the numerical accuracy of pysatl-core against reference
+sources — scipy wrappers and 50-decimal-digit mpmath tables — scenario by
+scenario, from declarative JSON files.
+
+```bash
+poetry run python benchmarks/run_accuracy.py --smoke   # pipeline health check (~2 s)
+poetry run python benchmarks/run_accuracy.py --all S1.1 # one specific scenario file
+```
+
+The full command reference and the scenario-JSON specification (every
+field, every value form, every default) live in
+[BENCHMARKING.md](BENCHMARKING.md).  No additional dependencies beyond
+the ones above are required (mpmath is only needed to regenerate the
+shipped reference tables).
 
 ---
 
