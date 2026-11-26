@@ -17,7 +17,7 @@ Rules (framework conventions):
   the failure is definitely execution: a crash of the measured (subject)
   side becomes ``Status.FAILED``, a crash of the reference side becomes
   ``Status.INVALID_REFERENCE``.  The same role rule applies to a quantile
-  follow-up crashing inside metric evaluation (ред. 46): the subject CDF
+  follow-up crashing inside metric evaluation (rev. 46): the subject CDF
   follow-up (``e2_self_consistency``) is ``failed``, the reference CDF
   follow-up (``e2_true``) is ``invalid_reference``.  Genuine framework bugs
   raise :class:`FrameworkDefect` and propagate.

@@ -1,4 +1,4 @@
-"""Optional invariant post-check (К-6).
+"""Optional invariant post-check (K-6).
 
 The checker is *not* a value source (it returns violations, never ``y``)
 and sits outside the ``ValueSource`` hierarchy.  By default
@@ -32,12 +32,12 @@ class InvariantChecker:
     """Mathematical sanity checks of one participant's values."""
 
     def check(self, query: AccuracyQuery, values: Float64Array) -> list[Violation]:
-        """Check values in the *native* space of the participant (REV-5).
+        """Check values in the *native* output_scale of the participant (REV-5).
 
         The runner passes unconverted (native) values — the rule of the
-        native space (N2/D8): monotonicity of cdf/ppf holds in the native
-        space of v1 sources (probability).  A source answering natively in
-        survival space would need direction-aware rules, which v1 does not
+        native scale (N2/D8): monotonicity of cdf/ppf holds in the native
+        scale of v1 sources (probability).  A source answering natively in
+        survival scale would need direction-aware rules, which v1 does not
         have; characteristics without rules (everything beyond pdf/cdf/ppf)
         get no checks — that limit is a documented v1 boundary, and the
         ``invariant_check_skipped`` note channel reports skips.

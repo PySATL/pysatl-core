@@ -1,12 +1,12 @@
 """Reference-side value sources: precomputed tables and on-demand computers.
 
-Naming (ред. 40): :class:`PrecomputedTable` is the *data* — an immutable
+Naming (rev. 40): :class:`PrecomputedTable` is the *data* — an immutable
 reference table with provenance; :class:`TableLookupSource` is the
 *service* — the ``ValueSource`` that looks values up in such a table and
 reports honest coverage (``missing``).  A table is an optimization, never
 a requirement, and a compute-capable source fills the gaps.
 ``OnDemandComputer`` wraps any other source, adds a content-addressed value
-cache (В-5: reference values are deterministic, so the cache is shared
+cache (B-5: reference values are deterministic, so the cache is shared
 across the scenarios of a comparison group) and exposes both capabilities.
 The cache key carries the *order* of the requested points (``values_hash``,
 not the order-independent ``grid_hash``) and the distribution fingerprint:
@@ -44,11 +44,11 @@ from pysatl_core_bench.accuracy.scenarios.spec import (
     DistributionSpec,
     ParticipantSpec,
 )
-from pysatl_core_bench.accuracy.types import KNOWN_SPACES, Capability, Readiness
+from pysatl_core_bench.accuracy.types import KNOWN_OUTPUT_SCALES, Capability, Readiness
 
 Float64Array = NDArray[np.float64]
 
-TABLE_SCHEMA = "pysatl-core-bench.table/1"
+TABLE_SCHEMA = "pysatl-core-bench.table/2"
 """Schema tag of the JSON reference-table format loaded by ``PrecomputedTable``."""
 
 __all__ = [
@@ -63,10 +63,10 @@ __all__ = [
 
 @dataclass(frozen=True)
 class PrecomputedTable:
-    """Immutable reference table with provenance (the *data*, ред. 40)."""
+    """Immutable reference table with provenance (the *data*, rev. 40)."""
 
     characteristic: str
-    space: str
+    output_scale: str
     points: Float64Array
     values: Float64Array
     library: str = "precomputed"
@@ -105,7 +105,7 @@ class PrecomputedTable:
         return {
             "schema": TABLE_SCHEMA,
             "characteristic": self.characteristic,
-            "space": self.space,
+            "output_scale": self.output_scale,
             "library": self.library,
             "library_version": self.library_version,
             "family": self.family,
@@ -127,9 +127,9 @@ class PrecomputedTable:
         if not isinstance(characteristic, str) or not characteristic:
             msg = "table characteristic must be a non-empty string"
             raise ValueError(msg)
-        space = payload.get("space")
-        if space not in KNOWN_SPACES:
-            msg = f"table space must be one of {KNOWN_SPACES}, got {space!r}"
+        output_scale = payload.get("output_scale")
+        if output_scale not in KNOWN_OUTPUT_SCALES:
+            msg = f"table output_scale must be one of {KNOWN_OUTPUT_SCALES}, got {output_scale!r}"
             raise ValueError(msg)
         parameters = payload.get("parameters")
         if parameters is not None and not isinstance(parameters, Mapping):
@@ -147,7 +147,7 @@ class PrecomputedTable:
         values = cls._finite_series(payload.get("values"), "values")
         return cls(
             characteristic=characteristic,
-            space=space,
+            output_scale=output_scale,
             points=np.asarray(points, dtype=np.float64),
             values=np.asarray(values, dtype=np.float64),
             library=str(payload.get("library", "precomputed")),
@@ -189,7 +189,7 @@ class PrecomputedTable:
 class TableLookupSource(ValueSource):
     """A lookup-only value source backed by a precomputed table.
 
-    The service half of the ред. 40 rename: it *owns* one
+    The service half of the rev. 40 rename: it *owns* one
     :class:`PrecomputedTable` (the data) and answers protocol calls by
     looking values up in it.  The table identity (family, parametrization,
     parameters) is checked against the scenario-level distribution, not
@@ -242,7 +242,7 @@ class TableLookupSource(ValueSource):
         points: Float64Array | None = None,
     ) -> SupportVerdict:
         if participant.strategy is not None:
-            # М-6/REV-5: a strategy on a lookup source is an *inapplicable
+            # M-6/REV-5: a strategy on a lookup source is an *inapplicable
             # configuration* (the operation exists, the configuration does
             # not) — unsupported_configuration, not not_applicable.
             return SupportVerdict(
@@ -269,12 +269,12 @@ class TableLookupSource(ValueSource):
                     f"scenario asks {str(query.characteristic)!r}"
                 ),
             )
-        if query.space not in (self._table.space,):
+        if query.output_scale not in (self._table.output_scale,):
             return SupportVerdict(
                 readiness=Readiness.NOT_APPLICABLE,
                 reason=(
-                    f"table holds values in {self._table.space!r} space, "
-                    f"query asks in {query.space!r}"
+                    f"table holds values on the {self._table.output_scale!r} scale, "
+                    f"query asks on {query.output_scale!r}"
                 ),
             )
         if points is None:
@@ -300,8 +300,8 @@ class TableLookupSource(ValueSource):
             missing=tuple(float(x) for x in uncovered[:_MAX_REPORTED_MISSING]),
         )
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
-        return [self._table.space]
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+        return [self._table.output_scale]
 
     def prepare(
         self,
@@ -408,8 +408,8 @@ class ExternalFunctionSource(ValueSource):
     a fixed-parameter function is lifted with a closure
     (``lambda _p, _q, x: f(x)``).  Capabilities default to ``{compute}``;
     wrap the source in ``OnDemandComputer`` to add the shared lookup cache
-    (В-5).  Computation strategies are refused with ``not_applicable``:
-    plain library functions have no strategy knobs (М-6, no silent
+    (B-5).  Computation strategies are refused with ``not_applicable``:
+    plain library functions have no strategy knobs (M-6, no silent
     fallback).
     """
 
@@ -421,7 +421,7 @@ class ExternalFunctionSource(ValueSource):
         provenance: Provenance,
         characteristics: Collection[str] | None = None,
         capabilities: frozenset[Capability] = frozenset({Capability.COMPUTE}),
-        native_spaces: Sequence[str] = ("probability",),
+        native_output_scales: Sequence[str] = ("probability",),
         support: SupportBounds = SupportBounds(-inf, inf, False, False),
         subject_id: str | None = None,
     ) -> None:
@@ -430,7 +430,7 @@ class ExternalFunctionSource(ValueSource):
         self._provenance = provenance
         self._characteristics = characteristics
         self._capabilities = capabilities
-        self._native_spaces = tuple(native_spaces)
+        self._native_output_scales = tuple(native_output_scales)
         self._support = support
         self._subject_id = subject_id or f"{provenance.library}@{provenance.library_version}"
 
@@ -463,7 +463,7 @@ class ExternalFunctionSource(ValueSource):
         points: Float64Array | None = None,
     ) -> SupportVerdict:
         if participant.strategy is not None:
-            # М-6/REV-5: same rule as TableLookupSource — unsupported
+            # M-6/REV-5: same rule as TableLookupSource — unsupported
             # configuration, not not_applicable.
             return SupportVerdict(
                 readiness=Readiness.UNSUPPORTED_CONFIGURATION,
@@ -484,8 +484,8 @@ class ExternalFunctionSource(ValueSource):
             )
         return SupportVerdict(readiness=Readiness.READY, reason="external function")
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
-        return list(self._native_spaces)
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+        return list(self._native_output_scales)
 
     def prepare(
         self,
@@ -495,7 +495,7 @@ class ExternalFunctionSource(ValueSource):
     ) -> PreparedSubject:
         # The participant is stashed so that evaluate() can pull the adapter
         # knobs exactly like compute() does; the distribution travels in the
-        # prepared state (ред. 40).
+        # prepared state (rev. 40).
         return PreparedSubject(
             participant_id=participant.participant_id,
             query=query,
@@ -548,7 +548,7 @@ class OnDemandComputer(ValueSource):
     """Wraps any source; serves cached values as lookup, computes the rest.
 
     The cache is unbounded in v1 (REV-17: an eviction policy belongs to the
-    future time/memory model, К-7) and thread-safe (А-9: the wrapped source
+    future time/memory model, K-7) and thread-safe (A-9: the wrapped source
     may be shared by parallel runs); ``cache_info()`` reports its size and
     ``cache_clear()`` resets it between scenario batches.
     """
@@ -594,8 +594,8 @@ class OnDemandComputer(ValueSource):
             return SupportVerdict(readiness=Readiness.READY, reason="served from cache")
         return self._wrapped.assess(participant, query, distribution, points)
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
-        return self._wrapped.native_spaces(participant, query)
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+        return self._wrapped.native_output_scales(participant, query)
 
     def prepare(
         self,
@@ -615,7 +615,7 @@ class OnDemandComputer(ValueSource):
         values = self._wrapped.evaluate(prepared, arr)
         with self._lock:
             # Double-check: a parallel evaluator may have filled the key
-            # while this thread was computing the same request (А-9).
+            # while this thread was computing the same request (A-9).
             cached = self._cache.get(key)
             if cached is None:
                 self._cache[key] = values.copy()
@@ -647,7 +647,7 @@ class OnDemandComputer(ValueSource):
         # values_hash is order-sensitive by design (D1): cached values are
         # aligned to the requested point order, so the key must not collapse
         # permutations of the same point set (no silent data swap).  The
-        # distribution fingerprint is in the key (ред. 40): one shared
+        # distribution fingerprint is in the key (rev. 40): one shared
         # source serves whole sweeps whose scenarios differ only in the
         # scenario-level distribution.
         fingerprint = prepared.distribution.fingerprint() if prepared.distribution else ""

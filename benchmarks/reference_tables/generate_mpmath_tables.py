@@ -90,7 +90,7 @@ def build_table(
         )
     return PrecomputedTable(
         characteristic=characteristic,
-        space=_SPACES[characteristic],
+        output_scale=_SPACES[characteristic],
         points=points,
         values=values,
         library="mpmath",
@@ -149,7 +149,7 @@ def main() -> int:
         )
         path = args.out / f"normal_{characteristic}_mu{args.mu:g}_sigma{args.sigma:g}.json"
         path.write_text(
-            json.dumps(table.to_json_dict(), separators=(",", ":"), ensure_ascii=True),
+            json.dumps(table.to_json_dict(), separators=(",", ":"), ensure_ascii=True) + "\n",
             encoding="utf-8",
         )
         # round-trip guard: the file must load back to the same table_hash

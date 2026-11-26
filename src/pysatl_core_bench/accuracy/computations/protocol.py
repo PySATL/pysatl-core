@@ -4,16 +4,18 @@ One protocol serves everything one can ask numbers from: the measured
 library adapter, precomputed tables, and on-demand computers.  Roles are
 separated by registry arguments and ``capabilities``, never by type.
 
-The distribution is a protocol argument (ред. 40): it is scenario-level
+The distribution is a protocol argument (rev. 40): it is scenario-level
 state (:class:`~...scenarios.spec.DistributionSpec`), so every method that
 needs it takes it explicitly instead of reading it from the participant —
 the participant carries only "who" (``source_id``, ``adapter_config``,
 ``strategy``).
 
-Space rule (N2): ``evaluate``/``compute`` have *no* space parameter — a
-source always answers in its native space; conversion to the question
-space is a runner-side ``SpaceConverter`` decision (D8), applied to the
-subject and to references alike.
+Scale rule (N2): ``evaluate``/``compute`` have *no* scale parameter — a
+source always answers in its native output scale; conversion to the question
+scale is a runner-side ``OutputScaleConverter`` decision (D8), applied to the
+subject and to references alike.  Fixing the scale at the protocol boundary
+is what keeps the precision policy in one place: a source that silently
+pre-converted its answers would hide a precision loss inside the adapter.
 """
 
 from __future__ import annotations
@@ -73,28 +75,28 @@ class ValueSource(Protocol):
     @property
     def source_id(self) -> str:
         """Registry key (C1)."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     @property
     def capabilities(self) -> frozenset[Capability]:
         """``{compute}``, ``{lookup}`` or ``{compute, lookup}``."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     @property
     def subject_id(self) -> str:
         """Identity of the computational object behind the source."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     @property
     def provenance(self) -> Provenance:
         """Static origin passport of the source."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     def support(
         self, participant: ParticipantSpec, distribution: DistributionSpec
     ) -> SupportBounds:
         """Bounds of the distribution support behind ``participant``."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     def assess(
         self,
@@ -105,11 +107,11 @@ class ValueSource(Protocol):
     ) -> SupportVerdict:
         """Readiness: with ``points=None`` "can you serve this at all",
         with points "are these points served (and which are missing)"."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
-        """Value spaces in which this source answers without conversion."""
-        ...
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+        """Output scales this source answers in without any conversion."""
+        ...  # pragma: no cover (protocol body)
 
     def prepare(
         self,
@@ -118,11 +120,11 @@ class ValueSource(Protocol):
         distribution: DistributionSpec,
     ) -> PreparedSubject:
         """Build the reusable computational state once per participant."""
-        ...
+        ...  # pragma: no cover (protocol body)
 
     def evaluate(self, prepared: PreparedSubject, points: Float64Array) -> Float64Array:
-        """Values at ``points`` in the *native* space (no space parameter)."""
-        ...
+        """Values at ``points`` in the *native* scale (no scale parameter)."""
+        ...  # pragma: no cover (protocol body)
 
     def compute(
         self,
@@ -132,4 +134,4 @@ class ValueSource(Protocol):
         distribution: DistributionSpec,
     ) -> Float64Array:
         """One-shot path (detector fallback, quantile follow-ups)."""
-        ...
+        ...  # pragma: no cover (protocol body)

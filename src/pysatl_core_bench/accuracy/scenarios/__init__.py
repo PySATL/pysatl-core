@@ -35,6 +35,12 @@ from .spec import (
     ScenarioSpec,
     StrategySpec,
 )
+from .tail import (
+    TAIL_ORIGIN_CURATED,
+    TAIL_ORIGIN_FALLBACK,
+    TailExtension,
+    resolve_tail_extension,
+)
 
 __all__ = [
     "AccuracyQuery",
@@ -60,5 +66,9 @@ __all__ = [
     "SpecialPointDetector",
     "StrategySpec",
     "TAIL_EXTENSION",
+    "TAIL_ORIGIN_CURATED",
+    "TAIL_ORIGIN_FALLBACK",
+    "TailExtension",
     "VIOLATION_CODE",
+    "resolve_tail_extension",
 ]

@@ -1,11 +1,11 @@
 """Comparison stage: the group table and pairwise agreement.
 
 The comparator receives only the ``comparison_group_id`` and *reads* all
-results of the group from the store — it never writes (В-4a).  The table
+results of the group from the store — it never writes (B-4a).  The table
 includes every result, whatever its status; nothing is silently dropped
 (N6).  Invariant verdicts are spread inside the group only (N7) by the
 shared :func:`spread_invariant_verdicts` helper: the runner applies it to
-the in-memory results *before* writing them to the store (А-5, REV-16:
+the in-memory results *before* writing them to the store (A-5, REV-16:
 store rows agree with the report by construction, not by a re-spread at
 read time — the comparator reads stored rows as they are).
 ``agreement`` compares two results of the *same* scenario pair: it
@@ -73,7 +73,7 @@ class Comparator:
     def table(self, group_id: str) -> ComparisonTable:
         """All results of the group, exactly as stored (N6).
 
-        The runner spreads invariant verdicts before writing (А-5, REV-16),
+        The runner spreads invariant verdicts before writing (A-5, REV-16),
         so stored rows already agree with the report; the comparator reads
         them without a re-spread.
         """
@@ -81,10 +81,10 @@ class Comparator:
         return ComparisonTable(comparison_group_id=group_id, rows=tuple(rows))
 
     def curve(self, group_id: str) -> SweepCurve:
-        """Sweep curve over ``sort_key`` for groups of a sweep (К-1).
+        """Sweep curve over ``sort_key`` for groups of a sweep (K-1).
 
         Built from the comparator's own table; invariant verdicts were
-        spread by the runner before writing (А-5), so verdict-affected rows
+        spread by the runner before writing (A-5), so verdict-affected rows
         are reflected in the curve the same way as in the table (N7).  The
         axis carries every distinct
         numeric sort_key (ascending) then every distinct string sort_key;
@@ -108,7 +108,7 @@ class Comparator:
                         sort_key=row.sort_key,
                         pair=row.pair,
                         characteristic=metric.characteristic,
-                        space=metric.space,
+                        output_scale=metric.output_scale,
                         region=metric.region,
                         status=row.status,
                         metrics=dict(metric.metrics),
@@ -117,7 +117,7 @@ class Comparator:
         points.sort(
             key=lambda p: (
                 p.characteristic,
-                p.space,
+                p.output_scale,
                 p.region,
                 p.pair,
                 _sort_key_order(p.sort_key),
@@ -150,34 +150,36 @@ class Comparator:
                 f"got {a.pair} vs {b.pair}"
             )
             raise GridMismatchError(msg)
-        index_b = {(m.characteristic, m.space, m.region): m for m in b.metrics}
+        index_b = {(m.characteristic, m.output_scale, m.region): m for m in b.metrics}
         entries: list[AgreementEntry] = []
         skipped: list[str] = []
         for metric_a in a.metrics:
-            metric_b = index_b.get((metric_a.characteristic, metric_a.space, metric_a.region))
+            metric_b = index_b.get(
+                (metric_a.characteristic, metric_a.output_scale, metric_a.region)
+            )
             if metric_b is None:
                 skipped.append(
-                    f"{metric_a.characteristic}/{metric_a.space}/{metric_a.region} "
+                    f"{metric_a.characteristic}/{metric_a.output_scale}/{metric_a.region} "
                     "has no counterpart on side b"
                 )
                 continue
             if metric_a.grid_hash != metric_b.grid_hash:
                 msg = (
                     f"grid_hash mismatch for {metric_a.characteristic}/"
-                    f"{metric_a.space}/{metric_a.region}: the two sides were "
+                    f"{metric_a.output_scale}/{metric_a.region}: the two sides were "
                     f"measured on different grids; agreement is defined only "
                     f"on equal grids"
                 )
                 raise GridMismatchError(msg)
             # Diffs cover the accuracy metrics *and* the diagnostics of the
-            # record (ред. 46): both are floats attached to the same
-            # (characteristic, space, region) key under the same grid-hash
+            # record (rev. 46): both are floats attached to the same
+            # (characteristic, output_scale, region) key under the same grid-hash
             # precondition.  Key namespaces are disjoint by construction.
             values_a = {**metric_a.metrics, **metric_a.diagnostics}
             values_b = {**metric_b.metrics, **metric_b.diagnostics}
             common = sorted(set(values_a) & set(values_b))
             skipped.extend(
-                f"{metric_a.characteristic}/{metric_a.space}/{metric_a.region}: "
+                f"{metric_a.characteristic}/{metric_a.output_scale}/{metric_a.region}: "
                 f"metric {key!r} present on one side only"
                 for key in sorted(set(values_a) ^ set(values_b))
             )
@@ -185,13 +187,13 @@ class Comparator:
             entries.append(
                 AgreementEntry(
                     characteristic=metric_a.characteristic,
-                    space=metric_a.space,
+                    output_scale=metric_a.output_scale,
                     region=metric_a.region,
                     grid_hash=metric_a.grid_hash,
                     diffs=diffs,
                 )
             )
-        a_keys = {(m.characteristic, m.space, m.region) for m in a.metrics}
+        a_keys = {(m.characteristic, m.output_scale, m.region) for m in a.metrics}
         skipped.extend(
             f"{key[0]}/{key[1]}/{key[2]} has no counterpart on side a"
             for key in sorted(set(index_b) - a_keys)

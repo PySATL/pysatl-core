@@ -34,7 +34,7 @@ The dict form is frozen on construction (see :func:`frozen_mapping`)."""
 
 @dataclass(frozen=True)
 class DistributionSpec:
-    """The distribution under measurement, canonical form (ред. 40).
+    """The distribution under measurement, canonical form (rev. 40).
 
     Scenario-level, shared by *all* participants of the scenario: "what is
     measured" lives next to the queries, "who measures" (``source_id``,
@@ -102,20 +102,40 @@ class ParticipantSpec:
 
 @dataclass(frozen=True)
 class Region:
-    """A region of the support with the value space of its question (N3)."""
+    """One region of the question axis, with the output scale of its values.
+
+    A region answers "where on the axis are we measuring" (the interval,
+    with ``None`` sides meaning "open, resolve against the runtime
+    support"), while ``output_scale`` answers "in which scale must the
+    compared values be reported".  The scale belongs to the region — not
+    to the reference — because one reference is legitimately compared in
+    two scales by two regions of one scenario (N3).
+    """
 
     name: str
     interval: Interval
-    space: str = "probability"
+    output_scale: str = "probability"
 
 
 @dataclass(frozen=True)
 class AccuracyQuery:
-    """What is asked, in which space, with which grid hint (ex-``InputSpec``)."""
+    """What is asked, in which output scale, and where to measure.
+
+    ``grid_hint`` is a *hint*: it steers the deterministic grid generator
+    (the generator is free to interpret it — e.g. ``n_points``) and its
+    absence means the documented default grid.  ``points`` is a *contract*,
+    not a hint: the user's own coordinates, which no component may
+    reinterpret — the user decides where to measure, the framework only
+    offers machinery (generated grid, special-point densification) on top
+    of that decision.  The two may be combined — one run then measures the
+    generated grid AND the user's points; a ``points`` array without
+    ``grid_hint`` measures exactly those points.
+    """
 
     characteristic: CharacteristicName
-    space: str = "probability"
+    output_scale: str = "probability"
     grid_hint: Mapping[str, Any] | None = None
+    points: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         if self.grid_hint is not None:  # REV-20: no post-load mutation

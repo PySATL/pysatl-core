@@ -7,7 +7,7 @@
       "sigma": 1.0
     }
   },
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "comparison_group": "sweep-normal-cdf-npoints",
   "subject": {
     "source_id": "pysatl-core"

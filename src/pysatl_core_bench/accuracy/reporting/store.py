@@ -1,7 +1,7 @@
 """Results store: the persistence sink between pipeline stages.
 
 Writers are the runner (pair results) and the reporter (rendered reports);
-the comparator only reads (В-4a).  V1 keeps everything in memory and, when
+the comparator only reads (B-4a).  V1 keeps everything in memory and, when
 constructed with a ``root`` directory, mirrors results, sidecars and
 reports to JSON files.  Instances are independent, so parallel runs in one
 process stay isolated; a shared instance is safe too (internal lock).
@@ -49,7 +49,7 @@ class ResultsStore:
     def write_result(self, result: AccuracyResult) -> None:
         """Runner-side write of one pair result.
 
-        One result per (scenario, pair) is the invariant (D3/В-7; REV-5
+        One result per (scenario, pair) is the invariant (D3/B-7; REV-5
         refines the key: sweep/chain variants of one group legitimately
         repeat the same pair under different ``scenario_id``).  A duplicate
         write raises instead of appending silently.
@@ -92,7 +92,7 @@ class ResultsStore:
 
     # -- sidecars ------------------------------------------------------------------
 
-    def put_sidecar(self, values: Float64Array, space: str) -> tuple[str, str]:
+    def put_sidecar(self, values: Float64Array, output_scale: str) -> tuple[str, str]:
         """Store pointwise values; returns ``(uri, hash)``.
 
         Sidecars keep pointwise curves out of the result rows; the URI is
@@ -106,7 +106,7 @@ class ResultsStore:
             if self._root is not None:
                 self._dump_json(
                     self._root / f"sidecar-{digest[:24]}.json",
-                    {"space": space, "values": arr.tolist()},
+                    {"output_scale": output_scale, "values": arr.tolist()},
                 )
         return uri, digest
 

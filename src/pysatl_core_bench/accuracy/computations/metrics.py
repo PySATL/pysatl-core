@@ -26,7 +26,7 @@ carry numbers that are *not* accuracy against the reference:
 - ``e2_self_consistency`` (ppf scenarios) — the former ``e2``:
   ``max |F_subj(q_found) - p|``, the internal ppf->cdf consistency of the
   subject.  It involves no reference at all, so it lives outside the
-  accuracy metrics (решение ред. 46: two metrics instead of one).
+  accuracy metrics (the rev. 46 decision: two metrics instead of one).
 - ``e2_self_consistency_unanswered`` / ``e2_true_unanswered`` — counts of
   follow-up points excluded from the respective maxima.
 
@@ -34,7 +34,24 @@ The framework guarantees diagnostic key names never collide with metric
 key names (``e2_self_consistency`` prefix vs the accuracy keys).
 
 Partial reference coverage is still a measurement (D6): metrics run over
-the covered points and holes are counted in ``n_missing_reference``.
+the covered points and holes are counted in ``n_missing_reference`` — and
+the holes themselves are enumerated in the AP-1 excluded-points
+dictionary (``MetricRecord.excluded_points``): every inside-support point
+with no comparable value carries its coordinate and a reason tag named
+after the counter that holds the aggregate (``n_missing_reference`` /
+``n_invalid_subject``; ``singularity`` is reserved for a future
+special-point exclusion policy).  Points outside the support never reach
+the grid and are reported as counts, not coordinates (AP-1).
+
+lpdf interpretation (rev. 58): the metrics run unchanged on log-density
+values.  ``abs_error`` = ``max |lpdf_subj - lpdf_ref|`` is the primary
+metric — it is exactly the log-domain accuracy (and, for small errors,
+the log-relative error of the pdf itself).  ``inf_norm``/``lre`` divide
+by ``|lpdf_true|``, which degenerates where the log-density crosses zero
+(pdf = 1); the zero-reference policy covers exact crossings, but a point
+that merely lands *near* a crossing inflates the relative error without
+saying anything about the implementation — read ``lre`` for lpdf as a
+grid-placement-sensitive hint, never as the accuracy verdict.
 """
 
 from __future__ import annotations
@@ -51,10 +68,17 @@ import numpy as np
 from numpy.typing import NDArray
 
 from pysatl_core.types import CharacteristicName
-from pysatl_core_bench.accuracy.dto import MetricRecord
+from pysatl_core_bench.accuracy.dto import (
+    EXCLUSION_INVALID_SUBJECT,
+    EXCLUSION_MISSING_REFERENCE,
+    EXCLUSION_SINGULARITY,
+    ExcludedPoint,
+    MetricRecord,
+)
+from pysatl_core_bench.accuracy.errors import FrameworkDefect
 from pysatl_core_bench.accuracy.scenarios.grid import Grid
 from pysatl_core_bench.accuracy.scenarios.spec import AccuracyQuery
-from pysatl_core_bench.accuracy.types import PROBABILITY_SPACE
+from pysatl_core_bench.accuracy.types import PROBABILITY_SCALE
 
 Float64Array = NDArray[np.float64]
 BoolArray = NDArray[np.bool_]
@@ -93,6 +117,18 @@ class MetricsEvaluator:
         """
         y = np.asarray(subject_values, dtype=np.float64).ravel()
         y_true = np.asarray(reference_values, dtype=np.float64).ravel()
+        if y.size != grid.points.size or y_true.size != grid.points.size:
+            # The values are grid-bound by pipeline contract (a source
+            # answers per point of the grid it was handed); a misaligned
+            # array cannot be attributed to coordinates, so the AP-1
+            # dictionary would be fiction.  Sources returning wrong-length
+            # arrays are a framework defect, not a measurement outcome.
+            msg = (
+                "metric evaluation contract violated: subject/reference value arrays "
+                f"must align with the grid points ({y.size} / {y_true.size} values "
+                f"for {grid.points.size} points)"
+            )
+            raise FrameworkDefect(msg)
         missing = (
             np.zeros(y.shape, dtype=bool)
             if missing_reference is None
@@ -109,17 +145,19 @@ class MetricsEvaluator:
         # Reference non-finiteness is already counted by the missing mask;
         # the non-finite *subject* values would otherwise vanish silently
         # (REV-5, no silence): they get their own counter.
-        n_invalid_subject = int((~np.isfinite(y) & ~missing & ~excluded).sum())
+        subject_invalid = ~np.isfinite(y) & ~missing & ~excluded
+        n_invalid_subject = int(subject_invalid.sum())
 
         record = MetricRecord(
             characteristic=str(query.characteristic),
-            space=grid.region.space,
+            output_scale=grid.region.output_scale,
             region=grid.region.name,
             grid_hash=grid.grid_hash,
             n_missing_reference=int(missing.sum()),
             n_excluded=int(excluded.sum()),
             n_compared=int(compared.sum()),
             n_invalid_subject=n_invalid_subject,
+            excluded_points=self._excluded_points(grid.points, missing, excluded, subject_invalid),
         )
         if not compared.any():
             return record
@@ -156,6 +194,32 @@ class MetricsEvaluator:
             record = replace(record, metrics=metrics)
         return record
 
+    @staticmethod
+    def _excluded_points(
+        points: Float64Array,
+        missing: BoolArray,
+        excluded: BoolArray,
+        subject_invalid: BoolArray,
+    ) -> tuple[ExcludedPoint, ...]:
+        """AP-1 dictionary of one cell: coordinate + reason tag per point.
+
+        Only *inside-support* points land here (the grid never carries
+        out-of-support points); the reason tag is the name of the counter
+        that aggregates the same fact, so the dictionary and the counters
+        cannot drift apart.  A point both missing at the reference and
+        invalid at the subject is tagged ``n_missing_reference`` — the
+        reference hole explains the non-comparison on its own.
+        """
+        entries: list[ExcludedPoint] = []
+        for x, miss, excl, invalid in zip(points, missing, excluded, subject_invalid, strict=True):
+            if miss:
+                entries.append(ExcludedPoint(float(x), EXCLUSION_MISSING_REFERENCE))
+            elif excl:
+                entries.append(ExcludedPoint(float(x), EXCLUSION_SINGULARITY))
+            elif invalid:
+                entries.append(ExcludedPoint(float(x), EXCLUSION_INVALID_SUBJECT))
+        return tuple(entries)
+
     def _fill_ppf_followups(
         self,
         metrics: dict[str, float],
@@ -173,7 +237,7 @@ class MetricsEvaluator:
         answers non-finitely at some compared point is excluded from its
         maximum and counted — silence and NaN are both dishonest (REV-5).
         """
-        if grid.region.space != PROBABILITY_SPACE:
+        if grid.region.output_scale != PROBABILITY_SCALE:
             return
         levels = np.asarray(grid.points, dtype=np.float64).ravel()
         if subject_cdf_followup is not None:

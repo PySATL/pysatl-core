@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -28,6 +29,8 @@ from pysatl_core_bench import (
     SupportBounds,
     TableLookupSource,
 )
+from pysatl_core_bench.accuracy.computations.protocol import PreparedSubject
+from pysatl_core_bench.accuracy.computations.sources import _MAX_REPORTED_MISSING, TABLE_SCHEMA
 from pysatl_core_bench.accuracy.types import Capability, Readiness
 
 
@@ -59,7 +62,7 @@ def make_table(n: int = 41, tol: float = 1e-12) -> TableLookupSource:
         "tbl",
         PrecomputedTable(
             characteristic="cdf",
-            space="probability",
+            output_scale="probability",
             points=points,
             values=stats.norm.cdf(points),
             coverage_tol=tol,
@@ -121,7 +124,7 @@ class TestTableLookupSource:
             )
 
     def test_participant_strategy_is_unsupported_configuration(self) -> None:
-        """A lookup source cannot honor strategies: unsupported, not n/a (М-6/REV-5)."""
+        """A lookup source cannot honor strategies: unsupported, not n/a (M-6/REV-5)."""
         participant = ParticipantSpec(
             role=Role.REFERENCE,
             source_id="tbl",
@@ -166,7 +169,7 @@ class TestOnDemandComputer:
         assert verdict.readiness == Readiness.READY
 
     def test_cache_key_is_order_sensitive(self) -> None:
-        # А-3 ("никакой тишины"): the same point set in another order must
+        # A-3 ("no silence"): the same point set in another order must
         # receive values aligned to *that* order, never the first order's
         # array.  The key uses order-sensitive values_hash, not grid_hash.
         calls: list[list[float]] = []
@@ -191,7 +194,7 @@ class TestOnDemandComputer:
         assert len(calls) == 2  # permuted request is a cache miss, not a swap
 
     def test_cache_key_is_distribution_sensitive(self) -> None:
-        # ред. 40: one shared source serves whole sweeps whose scenarios
+        # rev. 40: one shared source serves whole sweeps whose scenarios
         # differ only in the scenario-level distribution; the cache key
         # must never serve one distribution's values for another.
         calls: list[float] = []
@@ -326,7 +329,7 @@ class TestPySATLAdapter:
         assert verdict.readiness == Readiness.UNSUPPORTED_CONFIGURATION
 
     def test_adapter_config_is_refused_no_silent_knobs(self) -> None:
-        """ред. 40: the v1 pysatl-core adapter accepts no adapter_config."""
+        """rev. 40: the v1 pysatl-core adapter accepts no adapter_config."""
         adapter = PySATLAdapter()
         participant = ParticipantSpec(
             role=Role.SUBJECT,
@@ -431,14 +434,15 @@ class TestExternalFunctionSource:
         )
 
 
-TABLE_DIR = Path(__file__).resolve().parents[2] / "benchmarks" / "reference_tables"
+# Repository root: this file lives in tests/bench/computations/.
+TABLE_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "reference_tables"
 
 
 def make_table_data(n: int = 41) -> PrecomputedTable:
     points = np.linspace(-3.0, 3.0, n)
     return PrecomputedTable(
         characteristic="cdf",
-        space="probability",
+        output_scale="probability",
         points=points,
         values=stats.norm.cdf(points),
         library="scipy",
@@ -457,7 +461,7 @@ class TestTableJsonRoundTrip:
         restored = PrecomputedTable.from_json_dict(table.to_json_dict())
         assert restored.table_hash == table.table_hash
         assert restored.characteristic == "cdf"
-        assert restored.space == "probability"
+        assert restored.output_scale == "probability"
         assert restored.family == "Normal"
         assert restored.parametrization == "meanStd"
         assert restored.parameters == {"mu": 0.0, "sigma": 1.0}
@@ -475,11 +479,11 @@ class TestTableJsonRoundTrip:
         [
             ("schema", "pysatl-core-bench.table/0"),
             ("characteristic", ""),
-            ("space", "log"),
+            ("output_scale", "log"),
             ("dps", "50"),
             ("coverage_tol", "1e-12"),
         ],
-        ids=["schema", "characteristic", "space", "dps", "coverage_tol"],
+        ids=["schema", "characteristic", "output_scale", "dps", "coverage_tol"],
     )
     def test_invalid_fields_are_rejected(self, field: str, bad_value: object) -> None:
         payload = make_table_data().to_json_dict()
@@ -537,3 +541,344 @@ class TestShippedReferenceTables:
             )
             assert table.dps is not None and table.dps >= 50
             np.testing.assert_allclose(table.values, reference, atol=5e-16)
+
+
+class TestTableValidationMatrix:
+    """PrecomputedTable JSON validation (TABLE_SCHEMA): a table is data, so
+    every schema rule is a pinned refusal, not a warning."""
+
+    @staticmethod
+    def payload(**overrides: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "schema": TABLE_SCHEMA,
+            "characteristic": "cdf",
+            "output_scale": "probability",
+            "points": [0.0, 1.0],
+            "values": [0.5, 0.84],
+        }
+        base.update(overrides)
+        return base
+
+    @pytest.mark.parametrize(
+        "overrides, match",
+        [
+            ({"schema": "other/1"}, "schema"),
+            ({"characteristic": ""}, "characteristic"),
+            ({"characteristic": 5}, "characteristic"),
+            ({"output_scale": "hazard"}, "output_scale"),
+            ({"parameters": [1]}, "parameters"),
+            ({"dps": "50"}, "dps"),
+            ({"coverage_tol": "big"}, "coverage_tol"),
+            ({"points": []}, "non-empty"),
+            ({"points": [0.0], "values": [0.5, 0.84]}, "equal length"),
+            ({"points": ["a", 1.0]}, "numbers only"),
+            ({"points": [float("nan"), 1.0]}, "finite"),
+            ({"points": "nope"}, "non-empty list"),
+        ],
+    )
+    def test_invalid_payloads_are_rejected(self, overrides: dict[str, Any], match: str) -> None:
+        with pytest.raises(ValueError, match=match):
+            PrecomputedTable.from_json_dict(self.payload(**overrides))
+
+    def test_table_sorts_points_ascending(self) -> None:
+        table = PrecomputedTable(
+            characteristic="cdf",
+            output_scale="probability",
+            points=np.asarray([1.0, 0.0]),
+            values=np.asarray([0.84, 0.5]),
+        )
+        assert list(table.points) == [0.0, 1.0]
+        assert list(table.values) == [0.5, 0.84]
+        # the sort is part of the data identity, not a hidden reorder of
+        # the file: values travel with their points
+        assert table.values[1] == 0.84
+
+    def test_table_hash_is_content_addressed(self) -> None:
+        a = PrecomputedTable(
+            characteristic="cdf",
+            output_scale="probability",
+            points=np.asarray([0.0]),
+            values=np.asarray([0.5]),
+        )
+        b = PrecomputedTable(
+            characteristic="cdf",
+            output_scale="probability",
+            points=np.asarray([0.0]),
+            values=np.asarray([0.5]),
+        )
+        assert a.table_hash == b.table_hash
+
+
+class TestTableLookupSourceVerdicts:
+    """Assess verdicts of the lookup service (M-6, D6, rev. 40)."""
+
+    def test_strategy_on_a_table_is_unsupported(self) -> None:
+        source = make_table()
+        participant = ParticipantSpec(
+            role=Role.REFERENCE,
+            source_id="t",
+            participant_id="t#x",
+            adapter_config={},
+            strategy={"name": "ForcedGraphStrategy"},
+        )
+        verdict = source.assess(participant, make_query(), make_distribution())
+        assert verdict.readiness == Readiness.UNSUPPORTED_CONFIGURATION
+
+    def test_wrong_family_is_not_applicable(self) -> None:
+        pinned = TableLookupSource(
+            "pinned-family",
+            PrecomputedTable(
+                characteristic="cdf",
+                output_scale="probability",
+                points=np.linspace(-3.0, 3.0, 41),
+                values=stats.norm.cdf(np.linspace(-3.0, 3.0, 41)),
+                family="Normal",
+            ),
+        )
+        verdict = pinned.assess(
+            make_participant(),
+            make_query(),
+            DistributionSpec(family="Cauchy", parametrization="meanStd", parameters={}),
+        )
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+
+    def test_wrong_parameter_value_is_not_applicable(self) -> None:
+        # the identity check only fires for fields the table actually pins
+        pinned = TableLookupSource(
+            "pinned",
+            PrecomputedTable(
+                characteristic="cdf",
+                output_scale="probability",
+                points=np.linspace(-3.0, 3.0, 41),
+                values=stats.norm.cdf(np.linspace(-3.0, 3.0, 41)),
+                family="Normal",
+                parametrization="meanStd",
+                parameters={"mu": 0.0, "sigma": 1.0},
+            ),
+        )
+        verdict = pinned.assess(
+            make_participant(),
+            make_query(),
+            DistributionSpec(family="Normal", parametrization="meanStd", parameters={"mu": 5.0}),
+        )
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+
+    def test_wrong_characteristic_is_not_applicable(self) -> None:
+        source = make_table()
+        verdict = source.assess(make_participant(), make_query("pdf"), make_distribution())
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+
+    def test_wrong_output_scale_is_not_applicable(self) -> None:
+        source = make_table()
+        verdict = source.assess(
+            make_participant(),
+            AccuracyQuery(characteristic=CharacteristicName.CDF, output_scale="survival"),
+            make_distribution(),
+        )
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+
+    def test_full_coverage_reports_ready_without_missing(self) -> None:
+        source = make_table()  # lattice -3 + 0.15k, coverage_tol = 1e-12
+        verdict = source.assess(
+            make_participant(), make_query(), make_distribution(), np.asarray([0.0, 0.15])
+        )
+        assert verdict.readiness == Readiness.READY
+        assert verdict.reason == "all requested points are covered"
+
+    def test_no_coverage_is_not_covered_with_reported_points(self) -> None:
+        source = make_table()  # table over [-3, 3]
+        verdict = source.assess(
+            make_participant(), make_query(), make_distribution(), np.asarray([50.0, 60.0])
+        )
+        assert verdict.readiness == Readiness.NOT_COVERED
+        assert verdict.missing and len(verdict.missing) <= _MAX_REPORTED_MISSING
+
+    def test_evaluate_fills_holes_with_nan(self) -> None:
+        source = make_table()
+        values = source.evaluate(
+            source.prepare(make_participant(), make_query(), make_distribution()),
+            np.asarray([0.0, 100.0]),
+        )
+        assert np.isfinite(values[0]) and not np.isfinite(values[1])
+
+    def test_scale_mismatch_names_both_scales(self) -> None:
+        source = make_table()
+        verdict = source.assess(
+            make_participant(),
+            AccuracyQuery(characteristic=CharacteristicName.CDF, output_scale="survival"),
+            make_distribution(),
+        )
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+        assert "'probability'" in verdict.reason and "'survival'" in verdict.reason
+
+    def test_compute_is_refused(self) -> None:
+        with pytest.raises(SourceOperationError, match="no compute capability"):
+            make_table().compute(
+                make_participant(), make_query(), np.asarray([0.0]), make_distribution()
+            )
+
+
+class TestExternalFunctionSourceContract:
+    """The generic wrapper: normalization, refusal rules, payload checks."""
+
+    def test_declared_characteristics_are_enforced(self) -> None:
+        source = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.zeros(np.asarray(x).shape),
+            provenance=Provenance(library="ext", library_version="0"),
+            characteristics=["pdf"],
+        )
+        verdict = source.assess(make_participant(), make_query(), make_distribution())
+        assert verdict.readiness == Readiness.NOT_APPLICABLE
+
+    def test_shape_mismatch_is_an_operation_error(self) -> None:
+        source = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.zeros(3),
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        prepared = source.prepare(make_participant(), make_query(), make_distribution())
+        with pytest.raises(SourceOperationError, match="shape"):
+            source.evaluate(prepared, np.asarray([0.0, 1.0]))
+
+    def test_foreign_prepared_payload_is_refused(self) -> None:
+        source = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x),
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        prepared = PreparedSubject(
+            participant_id="x", query=make_query(), payload="not-a-participant"
+        )
+        with pytest.raises(SourceOperationError, match="payload"):
+            source.evaluate(prepared, np.asarray([0.0]))
+
+
+class TestOnDemandComputerCache:
+    """B-5: reference values are deterministic, so the cache is shared and
+    order-sensitive (a permuted request must never be served another
+    order's array)."""
+
+    def test_cache_hit_and_info(self) -> None:
+        wrapped = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x) * 2.0,
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        source = OnDemandComputer(wrapped)
+        prepared = source.prepare(make_participant(), make_query(), make_distribution())
+        first = source.evaluate(prepared, np.asarray([1.0, 2.0]))
+        assert source.cache_info()["entries"] == 1
+        second = source.evaluate(prepared, np.asarray([1.0, 2.0]))
+        assert np.array_equal(first, second)
+        source.cache_clear()
+        assert source.cache_info()["entries"] == 0
+
+    def test_permuted_order_is_a_cache_miss(self) -> None:
+        wrapped = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x) * 2.0,
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        source = OnDemandComputer(wrapped)
+        prepared = source.prepare(make_participant(), make_query(), make_distribution())
+        source.evaluate(prepared, np.asarray([1.0, 2.0]))
+        source.evaluate(prepared, np.asarray([2.0, 1.0]))
+        assert source.cache_info()["entries"] == 2
+
+    def test_computes_pass_through_to_the_wrapped_source(self) -> None:
+        wrapped = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x) * 2.0,
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        source = OnDemandComputer(wrapped)
+        values = source.compute(
+            make_participant(), make_query(), np.asarray([1.0]), make_distribution()
+        )
+        assert float(values[0]) == 2.0
+
+
+class TestSourceSurface:
+    """Public-source surface details (properties, error payloads)."""
+
+    def test_table_subject_id_is_the_table_hash(self) -> None:
+        source = make_table()
+        assert source.subject_id.startswith("table:")
+
+    def test_table_property_exposes_the_data(self) -> None:
+        source = make_table()
+        assert source.table.characteristic == "cdf"
+
+    def test_plain_assess_without_points_is_ready(self) -> None:
+        verdict = make_table().assess(make_participant(), make_query(), make_distribution())
+        assert verdict.readiness == Readiness.READY
+        assert verdict.reason == "table registered for this characteristic"
+
+    def test_external_evaluate_without_distribution_is_refused(self) -> None:
+        source = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x),
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        prepared = PreparedSubject(
+            participant_id=make_participant().participant_id,
+            query=make_query(),
+            payload=make_participant(),
+        )
+        with pytest.raises(SourceOperationError, match="no distribution"):
+            source.evaluate(prepared, np.asarray([0.0]))
+
+    def test_on_demand_delegates_static_surface(self) -> None:
+        wrapped = ExternalFunctionSource(
+            "ext",
+            lambda d, p, q, x: np.asarray(x),
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        source = OnDemandComputer(wrapped, source_id="cache")
+        assert source.source_id == "cache"
+        assert source.subject_id == wrapped.subject_id
+        assert source.provenance == wrapped.provenance
+        assert source.support(make_participant(), make_distribution()) == wrapped.support(
+            make_participant(), make_distribution()
+        )
+
+    def test_parallel_first_fill_keeps_one_entry(self) -> None:
+        # A-9: two threads racing on the same uncached key must both get
+        # correct values and the cache must keep exactly one entry (the
+        # double-check branch inside the lock).
+        import threading
+
+        barrier = threading.Barrier(2, timeout=10)
+
+        class SlowSource(ExternalFunctionSource):
+            def evaluate(self, prepared, points):
+                barrier.wait()  # both threads compute before either caches
+                return super().evaluate(prepared, points)
+
+        wrapped = SlowSource(
+            "slow",
+            lambda d, p, q, x: np.asarray(x) * 2.0,
+            provenance=Provenance(library="ext", library_version="0"),
+        )
+        source = OnDemandComputer(wrapped)
+        prepared = source.prepare(make_participant(), make_query(), make_distribution())
+        results: list[Any] = []
+
+        def worker() -> None:
+            results.append(source.evaluate(prepared, np.asarray([1.0, 2.0])))
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+        assert len(results) == 2
+        assert np.array_equal(results[0], results[1])
+        assert source.cache_info()["entries"] == 1
+
+    def test_from_json_rejects_a_non_object_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "table.json"
+        path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+        with pytest.raises(ValueError, match="must contain a JSON object"):
+            PrecomputedTable.from_json(path)

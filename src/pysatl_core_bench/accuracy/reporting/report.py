@@ -85,18 +85,18 @@ class Reporter:
             for metric in row.metrics:
                 rendered = ", ".join(f"{k}={v:.6g}" for k, v in metric.metrics.items())
                 lines.append(
-                    f"    {metric.characteristic}/{metric.space}/{metric.region}: "
+                    f"    {metric.characteristic}/{metric.output_scale}/{metric.region}: "
                     f"{rendered} (n={metric.n_compared}, "
                     f"missing_ref={metric.n_missing_reference}, "
                     f"excluded={metric.n_excluded}, "
                     f"invalid_subj={metric.n_invalid_subject})"
                 )
                 if metric.diagnostics:
-                    # Diagnostics (ред. 46) are rendered on their own line:
+                    # Diagnostics (rev. 46) are rendered on their own line:
                     # same record, never reported as accuracy.
                     diag = ", ".join(f"{k}={v:.6g}" for k, v in metric.diagnostics.items())
                     lines.append(
-                        f"    {metric.characteristic}/{metric.space}/{metric.region} "
+                        f"    {metric.characteristic}/{metric.output_scale}/{metric.region} "
                         f"diagnostics: {diag}"
                     )
         lines.extend(Reporter._render_curve(curve))
@@ -104,7 +104,7 @@ class Reporter:
 
     @staticmethod
     def _render_curve(curve: SweepCurve | None) -> list[str]:
-        """Sweep curve over sort_key (К-1): empty for non-sweep groups."""
+        """Sweep curve over sort_key (K-1): empty for non-sweep groups."""
         if curve is None or not curve.axis:
             return []
         axis_text = " -> ".join(str(key) for key in curve.axis)
@@ -114,11 +114,11 @@ class Reporter:
         ]
         current_series: tuple[str, str, str, tuple[str, str]] | None = None
         for point in curve.points:
-            series = (point.characteristic, point.space, point.region, point.pair)
+            series = (point.characteristic, point.output_scale, point.region, point.pair)
             if series != current_series:
                 current_series = series
                 lines.append(
-                    f"  {point.characteristic}/{point.space}/{point.region} "
+                    f"  {point.characteristic}/{point.output_scale}/{point.region} "
                     f"[{' x '.join(point.pair)}]:"
                 )
             metrics = ", ".join(f"{k}={v:.6g}" for k, v in point.metrics.items())

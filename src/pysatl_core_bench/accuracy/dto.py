@@ -94,18 +94,57 @@ class SpecialPoint:
         return {"x": self.x, "kind": self.kind, "source": self.source}
 
 
+EXCLUSION_MISSING_REFERENCE = "n_missing_reference"
+EXCLUSION_INVALID_SUBJECT = "n_invalid_subject"
+EXCLUSION_SINGULARITY = "singularity"
+"""Reason tags of the AP-1 excluded-points dictionary.
+
+The first two are the exact counter names of :class:`MetricRecord`, so a
+reader asking "why is this counter big" matches the tags against the
+counter in one glance.  ``singularity`` is reserved for the special-point
+exclusion policy (no v1 policy excludes points, so it is never emitted
+yet); it is part of the contract so the dictionary schema stays stable
+when such a policy appears.
+"""
+
+EXCLUSION_REASONS: tuple[str, ...] = (
+    EXCLUSION_MISSING_REFERENCE,
+    EXCLUSION_INVALID_SUBJECT,
+    EXCLUSION_SINGULARITY,
+)
+
+
+@dataclass(frozen=True)
+class ExcludedPoint:
+    """One inside-support grid point that produced no comparable value (AP-1).
+
+    The excluded-points dictionary answers the tail-region reader's
+    question — "why is ``n_missing_reference`` big here?" — with
+    coordinates and reason tags, per (query, region) cell.  Points
+    *outside* the support are deliberately absent: they never enter the
+    grid, are not enumerated (AP-1), and their removal is reported as a
+    count in the validator notes and in ``Grid.n_removed_out_of_support``.
+    """
+
+    x: float
+    reason: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"x": self.x, "reason": self.reason}
+
+
 @dataclass(frozen=True)
 class MetricRecord:
-    """Error metrics of one pair for one (characteristic, space, region).
+    """Error metrics of one pair for one (characteristic, output_scale, region).
 
     ``metrics`` are accuracy numbers against the reference;
     ``diagnostics`` are numbers that involve no reference (currently the
     ``e2_self_consistency`` family of ppf follow-ups) — same floats, same
-    record, but never reported as accuracy (решение ред. 46).
+    record, but never reported as accuracy (the rev. 46 decision).
     """
 
     characteristic: str
-    space: str
+    output_scale: str
     region: str
     grid_hash: str
     metrics: Mapping[str, float] = field(default_factory=dict)
@@ -114,6 +153,15 @@ class MetricRecord:
     n_compared: int = 0
     n_excluded: int = 0
     n_invalid_subject: int = 0
+    excluded_points: tuple[ExcludedPoint, ...] = ()
+    """AP-1 dictionary: inside-support points with no comparable value.
+
+    Every entry is (coordinate, reason tag); the tags name the counter
+    that carries the aggregate (``n_missing_reference`` /
+    ``n_invalid_subject``), so the dictionary and the counters tell one
+    story.  Points outside the support are not part of this dictionary —
+    they are removed before measurement and reported as counts.
+    """
 
     def __post_init__(self) -> None:  # REV-20
         object.__setattr__(self, "metrics", frozen_mapping(self.metrics))
@@ -122,7 +170,7 @@ class MetricRecord:
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "characteristic": self.characteristic,
-            "space": self.space,
+            "output_scale": self.output_scale,
             "region": self.region,
             "grid_hash": self.grid_hash,
             "metrics": dict(self.metrics),
@@ -131,6 +179,7 @@ class MetricRecord:
             "n_compared": self.n_compared,
             "n_excluded": self.n_excluded,
             "n_invalid_subject": self.n_invalid_subject,
+            "excluded_points": [p.to_json_dict() for p in self.excluded_points],
         }
 
 
@@ -175,15 +224,15 @@ class PointwiseSegment:
 
     Pointwise arrays concatenate the per-region value blocks of all queries
     in measurement order; the segment records where each block starts and
-    ends — and the question space of that block, because regions of one
-    scenario may live in different spaces (REV-5) — so the flat sidecar
+    ends — and the question scale of that block, because regions of one
+    scenario may live in different scales (REV-5) — so the flat sidecar
     stays joinable with the metric records without replaying grid
-    construction (А-11).
+    construction (A-11).
     """
 
     characteristic: str
     region: str
-    space: str
+    output_scale: str
     start: int
     stop: int
 
@@ -191,7 +240,7 @@ class PointwiseSegment:
         return {
             "characteristic": self.characteristic,
             "region": self.region,
-            "space": self.space,
+            "output_scale": self.output_scale,
             "start": self.start,
             "stop": self.stop,
         }
@@ -203,7 +252,7 @@ class PointwiseRef:
 
     uri: str
     hash: str
-    space: str
+    output_scale: str
     n_points: int
     segments: tuple[PointwiseSegment, ...] = ()
 
@@ -211,7 +260,7 @@ class PointwiseRef:
         return {
             "uri": self.uri,
             "hash": self.hash,
-            "space": self.space,
+            "output_scale": self.output_scale,
             "n_points": self.n_points,
             "segments": [segment.to_json_dict() for segment in self.segments],
         }
@@ -235,8 +284,8 @@ class AccuracyResult:
     validator_notes: tuple[ValidatorNote, ...] = ()
     invariant_violations: tuple[Violation, ...] = ()
     metrics: tuple[MetricRecord, ...] = ()
-    space_computed: str | None = None
-    space_reported: str | None = None
+    output_scale_computed: str | None = None
+    output_scale_reported: str | None = None
     y_true: tuple[float, ...] | None = None
     pointwise_subject: PointwiseRef | None = None
     pointwise_reference: PointwiseRef | None = None
@@ -272,8 +321,8 @@ class AccuracyResult:
             "validator_notes": [n.to_json_dict() for n in self.validator_notes],
             "invariant_violations": [v.to_json_dict() for v in self.invariant_violations],
             "metrics": [m.to_json_dict() for m in self.metrics],
-            "space_computed": self.space_computed,
-            "space_reported": self.space_reported,
+            "output_scale_computed": self.output_scale_computed,
+            "output_scale_reported": self.output_scale_reported,
             "y_true": list(self.y_true) if self.y_true is not None else None,
             "pointwise_subject": (
                 self.pointwise_subject.to_json_dict() if self.pointwise_subject else None
@@ -297,7 +346,7 @@ class AgreementEntry:
     """Metric differences of two sides over one matched region record."""
 
     characteristic: str
-    space: str
+    output_scale: str
     region: str
     grid_hash: str
     diffs: Mapping[str, float]
@@ -330,7 +379,7 @@ class SweepPoint:
     sort_key: float | str
     pair: tuple[str, str]
     characteristic: str
-    space: str
+    output_scale: str
     region: str
     status: Status
     metrics: Mapping[str, float] = field(default_factory=dict)
@@ -343,7 +392,7 @@ class SweepPoint:
             "sort_key": self.sort_key,
             "pair": list(self.pair),
             "characteristic": self.characteristic,
-            "space": self.space,
+            "output_scale": self.output_scale,
             "region": self.region,
             "status": self.status.value,
             "metrics": dict(self.metrics),
@@ -352,7 +401,7 @@ class SweepPoint:
 
 @dataclass(frozen=True)
 class SweepCurve:
-    """Curve over the sweep axis (К-1): series of (sort_key, metrics) points.
+    """Curve over the sweep axis (K-1): series of (sort_key, metrics) points.
 
     The axis lists every distinct numeric sort_key of the group (ascending),
     followed by distinct string sort_keys (lexicographic).  The axis is the
@@ -411,6 +460,11 @@ __all__ = [
     "Agreement",
     "AgreementEntry",
     "ComparisonTable",
+    "EXCLUSION_INVALID_SUBJECT",
+    "EXCLUSION_MISSING_REFERENCE",
+    "EXCLUSION_REASONS",
+    "EXCLUSION_SINGULARITY",
+    "ExcludedPoint",
     "MetricRecord",
     "PointwiseRef",
     "Provenance",

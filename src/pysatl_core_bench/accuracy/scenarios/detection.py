@@ -5,6 +5,16 @@ scenario JSON and never taken from the output of the measured
 implementation (N1).  V1 rules: support boundaries from the public API
 plus curated per-family knowledge; the numerical fallback against a
 trusted reference is deliberately deferred.
+
+The detection carries **no completeness guarantee**, and the
+documentation says so explicitly (owner decision, rev. 61): the rules
+cover exactly the families and preconditions they enumerate (e.g. the
+Exponential/Gamma rules require the support boundary at exactly 0 and
+stay silent when it is not), and an unknown family yields no curated
+predictions at all.  A special point the framework missed is a blind
+spot of the measurement — the grid is not densified there and a defect
+hiding near it may stay invisible — so the manifest in the result means
+"what was predicted", never "all points that exist".
 """
 
 from __future__ import annotations
@@ -36,7 +46,7 @@ class SpecialPointDetector:
     def detect(
         self, distribution: DistributionSpec, support: SupportBounds | None
     ) -> list[SpecialPoint]:
-        """Predict special points of the scenario distribution (ред. 40).
+        """Predict special points of the scenario distribution (rev. 40).
 
         The signature takes the distribution spec (not a participant, not a
         library distribution object) because the runner never holds a

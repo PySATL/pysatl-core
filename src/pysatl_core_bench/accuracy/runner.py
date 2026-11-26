@@ -5,12 +5,12 @@ in one process work because every prepared state lives in a local,
 run-scoped cache.  Call order inside ``run`` is fixed:
 
 resolve participants -> support (a single provider, or the intersection of
-the participants' supports when a lookup-only member is present — решение
-по 7.2, ред. 46) -> detect special points -> generate grids
+the participants' supports when a lookup-only member is present — the
+section 7.2 decision, rev. 46) -> detect special points -> generate grids
 -> assess subject and references -> prepare (once per participant) -> values
-in native spaces -> SpaceConverter (only if needed) -> metrics per region ->
-group-wide spread of invariant verdicts (N7) -> write one result per pair
--> Reporter.
+in native scales -> OutputScaleConverter (only if needed) -> metrics per
+region -> group-wide spread of invariant verdicts (N7) -> write one result
+per pair -> Reporter.
 
 Prepare is orchestrated here too (R41-1): :meth:`run_group_raw` takes a raw
 scenario dict (a JSON file payload, possibly a sweep/chain file), expands it
@@ -25,9 +25,9 @@ primary entry point for a file's scenarios (sweep/chain variants share one
 group), :meth:`run` is its single-scenario degenerate case.  Only after
 the whole group is measured can the spread verdicts of one scenario reach
 the pair rows of the others; storing earlier would leave rows in the store
-that disagree with the report (А-5).
+that disagree with the report (A-5).
 
-Parallelism contract (А-9).  Participants are independent by construction:
+Parallelism contract (A-9).  Participants are independent by construction:
 all per-participant state (prepare + evaluate) flows through the run-scoped
 ``_RunCache`` and no step couples two participants, so measuring several
 participants concurrently (e.g. the subject via pysatl-core and a reference
@@ -52,7 +52,14 @@ Status rules encoded here:
 - a reference crash is ``invalid_reference`` (unusable baseline), a subject
   crash is ``failed`` (defect of the measured side);
 - ``y_true`` keeps the report language: the reference values in the
-  question space of the region.
+  question scale of the region.
+
+Explicit user points (rev. 60): the runner owns the two transformations
+the grid generator applies to a ``points`` array — duplicate coordinates
+are measured once, non-ppf points outside the runtime support never enter
+a grid — and reports both as validator notes on every result row of the
+scenario.  A transformed request without a visible reason is forbidden
+(no silence; the standalone form of the AP-1 excluded-points report).
 """
 
 from __future__ import annotations
@@ -73,9 +80,9 @@ from numpy.typing import NDArray
 from pysatl_core.types import CharacteristicName
 from pysatl_core_bench.accuracy.canonical import values_hash
 from pysatl_core_bench.accuracy.computations.metrics import CdfFollowup, MetricsEvaluator
+from pysatl_core_bench.accuracy.computations.output_scale import OutputScaleConverter
 from pysatl_core_bench.accuracy.computations.protocol import PreparedSubject, ValueSource
 from pysatl_core_bench.accuracy.computations.registry import SourceRegistry
-from pysatl_core_bench.accuracy.computations.spaces import SpaceConverter
 from pysatl_core_bench.accuracy.dto import (
     AccuracyResult,
     MetricRecord,
@@ -111,8 +118,13 @@ from pysatl_core_bench.accuracy.scenarios.spec import (
     ParticipantSpec,
     ScenarioSpec,
 )
+from pysatl_core_bench.accuracy.scenarios.tail import (
+    TAIL_EXTENSION,
+    TAIL_ORIGIN_FALLBACK,
+    resolve_tail_extension,
+)
 from pysatl_core_bench.accuracy.types import (
-    PROBABILITY_SPACE,
+    PROBABILITY_SCALE,
     SCHEMA_VERSION,
     STATUS_PRIORITY,
     Capability,
@@ -146,11 +158,11 @@ class _FollowupCrash(Exception):
 class _RunCache:
     """Run-scoped cache: prepared states, values and assessments.
 
-    Everything here lives exactly one run (C2.3/А-9); the assessment slot
+    Everything here lives exactly one run (C2.3/A-9); the assessment slot
     (REV-18) keeps the readiness verdicts of one participant stable across
     the pairs of a group — symmetric mode used to re-assess every side for
     every pair, and a reference was re-assessed per pair in subject mode.
-    The scenario distribution (ред. 40) travels with the cache: one run
+    The scenario distribution (rev. 40) travels with the cache: one run
     measures exactly one distribution, so every prepare call forwards it.
     """
 
@@ -168,7 +180,7 @@ class _RunCache:
 
     def prepared(self, participant: ParticipantSpec, query: AccuracyQuery) -> PreparedSubject:
         # The query participates in the key (REV-5): two queries sharing a
-        # characteristic but differing in space/grid_hint are different
+        # characteristic but differing in output_scale/grid_hint are different
         # prepare calls.
         key = (participant.participant_id, repr(query))
         if key not in self._prepared:
@@ -239,7 +251,7 @@ class AccuracyRunner:
         grid_generator: GridGenerator | None = None,
         validator: ScenarioValidator | None = None,
         metrics_evaluator: MetricsEvaluator | None = None,
-        converter: SpaceConverter | None = None,
+        converter: OutputScaleConverter | None = None,
         invariant_checker: InvariantChecker | None = None,
         expander: ScenarioExpander | None = None,
         loader: ScenarioLoader | None = None,
@@ -250,7 +262,7 @@ class AccuracyRunner:
         self._grid_generator = grid_generator or GridGenerator()
         self._validator = validator or ScenarioValidator()
         self._metrics = metrics_evaluator or MetricsEvaluator()
-        self._converter = converter or SpaceConverter()
+        self._converter = converter or OutputScaleConverter()
         self._invariants = invariant_checker or InvariantChecker()
         # Prepare orchestration lives here since R41-1: the raw-file entry
         # (run_group_raw) owns the expand -> load pipeline, so the diagram's
@@ -296,7 +308,7 @@ class AccuracyRunner:
         REV-16: the store write happens *after* the group-wide spread
         (N7), so invariant verdicts of any scenario of the group reach
         every pair row of the group before anything is persisted — the
-        stored rows agree with the report by construction (А-5), not by
+        stored rows agree with the report by construction (A-5), not by
         an idempotent re-spread at read time.  All ``specs`` must share
         one ``comparison_group`` (a misuse raises :class:`FrameworkDefect`).
 
@@ -327,11 +339,11 @@ class AccuracyRunner:
         Single-scenario degenerate case of :meth:`run_group` (REV-16): the
         spread is group-wide over one scenario, then the rows are written
         and the report rendered — the store still only ever sees rows that
-        agree with the report (А-5).
+        agree with the report (A-5).
 
-        Participants and pairs come only from the canonical spec (В-7): the
+        Participants and pairs come only from the canonical spec (B-7): the
         old optional ``participants``/``pair_policy`` arguments were a dead
-        input that existed only to be rejected (А-8) and are removed.
+        input that existed only to be rejected (A-8) and are removed.
         """
         return self.run_group([spec])
 
@@ -341,7 +353,7 @@ class AccuracyRunner:
         pair_policy = spec.pair_policy
 
         pairs = self._pairs(participants, pair_policy, spec)
-        # One source of truth for the degenerate rule (М-5/А-4): the runner
+        # One source of truth for the degenerate rule (M-5/A-4): the runner
         # orchestrates the call and supplies *its* pairs; the validator owns
         # the rule and the DEGENERATE_NOTE constant.
         degenerate = self._validator.notes_by_pair(
@@ -350,7 +362,7 @@ class AccuracyRunner:
         sources = self._resolve(participants)
         run_cache = _RunCache(sources, spec.distribution)
 
-        # Support rule (ред. 46, решение по 7.2): a lookup-only participant
+        # Support rule (rev. 46, section 7.2 decision): a lookup-only participant
         # answers only on its own range, so a grid built from another
         # member's support would be silently truncated by its coverage.
         # When the group contains a lookup-only participant, the grids are
@@ -374,11 +386,56 @@ class AccuracyRunner:
                 sources.get(primary.participant_id), primary, spec.distribution
             )
             support, support_notes = bounds, ((note,) if note else ())
-        env_notes: tuple[ValidatorNote, ...] = support_notes
-        special_points = tuple(self._detector.detect(spec.distribution, support))
-        grids = self._grid_generator.generate(
-            list(spec.queries), list(spec.regions), list(special_points), support
+        env_notes: tuple[ValidatorNote, ...] = (
+            *support_notes,
+            *self._explicit_point_notes(spec.queries, support),
         )
+        special_points = tuple(self._detector.detect(spec.distribution, support))
+        # Tail geometry (rev. 61): the length of an unbounded side is
+        # derived from the distribution parameters by the curated
+        # per-family table; a query overrides it with
+        # grid_hint.tail_extension.  A fallback to the fixed constant is
+        # reported, never silent — the reader must know the tail length
+        # is the arbitrary default, not a scale-aware choice.
+        tail = resolve_tail_extension(spec.distribution)
+        tail_notes: tuple[ValidatorNote, ...] = ()
+        if tail.origin == TAIL_ORIGIN_FALLBACK:
+            parametrization = spec.distribution.parametrization
+            tail_notes = (
+                ValidatorNote(
+                    code="tail_extension_fallback",
+                    detail=(
+                        f"no curated tail scale for family {spec.distribution.family!r}"
+                        + (f" (parametrization {parametrization!r})" if parametrization else "")
+                        + f"; unbounded region sides resolve to the fixed {TAIL_EXTENSION:g}-unit "
+                        "extension for queries without a grid_hint.tail_extension override"
+                    ),
+                ),
+            )
+        grids = self._grid_generator.generate(
+            list(spec.queries),
+            list(spec.regions),
+            list(special_points),
+            support,
+            tail_extension=tail.value,
+        )
+        # AP-1: points the support filter removed are not enumerated (the
+        # coordinates are reconstructible from the deterministic
+        # generator), but the removal itself is never silent.
+        removal_notes = tuple(
+            ValidatorNote(
+                code="grid_points_removed_out_of_support",
+                detail=(
+                    f"query {str(grid.query.characteristic)}, region {grid.region.name!r}: "
+                    f"{grid.n_removed_out_of_support} generated grid point"
+                    + (" lies" if grid.n_removed_out_of_support == 1 else "s lie")
+                    + " outside the runtime support and were removed from the grid"
+                ),
+            )
+            for grid in grids
+            if grid.n_removed_out_of_support > 0
+        )
+        env_notes = (*env_notes, *tail_notes, *removal_notes)
 
         if pair_policy == "subject":
             results = self._run_subject_mode(
@@ -389,6 +446,75 @@ class AccuracyRunner:
                 spec, pairs, run_cache, grids, degenerate, special_points, env_notes
             )
         return results
+
+    # -- explicit points ----------------------------------------------------------------
+
+    _MAX_LISTED_NOTES = 16
+    """Cap on coordinates listed inside one note detail (pattern of the
+    coverage ``missing`` report): the count stays exact, the listing stays
+    bounded."""
+
+    def _explicit_point_notes(
+        self, queries: Sequence[AccuracyQuery], support: SupportBounds | None
+    ) -> tuple[ValidatorNote, ...]:
+        """Explain every transformation applied to explicit user points.
+
+        The grid generator applies two reductions to a ``points`` array
+        (duplicate coordinates measured once; non-ppf points outside the
+        runtime support removed).  Both are legitimate — but a request the
+        framework rewrote without saying so would violate "no silence".
+        Duplicates are listed (the kept coordinate is in-support
+        information); out-of-support points are reported as a *count*
+        without coordinates — the AP-1 shape of the excluded-points
+        reporting (a point the support forbids was never measured, and
+        the dictionary of inside-support exclusions does not apply to
+        it).
+        """
+        notes: list[ValidatorNote] = []
+        for query in queries:
+            if query.points is None:
+                continue
+            name = str(query.characteristic)
+            counts: dict[float, int] = {}
+            for x in query.points:
+                counts[x] = counts.get(x, 0) + 1
+            duplicates = [x for x, n in counts.items() if n > 1]
+            if duplicates:
+                notes.append(
+                    ValidatorNote(
+                        code="explicit_points_deduplicated",
+                        detail=(
+                            f"query {name}: duplicate points are measured once (first "
+                            f"occurrence kept): {self._list_points(duplicates)}"
+                        ),
+                    )
+                )
+            if support is not None and query.characteristic != CharacteristicName.PPF:
+                outside = [x for x in counts if not (support.left <= x <= support.right)]
+                if outside:
+                    notes.append(
+                        ValidatorNote(
+                            code="explicit_points_out_of_support",
+                            detail=(
+                                f"query {name}: {len(outside)} of {len(counts)} distinct "
+                                f"points lie outside the runtime support "
+                                f"[{support.left!r}, {support.right!r}] and were removed "
+                                "from the grids"
+                            ),
+                        )
+                    )
+        return tuple(notes)
+
+    @classmethod
+    def _list_points(cls, points: Sequence[float]) -> str:
+        """Format coordinates for a note; beyond the cap the count stays exact."""
+        shown = [repr(x) for x in points[: cls._MAX_LISTED_NOTES]]
+        tail = (
+            ""
+            if len(points) <= cls._MAX_LISTED_NOTES
+            else f" (and {len(points) - len(shown)} more)"
+        )
+        return f"[{', '.join(shown)}]{tail}"
 
     # -- pair construction -------------------------------------------------------
 
@@ -456,7 +582,7 @@ class AccuracyRunner:
         distribution: DistributionSpec,
         lookup_only: Sequence[ParticipantSpec],
     ) -> tuple[SupportBounds | None, tuple[ValidatorNote, ...]]:
-        """Intersection of the participants' supports (ред. 46, решение по 7.2).
+        """Intersection of the participants' supports (rev. 46, section 7.2 decision).
 
         A lookup-only member makes a single-provider support arbitrary:
         a table answers only on its data range, so grids built from
@@ -533,7 +659,7 @@ class AccuracyRunner:
         """Ask the source for its support; the runner never computes it.
 
         The support is *reported* by the source itself (ValueSource
-        protocol) for the scenario distribution (ред. 40).  A source that
+        protocol) for the scenario distribution (rev. 40).  A source that
         fails to answer is not swallowed silently: the failure comes back
         as a validator note and reaches the report, while the grid falls
         back to the documented heuristic.
@@ -596,8 +722,8 @@ class AccuracyRunner:
         except FrameworkDefect:
             raise
         except Exception as exc:
-            # Subject crash -> failed for every pair (В-3a); the explanation
-            # still lists every unready reference (К-4).
+            # Subject crash -> failed for every pair (B-3a); the explanation
+            # still lists every unready reference (K-4).
             crashed = SupportVerdict(
                 readiness=Readiness.UNAVAILABLE,
                 reason=(f"subject failed during prepare/evaluate: {type(exc).__name__}: {exc}"),
@@ -651,7 +777,7 @@ class AccuracyRunner:
         subject_status: Status | None = None,
         env_notes: Sequence[ValidatorNote] = (),
     ) -> list[AccuracyResult]:
-        # К-4: the base status belongs to the subject and is computed once;
+        # K-4: the base status belongs to the subject and is computed once;
         # every pair collapses it with *its own* unready reference, so the
         # status never leaks from one pair into the next.
         base_status = subject_status or self._subject_status(subject_verdicts)
@@ -775,25 +901,25 @@ class AccuracyRunner:
         subject_pointwise: list[float] = []
         reference_pointwise: list[float] = []
         pointwise_segments: list[PointwiseSegment] = []
-        space_computed: str | None = None
-        space_reported: str | None = None
+        output_scale_computed: str | None = None
+        output_scale_reported: str | None = None
         ref_provenance_prepared: PreparedSubject | None = None
         subj_provenance_prepared: PreparedSubject | None = None
         probe_notes_acc: list[ValidatorNote] = []
 
         for query in spec.queries:
-            subject_native, subject_probe = self._native_spaces(
+            subject_native, subject_probe = self._native_output_scales(
                 run_cache.source(sides.subject), sides.subject, query
             )
-            reference_native, reference_probe = self._native_spaces(
+            reference_native, reference_probe = self._native_output_scales(
                 run_cache.source(sides.reference), sides.reference, query
             )
             probe_notes = [n for n in (subject_probe, reference_probe) if n is not None]
-            # REV-5 (А-6/no silence): notes of *every* query reach the
+            # REV-5 (A-6/no silence): notes of *every* query reach the
             # result; the per-query list used to be overwritten.
             probe_notes_acc.extend(probe_notes)
-            if space_computed is None and subject_native:
-                space_computed = subject_native[0]
+            if output_scale_computed is None and subject_native:
+                output_scale_computed = subject_native[0]
             try:
                 ref_prepared = run_cache.prepared(sides.reference, query)
                 if ref_provenance_prepared is None:
@@ -834,7 +960,7 @@ class AccuracyRunner:
                     # a reference crash is invalid_reference, a subject
                     # crash is failed).  Both calls used to share one
                     # except-block, blaming the reference even when the
-                    # subject crashed (А-2).
+                    # subject crashed (A-2).
                     return self._unready_result(
                         spec,
                         sides,
@@ -868,19 +994,19 @@ class AccuracyRunner:
                         special_points=special_points,
                         env_notes=(*env_notes, *probe_notes_acc),
                     )
-                if probe_notes and grid.region.space != PROBABILITY_SPACE:
-                    # REV-5 (D8): a failed native_spaces() probe means the
+                if probe_notes and grid.region.output_scale != PROBABILITY_SCALE:
+                    # REV-5 (D8): a failed native_output_scales() probe means the
                     # conversion decision is made on missing data; for a
-                    # non-probability question space that is not allowed to
+                    # non-probability question scale that is not allowed to
                     # pass silently as "no conversion needed".
                     return self._unready_result(
                         spec,
                         sides,
                         Status.UNSUPPORTED_CONFIGURATION,
                         (
-                            "the native_spaces() probe failed for this pair; the "
-                            f"space conversion required by region {grid.region.name!r} "
-                            f"({grid.region.space}) cannot be decided safely"
+                            "the native_output_scales() probe failed for this pair; the "
+                            f"scale conversion required by region {grid.region.name!r} "
+                            f"({grid.region.output_scale}) cannot be decided safely"
                         ),
                         degenerate,
                         run_cache,
@@ -888,18 +1014,18 @@ class AccuracyRunner:
                         special_points=special_points,
                         env_notes=(*env_notes, *probe_notes_acc),
                     )
-                s_conv, s_fact = self._to_question_space(
-                    s_values, subject_native, grid.region.space
+                s_conv, s_fact = self._to_question_scale(
+                    s_values, subject_native, grid.region.output_scale
                 )
-                r_conv, r_fact = self._to_question_space(
-                    r_values, reference_native, grid.region.space
+                r_conv, r_fact = self._to_question_scale(
+                    r_values, reference_native, grid.region.output_scale
                 )
                 if s_fact:
                     subject_facts.append(s_fact)
                 if r_fact:
                     reference_facts.append(r_fact)
-                if space_reported is None:
-                    space_reported = grid.region.space
+                if output_scale_reported is None:
+                    output_scale_reported = grid.region.output_scale
 
                 missing = self._missing_mask(
                     grid.points, ref_verdicts[str(query.characteristic)], r_conv
@@ -930,7 +1056,7 @@ class AccuracyRunner:
                 except FrameworkDefect:
                     raise
                 except _FollowupCrash as exc:
-                    # REV-5/ред. 46: the follow-up is an evaluate-stage call
+                    # REV-5/rev. 46: the follow-up is an evaluate-stage call
                     # of one side; its crash maps by the role rule (subject
                     # -> failed, reference -> invalid_reference), not by the
                     # blanket pair failure.
@@ -968,13 +1094,13 @@ class AccuracyRunner:
                 y_true.extend(float(x) for x in r_conv)
                 subject_pointwise.extend(float(x) for x in s_conv)
                 reference_pointwise.extend(float(x) for x in r_conv)
-                # D1 joinability (А-11): record which slice of the flat
+                # D1 joinability (A-11): record which slice of the flat
                 # sidecar belongs to this (characteristic, region) block.
                 pointwise_segments.append(
                     PointwiseSegment(
                         characteristic=str(query.characteristic),
                         region=grid.region.name,
-                        space=grid.region.space,
+                        output_scale=grid.region.output_scale,
                         start=start,
                         stop=len(y_true),
                     )
@@ -985,7 +1111,8 @@ class AccuracyRunner:
             status = Status.MEASURED
             explanation = (
                 f"metrics computed for {sum(m.n_compared for m in metrics)} points; "
-                f"subject native space {space_computed!r}, question space {space_reported!r}"
+                f"subject native scale {output_scale_computed!r}, "
+                f"question scale {output_scale_reported!r}"
             )
         elif not metrics:
             # REV-2/REV-5: every region resolved to an empty grid against the
@@ -1005,7 +1132,7 @@ class AccuracyRunner:
             status = Status.INVALID_REFERENCE
             explanation += "; invariant check disproved the participant values"
 
-        # REV-5 (М-7): in symmetric/explicit mode the subject is prepared
+        # REV-5 (M-7): in symmetric/explicit mode the subject is prepared
         # lazily inside the grid loop; its prepared state exists by now.
         if subj_provenance_prepared is None and spec.queries:
             subj_provenance_prepared = run_cache.prepared_for_provenance(
@@ -1013,10 +1140,10 @@ class AccuracyRunner:
             )
 
         pointwise_subject = self._sidecar(
-            subject_pointwise, space_reported, tuple(pointwise_segments)
+            subject_pointwise, output_scale_reported, tuple(pointwise_segments)
         )
         pointwise_reference = self._sidecar(
-            reference_pointwise, space_reported, tuple(pointwise_segments)
+            reference_pointwise, output_scale_reported, tuple(pointwise_segments)
         )
 
         return AccuracyResult(
@@ -1034,8 +1161,8 @@ class AccuracyRunner:
             validator_notes=(*notes, *env_notes, *probe_notes_acc, *invariant_notes),
             invariant_violations=tuple(violations),
             metrics=tuple(metrics),
-            space_computed=space_computed,
-            space_reported=space_reported,
+            output_scale_computed=output_scale_computed,
+            output_scale_reported=output_scale_reported,
             y_true=tuple(y_true) if y_true else None,
             pointwise_subject=pointwise_subject,
             pointwise_reference=pointwise_reference,
@@ -1151,11 +1278,11 @@ class AccuracyRunner:
 
     @staticmethod
     def _subject_status(verdicts: Mapping[str, SupportVerdict]) -> Status:
-        """Collapse the subject's verdicts by the contract priority (К-4).
+        """Collapse the subject's verdicts by the contract priority (K-4).
 
         Single code point of the priority: ``STATUS_PRIORITY`` from types
-        (А-7); FAILED is covered by the priority list, there is no separate
-        branch for it (А-13: the old branch was unreachable).
+        (A-7); FAILED is covered by the priority list, there is no separate
+        branch for it (A-13: the old branch was unreachable).
         """
         mapped = [AccuracyRunner._subject_readiness_map(v.readiness) for v in verdicts.values()]
         in_priority = [m for m in mapped if m in STATUS_PRIORITY]
@@ -1284,43 +1411,53 @@ class AccuracyRunner:
             ),
         )
 
-    # -- values, spaces, metrics ------------------------------------------------------------
+    # -- values, scales, metrics ------------------------------------------------------------
 
     @staticmethod
     def _grids_for(grids: list[Grid], query: AccuracyQuery) -> list[Grid]:
         return [g for g in grids if g.query == query]
 
-    def _to_question_space(
-        self, values: Float64Array, native_spaces: list[str], question_space: str
+    def _to_question_scale(
+        self, values: Float64Array, native_scales: list[str], question_scale: str
     ) -> tuple[Float64Array, dict[str, str] | None]:
-        if question_space in native_spaces or not native_spaces:
+        """Convert one side's values into the region's question scale.
+
+        The decision rule is the rule of the native scale (N2/D8): no
+        conversion when the side already answers in the question scale, or
+        when its probe failed and there is nothing to decide from; the
+        converter runs as the last resort, and the fact of the conversion
+        travels to the result's provenance.
+        """
+        if question_scale in native_scales or not native_scales:
             return values, None
-        converted = self._converter.convert(values, native_spaces[0], question_space)
-        return converted, self._converter.conversion_fact(native_spaces[0], question_space)
+        converted = self._converter.convert(values, native_scales[0], question_scale)
+        return converted, self._converter.conversion_fact(native_scales[0], question_scale)
 
     @staticmethod
-    def _native_spaces(
+    def _native_output_scales(
         source: ValueSource | None, participant: ParticipantSpec, query: AccuracyQuery
     ) -> tuple[list[str], ValidatorNote | None]:
-        """Ask the source for its native spaces; failures reach the report.
+        """Ask the source for its native scales; failures reach the report.
 
-        An empty answer used to be indistinguishable from a crashed answer,
-        which could hide a missing space conversion (D8).  A crash now
-        returns an explicit validator note instead of silence.
+        The probe answers one question: is a scale conversion needed for
+        this side at all?  An empty answer used to be indistinguishable
+        from a crashed answer, which could hide a missing conversion (D8);
+        a crash now returns an explicit validator note instead of silence,
+        and every later decision made without the probe is reported.
         """
         if source is None:
             return [], None
         try:
-            return list(source.native_spaces(participant, query)), None
+            return list(source.native_output_scales(participant, query)), None
         except FrameworkDefect:
             raise
         except Exception as exc:
             note = ValidatorNote(
-                code="native_spaces_probe_failed",
+                code="native_output_scales_probe_failed",
                 detail=(
-                    f"native_spaces() of {participant.participant_id} failed: "
-                    f"{type(exc).__name__}: {exc}; the space conversion decision "
-                    f"was made without this information"
+                    f"native_output_scales() of {participant.participant_id} failed: "
+                    f"{type(exc).__name__}: {exc}; the scale conversion decision "
+                    "was made without this information"
                 ),
             )
             return [], note
@@ -1351,14 +1488,14 @@ class AccuracyRunner:
         subject_facts: list[dict[str, str]],
         reference_facts: list[dict[str, str]],
     ) -> tuple[CdfFollowup | None, CdfFollowup | None, list[ValidatorNote]]:
-        """CDF follow-ups of the two sides for the ppf metrics (ред. 46).
+        """CDF follow-ups of the two sides for the ppf metrics (rev. 46).
 
         ``e2_self_consistency`` plugs the found quantiles into the subject
         CDF (a diagnostic, not accuracy); ``e2_true`` plugs them into the
         reference CDF (accuracy, issue #124 §3.5).  Preconditions are
         checked explicitly and their violation is reported, never silent:
 
-        - the side's ``native_spaces()`` probe must have succeeded —
+        - the side's ``native_output_scales()`` probe must have succeeded —
           otherwise the follow-up values cannot be converted to
           probability safely and the number is not computed (D8 rule);
         - ``e2_true`` additionally requires a compute-capable reference:
@@ -1387,7 +1524,7 @@ class AccuracyRunner:
                 ValidatorNote(
                     code="e2_self_consistency_skipped",
                     detail=(
-                        f"native_spaces() probe of {sides.subject.participant_id} failed; "
+                        f"native_output_scales() probe of {sides.subject.participant_id} failed; "
                         "the subject CDF follow-up is not computed because its values "
                         "could not be converted to probability safely"
                     ),
@@ -1424,7 +1561,7 @@ class AccuracyRunner:
                 ValidatorNote(
                     code="e2_true_skipped",
                     detail=(
-                        f"native_spaces() probe of {sides.reference.participant_id} failed; "
+                        f"native_output_scales() probe of {sides.reference.participant_id} failed; "
                         "e2_true is not computed because the follow-up values could not "
                         "be converted to probability safely"
                     ),
@@ -1437,17 +1574,17 @@ class AccuracyRunner:
         participant: ParticipantSpec,
         run_cache: _RunCache,
         distribution: DistributionSpec,
-        native_spaces: list[str],
+        native_output_scales: list[str],
         *,
         sink: list[dict[str, str]],
         role: str,
     ) -> CdfFollowup | None:
-        """Closure computing one side's CDF at the found quantiles (ред. 46).
+        """Closure computing one side's CDF at the found quantiles (rev. 46).
 
         One-shot protocol path (quantile follow-ups): ``compute`` with a
-        probability-space CDF query.  The values arrive in the side's
-        native space (N2: no space parameter) and are converted to
-        probability here — the same last-resort ``SpaceConverter`` rule as
+        probability-output_scale CDF query.  The values arrive in the side's
+        native output_scale (N2: no output_scale parameter) and are converted to
+        probability here — the same last-resort ``OutputScaleConverter`` rule as
         for the grid values (D8); the conversion fact is recorded in the
         side's provenance facts.  Crashes are wrapped into
         ``_FollowupCrash`` so the runner maps them by role instead of
@@ -1456,7 +1593,9 @@ class AccuracyRunner:
         source = run_cache.source(participant)
         if source is None:
             return None
-        cdf_query = AccuracyQuery(characteristic=CharacteristicName.CDF, space=PROBABILITY_SPACE)
+        cdf_query = AccuracyQuery(
+            characteristic=CharacteristicName.CDF, output_scale=PROBABILITY_SCALE
+        )
 
         def followup(quantiles: Float64Array) -> Float64Array:
             try:
@@ -1467,11 +1606,15 @@ class AccuracyRunner:
                     distribution,
                 )
                 values = np.asarray(raw, dtype=np.float64).ravel()
-                if native_spaces and native_spaces[0] != PROBABILITY_SPACE:
-                    fact = self._converter.conversion_fact(native_spaces[0], PROBABILITY_SPACE)
+                if native_output_scales and native_output_scales[0] != PROBABILITY_SCALE:
+                    fact = self._converter.conversion_fact(
+                        native_output_scales[0], PROBABILITY_SCALE
+                    )
                     if fact not in sink:
                         sink.append(fact)
-                    return self._converter.convert(values, native_spaces[0], PROBABILITY_SPACE)
+                    return self._converter.convert(
+                        values, native_output_scales[0], PROBABILITY_SCALE
+                    )
                 return values
             except FrameworkDefect:
                 raise
@@ -1553,18 +1696,18 @@ class AccuracyRunner:
     def _sidecar(
         self,
         values: list[float],
-        space: str | None,
+        output_scale: str | None,
         segments: tuple[PointwiseSegment, ...] = (),
     ) -> PointwiseRef | None:
         if not values:
             return None
         uri, digest = self._store.put_sidecar(
-            np.asarray(values, dtype=np.float64), space or "probability"
+            np.asarray(values, dtype=np.float64), output_scale or "probability"
         )
         return PointwiseRef(
             uri=uri,
             hash=digest,
-            space=space or "probability",
+            output_scale=output_scale or "probability",
             n_points=len(values),
             segments=segments,
         )

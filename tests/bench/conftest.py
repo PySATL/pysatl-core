@@ -64,7 +64,7 @@ def normal_table_cdf(source_id: str = "scipy-norm-cdf", n: int = 41) -> TableLoo
         source_id,
         PrecomputedTable(
             characteristic="cdf",
-            space="probability",
+            output_scale="probability",
             points=points,
             values=stats.norm.cdf(points),
             library="scipy",
@@ -80,7 +80,7 @@ def normal_table_pdf(source_id: str = "scipy-norm-pdf", n: int = 41) -> TableLoo
         source_id,
         PrecomputedTable(
             characteristic="pdf",
-            space="probability",
+            output_scale="probability",
             points=points,
             values=stats.norm.pdf(points),
             library="scipy",
@@ -97,7 +97,7 @@ def normal_table_ppf(source_id: str = "scipy-norm-ppf", n: int = 41) -> TableLoo
         source_id,
         PrecomputedTable(
             characteristic="ppf",
-            space="probability",
+            output_scale="probability",
             points=points,
             values=stats.norm.ppf(points),
             library="scipy",
@@ -113,7 +113,7 @@ def normal_participant(source_id: str = "pysatl-core") -> dict[str, Any]:
 
 def cdf_scenario_raw() -> dict[str, Any]:
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "comparison_group": "normal-cdf-vs-scipy",
         "distribution": {
             "family": "Normal",
@@ -123,9 +123,9 @@ def cdf_scenario_raw() -> dict[str, Any]:
         "subject": normal_participant(),
         "references": [{"source_id": "scipy-norm-cdf"}],
         "queries": [
-            {"characteristic": "cdf", "space": "probability", "grid_hint": {"n_points": 41}}
+            {"characteristic": "cdf", "output_scale": "probability", "grid_hint": {"n_points": 41}}
         ],
-        "regions": [{"name": "bulk", "interval": [-3.0, 3.0], "space": "probability"}],
+        "regions": [{"name": "bulk", "interval": [-3.0, 3.0], "output_scale": "probability"}],
     }
 
 
@@ -165,7 +165,7 @@ class CrashingSource(ValueSource):
     ) -> SupportVerdict:
         return SupportVerdict(readiness=Readiness.READY, reason="crashing pretends")
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
         return ["probability"]
 
     def prepare(
@@ -235,7 +235,7 @@ class FollowupCrashSource(ValueSource):
     ) -> SupportVerdict:
         return SupportVerdict(readiness=Readiness.READY, reason="cdf-boom pretends")
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
         return ["probability"]
 
     def prepare(

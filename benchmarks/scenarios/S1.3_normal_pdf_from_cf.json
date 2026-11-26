@@ -7,7 +7,7 @@
       "sigma": 1.0
     }
   },
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "scenario_id": "S1.3-normal-pdf-from-cf",
   "comparison_group": "S1.3-normal-pdf-from-cf-vs-reference",
   "subject": {

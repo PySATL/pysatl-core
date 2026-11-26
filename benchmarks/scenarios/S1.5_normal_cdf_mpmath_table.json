@@ -7,7 +7,7 @@
       "sigma": 1.0
     }
   },
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "scenario_id": "S1.5-normal-cdf",
   "comparison_group": "S1.5-normal-cdf-vs-mpmath-table",
   "subject": {

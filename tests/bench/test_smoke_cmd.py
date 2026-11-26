@@ -24,6 +24,7 @@ from benchmarks.run_accuracy import (
     SMOKE_EXPECTATIONS,
     _check_smoke_expectation,
     build_registry,
+    main,
 )
 from pysatl_core_bench import (
     AccuracyRunner,
@@ -53,7 +54,7 @@ def test_smoke_set_files_exist() -> None:
 
 
 def _prepare(raw: dict[str, Any], stem: str) -> dict[str, Any]:
-    # Minimal-file rule (ред. 35): same injection as run_accuracy.main().
+    # Minimal-file rule (rev. 35): same injection as run_accuracy.main().
     if "scenario_id" not in raw and "comparison_group" not in raw:
         raw["comparison_group"] = stem
     return raw
@@ -102,3 +103,21 @@ def test_persisted_artifacts_are_strict_json(smoke_registry: Any, tmp_path: Path
     for artifact in files:
         payload = json.loads(artifact.read_text(encoding="utf-8"))
         assert isinstance(payload, dict)
+
+
+def test_clean_mode_wipes_the_storage(tmp_path: Path, capsys: Any, monkeypatch: Any) -> None:
+    """--clean is the storage maintenance command: it removes the whole
+    results storage (default ``benchmark_results/`` or the ``--out DIR``)
+    and exits; a missing storage is not an error."""
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    (storage / "SUMMARY.md").write_text("# run", encoding="utf-8")
+    (storage / "run-20260101-000000").mkdir()
+    monkeypatch.setattr("sys.argv", ["run_accuracy.py", "--clean", "--out", str(storage)])
+    assert main() == 0
+    assert not storage.exists()
+    assert "cleaned the results storage" in capsys.readouterr().out
+
+    monkeypatch.setattr("sys.argv", ["run_accuracy.py", "--clean", "--out", str(storage)])
+    assert main() == 0
+    assert "nothing to clean" in capsys.readouterr().out

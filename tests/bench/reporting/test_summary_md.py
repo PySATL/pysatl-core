@@ -1,8 +1,8 @@
-"""SUMMARY.md table contract (ред. 55): matching sizes of names and data.
+"""SUMMARY.md table contract (rev. 55): matching sizes of names and data.
 
 The raw text is a primary reading mode of the run summary, so the plain-text
 table must not be ragged: the width of every column fits both its header
-name («название») and every data cell implementing that name, all cells of
+name and every data cell implementing that name, all cells of
 a column carry the same size, and every line of a table has the same
 length.  Markdown renderers see the same table as before.
 """
@@ -19,7 +19,8 @@ import pytest
 from pysatl_core_bench import AccuracyResult, Status
 from pysatl_core_bench.accuracy.dto import MetricRecord, ValidatorNote
 
-ROOT = Path(__file__).resolve().parents[2]
+# Repository root: this file lives in tests/bench/reporting/.
+ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:  # for the ``benchmarks`` namespace import below
     sys.path.insert(0, str(ROOT))
 
@@ -85,7 +86,7 @@ def _result(
         metrics=(
             MetricRecord(
                 characteristic="pdf",
-                space="probability",
+                output_scale="probability",
                 region="bulk",
                 grid_hash="g1",
                 metrics={"abs_error": abs_error, "lre": lre},

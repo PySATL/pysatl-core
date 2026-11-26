@@ -11,11 +11,9 @@
   "pair_policy": "symmetric",
   "participants": [
     {
-      "role": "peer",
       "source_id": "pysatl-core"
     },
     {
-      "role": "peer",
       "source_id": "pysatl-core",
       "strategy": {
         "name": "ForcedGraphStrategy",
@@ -25,7 +23,6 @@
       }
     },
     {
-      "role": "peer",
       "source_id": "scipy-norm"
     }
   ],

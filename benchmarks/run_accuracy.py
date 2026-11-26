@@ -19,6 +19,7 @@ Two commands (from the repository root; poetry installs both packages):
     poetry run python benchmarks/run_accuracy.py --smoke --out /tmp/out
     poetry run python benchmarks/run_accuracy.py --all S1.4   # + substring filter
     poetry run python benchmarks/run_accuracy.py --list       # what would run
+    poetry run python benchmarks/run_accuracy.py --clean      # wipe the results storage
 
 The registry carries three kinds of reference sides: a runnable scipy
 wrapper (``reference_sources.scipy_norm_source``), its on-demand caching
@@ -27,16 +28,16 @@ variant, and the mpmath-generated production tables
 
 Smoke mode (08_smoke_scenarios §1): the canonical smoke set — the
 repository scenarios plus the drop-in smoke files (S1.0 minimal,
-S1.6/S1.7/S3.1, NEG1–NEG5) — is run and *verified against expectations*:
+S1.6/S1.7/S1.9/S3.1, NEG1–NEG5) — is run and *verified against expectations*:
 positive files must come out ``measured`` with per-region metrics, each
 negative file must show exactly its expected honest status (NEG2 also
 carries the ``degenerate_comparison`` validator note).  A file rejected
 at expansion/load is a smoke failure (§1.4).  Exit code: 0 — pipeline
 healthy; 2 — an expectation is violated (measurement broken).  Without
-``--smoke`` the batch prints reports and applies the А-15 exit rule:
+``--smoke`` the batch prints reports and applies the A-15 exit rule:
 ``failed``/``invalid_reference`` → 2, honest outcomes → 0.
 
-Minimal scenario files (ред. 35): ``schema_version``, ``comparison_group``
+Minimal scenario files (rev. 35): ``schema_version``, ``comparison_group``
 and ``scenario_id`` are optional — a file that declares none of them gets
 its file stem injected as the comparison group here, before expansion.
 """
@@ -46,13 +47,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 try:  # REV-5: script and module invocations both work
-    from benchmarks.reference_sources import mpmath_table_sources, scipy_norm_source
+    from benchmarks.reference_sources import (
+        mpmath_table_sources,
+        scipy_exponential_source,
+        scipy_norm_source,
+    )
 except ModuleNotFoundError:  # pragma: no cover - script invocation
     # As a plain script, sys.path[0] is benchmarks/ itself, so the package
     # prefix is unavailable; resolve the sibling module dynamically instead
@@ -62,6 +68,7 @@ except ModuleNotFoundError:  # pragma: no cover - script invocation
     _reference_sources: Any = importlib.import_module("reference_sources")
     mpmath_table_sources = _reference_sources.mpmath_table_sources
     scipy_norm_source = _reference_sources.scipy_norm_source
+    scipy_exponential_source = _reference_sources.scipy_exponential_source
 
 from pysatl_core_bench import (
     AccuracyResult,
@@ -89,6 +96,10 @@ SMOKE_EXPECTATIONS: dict[str, Status] = {
     "S1.5_normal_cdf_mpmath_table.json": Status.MEASURED,
     "S1.6_normal_ppf.json": Status.MEASURED,
     "S1.7_normal_cdf_survival.json": Status.MEASURED,
+    "S1.8_normal_lpdf.json": Status.MEASURED,
+    "S1.9_explicit_points.json": Status.MEASURED,
+    "S1.10_tail_policy.json": Status.MEASURED,
+    "S1.11_invariant_check.json": Status.MEASURED,
     "S3.1_symmetric_agreement.json": Status.MEASURED,
     "sweep_normal_cdf_npoints.json": Status.MEASURED,
     "chain_normal_cdf_sigma.json": Status.MEASURED,
@@ -104,6 +115,7 @@ def build_registry() -> SourceRegistry:
     registry = SourceRegistry()
     registry.register(PySATLAdapter())
     registry.register(scipy_norm_source())
+    registry.register(scipy_exponential_source())
     registry.register(OnDemandComputer(scipy_norm_source(), source_id="on-demand-scipy-norm"))
     for table_source in mpmath_table_sources():
         if table_source.source_id in registry:
@@ -159,11 +171,11 @@ def _pair_brief(result: AccuracyResult) -> tuple[str, str]:
 def _render_md_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     """Render one markdown table whose plain-text form is column-aligned.
 
-    The width of every column fits both its header cell ("название") and
-    every data cell implementing that name — the largest of them, so the
-    cells of one column carry matching sizes and every line of the table
-    has the same length.  Renderers see the same table as before; the raw
-    text stops being ragged.
+    The width of every column fits both its header cell and every data
+    cell implementing that name — the largest of them, so the cells of one
+    column carry matching sizes and every line of the table has the same
+    length.  Renderers see the same table as before; the raw text stops
+    being ragged.
     """
     widths = [
         max([len(header), *[len(row[i]) for row in rows]]) for i, header in enumerate(headers)
@@ -189,7 +201,7 @@ def _write_summary_md(
     One section per scenario file, one row per participant pair; statuses,
     worst-region metrics and validator notes are all resolved here, so the
     reader never has to open the per-pair JSON artifacts.  Tables are
-    column-aligned (ред. 55): header names and the data implementing them
+    column-aligned (rev. 55): header names and the data implementing them
     share the column width, so the summary reads as a table in plain text.
     """
     lines: list[str] = [
@@ -258,6 +270,11 @@ def main() -> int:
         action="store_true",
         help="run every scenario file (the default without --smoke)",
     )
+    mode.add_argument(
+        "--clean",
+        action="store_true",
+        help="remove the results storage and exit: the default benchmark_results/ or the --out DIR",
+    )
     parser.add_argument(
         "--out",
         default=None,
@@ -272,6 +289,17 @@ def main() -> int:
         help="print the scenario files that would run and exit",
     )
     args = parser.parse_args()
+
+    if args.clean:
+        # Maintenance mode: the storage accumulates timestamped run dirs,
+        # so an explicit wipe command replaces manual directory surgery.
+        root = Path(args.out) if args.out is not None else Path("benchmark_results")
+        if not root.exists():
+            print(f"nothing to clean: {root} does not exist")
+            return 0
+        shutil.rmtree(root)
+        print(f"cleaned the results storage: {root}")
+        return 0
 
     if args.smoke:
         files = [
@@ -322,7 +350,7 @@ def main() -> int:
                 smoke_failures.append((path.name, [f"not JSON: {exc}"]))
             rejected_files.append((path.name, f"not JSON: {exc}"))
             continue
-        # Minimal-file rule (ред. 35): a file that declares neither
+        # Minimal-file rule (rev. 35): a file that declares neither
         # scenario_id nor comparison_group is named by its file stem.
         if "scenario_id" not in raw and "comparison_group" not in raw:
             raw["comparison_group"] = path.stem

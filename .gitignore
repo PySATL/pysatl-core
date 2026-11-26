@@ -29,6 +29,9 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# Wheel-install metadata must never leak into the source tree (it shows up
+# next to the packages when a wheel is unpacked instead of installed):
+*.dist-info/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -142,12 +145,12 @@ docs/source/examples/*
 # Unuran build artifacts
 src/pysatl_core/sampling/unuran/bindings/_unuran_cffi.c
 
-# Benchmark run artifacts (run_accuracy.py default storage: benchmark_results/run-<timestamp>/)
-benchmark_results/
-
 # ai
 
 .ai/*
 AGENTS.md
 CLAUDE.md
 .codex
+
+# Benchmark run artifacts (run_accuracy.py default storage: benchmark_results/run-<timestamp>/)
+benchmark_results/

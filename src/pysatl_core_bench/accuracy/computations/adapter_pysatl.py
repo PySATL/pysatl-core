@@ -3,21 +3,21 @@
 The adapter owns the catalog of computation-strategy names of *its* library
 version, constructs strategy objects and installs them through the public
 ``distr.with_computation_strategy(...)`` during prepare.  There is no
-separate strategy registry (М-3): a second one would duplicate the C1
+separate strategy registry (M-3): a second one would duplicate the C1
 pattern without benefit.  Unknown or inapplicable strategies produce an
 explicit ``unsupported_configuration`` verdict — never a silent fallback
-(М-6).
+(M-6).
 
 Strategy catalog (v1):
 
 - ``DefaultComputationStrategy`` — the library first-match walker;
-- ``ForcedGraphStrategy`` (М-2, params ``{"from": ..., "labels": [...]?}``)
+- ``ForcedGraphStrategy`` (M-2, params ``{"from": ..., "labels": [...]?}``)
   — forces the route to start at the given characteristic.  The forced plan
   is: analytical loop at ``from`` + graph path to the target.  A start that
   is not a graph node (today: ``cf``, a source-only characteristic — the
   characteristic-graph invariants forbid one-way source nodes) is served
   through a direct fitter-registry lookup of the ``from -> target`` edge;
-  the resulting plan is dumped into provenance (М-7) exactly as any other.
+  the resulting plan is dumped into provenance (M-7) exactly as any other.
 
 The library graph ships no ``cf -> pdf`` edge (a source-only characteristic
 can never be a graph node), and the benchmark never modifies pysatl-core
@@ -113,12 +113,12 @@ asking a moment "on a grid" is a category error, not a library crash.
 Without this check such a query assessed READY (the graph can name a plan)
 and then blew up in evaluate (scalar methods have no array semantics) —
 an avoidable ``failed``.  Refusing here is adapter-owned library knowledge
-(М-6: explicit unsupported_configuration, no silent fallback); a future
+(M-6: explicit unsupported_configuration, no silent fallback); a future
 core that serves moments with array semantics extends the catalog instead.
 """
 
 _FITTER_REGISTRATION_LOCK = threading.Lock()
-"""Serializes the idempotent check-and-register of the bench fitter (А-9)."""
+"""Serializes the idempotent check-and-register of the bench fitter (A-9)."""
 
 _FAMILIES_CONFIGURE_LOCK = threading.Lock()
 """Serializes the first core-family configuration inside one process.
@@ -258,7 +258,7 @@ def _ensure_cf_to_pdf_edge() -> None:
     ``reset_core_state()`` (called between scenarios) clears the registry,
     so registration is repeated lazily before each distribution construction.
     The check-then-register window is guarded by a lock: parallel participants
-    (А-9) build distributions concurrently and must not double-register.
+    (A-9) build distributions concurrently and must not double-register.
     """
     with _FITTER_REGISTRATION_LOCK:
         registry = fitter_registry()
@@ -283,7 +283,7 @@ class _ForcedPlan:
 
 
 class _ForcedGraphStrategy:
-    """Computation strategy that forces the route to start at a characteristic (М-2).
+    """Computation strategy that forces the route to start at a characteristic (M-2).
 
     Implements the public ``ComputationStrategy`` protocol of pysatl-core.
     The forced plan is: analytical loop at ``from`` followed by the graph path
@@ -420,7 +420,7 @@ class _ForcedGraphStrategy:
     def _find_graph_path(
         self, view: RegistryView, state: GenericCharacteristicName
     ) -> list[ComputationEdgeMeta] | None:
-        """Labels are preferences; the first matching route wins (М-2)."""
+        """Labels are preferences; the first matching route wins (M-2)."""
         for label in self._labels:
             path = view.find_path(self._start, state, prefer_label=label)
             if path:
@@ -436,7 +436,7 @@ class _ForcedGraphStrategy:
         back to a definitive one, while no computation ever returns to
         ``cf``.  The fitter registry still knows the edge (the benchmark
         registers its Gil-Pelaez fitter through the public API), so the
-        forced plan can carry it and the dump stays a faithful fact (М-7).
+        forced plan can carry it and the dump stays a faithful fact (M-7).
         """
         descriptor = fitter_registry().find(state, [self._start], required_tags=_CONTINUOUS_1D_TAGS)
         if descriptor is None:
@@ -561,7 +561,7 @@ class PySATLAdapter:
         try:
             distr.explain_computation_path(query.characteristic)
         except AdapterConfigurationError as exc:
-            # Unknown strategy, inapplicable start, route not found (М-6).
+            # Unknown strategy, inapplicable start, route not found (M-6).
             return SupportVerdict(
                 readiness=Readiness.UNSUPPORTED_CONFIGURATION,
                 reason=f"strategy inapplicable: {exc}",
@@ -570,7 +570,7 @@ class PySATLAdapter:
             raise
         except Exception as exc:
             # Any other refusal means the library cannot serve the
-            # characteristic at all — an outcome, not a crash (М-6).
+            # characteristic at all — an outcome, not a crash (M-6).
             return SupportVerdict(
                 readiness=Readiness.NOT_APPLICABLE,
                 reason=(
@@ -596,9 +596,9 @@ class PySATLAdapter:
                 )
         return SupportVerdict(readiness=Readiness.READY, reason="compute source")
 
-    def native_spaces(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
-        # v1: every graph characteristic answers in probability space; the
-        # survival space is reached only through SpaceConverter.
+    def native_output_scales(self, participant: ParticipantSpec, query: AccuracyQuery) -> list[str]:
+        # v1: every graph characteristic answers in probability scale; the
+        # survival scale is reached only through OutputScaleConverter.
         return ["probability"]
 
     # -- protocol: two-phase evaluation ---------------------------------------
@@ -644,7 +644,7 @@ class PySATLAdapter:
     def _build_distribution(
         self, distribution: DistributionSpec, participant: ParticipantSpec
     ) -> Distribution:
-        # ред. 40: the measured distribution is scenario-level state; the
+        # rev. 40: the measured distribution is scenario-level state; the
         # participant carries only adapter knobs.  The v1 pysatl-core
         # adapter accepts no adapter_config (no silent knobs).
         if participant.adapter_config:
@@ -698,7 +698,7 @@ class PySATLAdapter:
 
     @staticmethod
     def _forced_graph_strategy(params: Mapping[str, Any]) -> _ForcedGraphStrategy:
-        """Build ``ForcedGraphStrategy`` from its params (М-2; validated, no fallback)."""
+        """Build ``ForcedGraphStrategy`` from its params (M-2; validated, no fallback)."""
         unknown = set(params) - {"from", "labels"}
         if unknown:
             msg = (
@@ -767,7 +767,7 @@ class PySATLAdapter:
 
     @staticmethod
     def _path_dump(plan: ComputationPlan) -> dict[str, Any]:
-        """Serialize the actual ComputationPlan (М-7: the dump is the fact)."""
+        """Serialize the actual ComputationPlan (M-7: the dump is the fact)."""
         return {
             "target": str(plan.target),
             "source": str(plan.source),

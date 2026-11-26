@@ -1,9 +1,9 @@
-"""Compute stage of the accuracy model: value sources, spaces, metrics.
+"""Compute stage of the accuracy model: value sources, scales, metrics.
 
 Everything one can ask *numbers* from lives here: the ``ValueSource``
 protocol, the source registry, the pysatl-core adapter (the library
 boundary), reference sources (precomputed tables, external library
-functions, on-demand caching), the space converter and the per-region
+functions, on-demand caching), the output-scale converter and the per-region
 error metrics.  Scenario grammar and comparison/report stages belong to
 the sibling subpackages ``scenarios`` and ``reporting``; the orchestrator
 is ``accuracy.runner``.
@@ -17,6 +17,7 @@ __license__ = "SPDX-License-Identifier: MIT"
 
 from .adapter_pysatl import PySATLAdapter
 from .metrics import LRE_CAP, MetricsEvaluator
+from .output_scale import OutputScaleConverter
 from .protocol import PreparedSubject, ValueSource
 from .registry import SourceRegistry
 from .sources import (
@@ -26,7 +27,6 @@ from .sources import (
     PrecomputedTable,
     TableLookupSource,
 )
-from .spaces import SpaceConverter
 
 __all__ = [
     "ExternalFunction",
@@ -38,7 +38,7 @@ __all__ = [
     "PrecomputedTable",
     "PySATLAdapter",
     "SourceRegistry",
-    "SpaceConverter",
+    "OutputScaleConverter",
     "TableLookupSource",
     "ValueSource",
 ]

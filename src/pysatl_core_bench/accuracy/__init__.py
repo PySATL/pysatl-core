@@ -4,7 +4,7 @@ Layout (three work folders plus the shared kernel):
 
 - ``computations``  — the Compute stage: the ``ValueSource`` protocol and
   registry, the pysatl-core adapter, reference sources (precomputed
-  tables, external library functions, on-demand caching), the space
+  tables, external library functions, on-demand caching), the output_scale
   converter and the per-region error metrics;
 - ``scenarios``     — the scenario stage: canonical ``*Spec`` structures,
   expand -> load -> validate of the raw JSON grammar, grid generation,
@@ -35,20 +35,25 @@ from .computations import (
     ExternalFunctionSource,
     MetricsEvaluator,
     OnDemandComputer,
+    OutputScaleConverter,
     PrecomputedTable,
     PreparedSubject,
     PySATLAdapter,
     SourceRegistry,
-    SpaceConverter,
     TableLookupSource,
     ValueSource,
 )
 from .core_state import reset_core_state
 from .dto import (
+    EXCLUSION_INVALID_SUBJECT,
+    EXCLUSION_MISSING_REFERENCE,
+    EXCLUSION_REASONS,
+    EXCLUSION_SINGULARITY,
     AccuracyResult,
     Agreement,
     AgreementEntry,
     ComparisonTable,
+    ExcludedPoint,
     MetricRecord,
     PointwiseRef,
     Provenance,
@@ -76,6 +81,8 @@ from .scenarios import (
     DEGENERATE_NOTE,
     DENSIFICATION_OFFSETS,
     TAIL_EXTENSION,
+    TAIL_ORIGIN_CURATED,
+    TAIL_ORIGIN_FALLBACK,
     VIOLATION_CODE,
     AccuracyQuery,
     DistributionSpec,
@@ -92,6 +99,8 @@ from .scenarios import (
     ScenarioValidator,
     SpecialPointDetector,
     StrategySpec,
+    TailExtension,
+    resolve_tail_extension,
 )
 from .types import (
     SCHEMA_VERSION,
@@ -104,11 +113,17 @@ from .types import (
 
 __all__ = [
     "DENSIFICATION_OFFSETS",
+    "EXCLUSION_INVALID_SUBJECT",
+    "EXCLUSION_MISSING_REFERENCE",
+    "EXCLUSION_REASONS",
+    "EXCLUSION_SINGULARITY",
     "ExternalFunction",
     "LRE_CAP",
     "SCHEMA_VERSION",
     "STATUS_PRIORITY",
     "TAIL_EXTENSION",
+    "TAIL_ORIGIN_CURATED",
+    "TAIL_ORIGIN_FALLBACK",
     "VIOLATION_CODE",
     "AccuracyQuery",
     "AccuracyResult",
@@ -122,6 +137,7 @@ __all__ = [
     "ComparisonTable",
     "DEGENERATE_NOTE",
     "DistributionSpec",
+    "ExcludedPoint",
     "ExternalFunctionSource",
     "FrameworkDefect",
     "Grid",
@@ -153,7 +169,7 @@ __all__ = [
     "SourceNotRegistered",
     "SourceOperationError",
     "SourceRegistry",
-    "SpaceConverter",
+    "OutputScaleConverter",
     "SpecialPoint",
     "SpecialPointDetector",
     "Status",
@@ -163,6 +179,7 @@ __all__ = [
     "SweepCurve",
     "SweepPoint",
     "TableLookupSource",
+    "TailExtension",
     "ValidatorNote",
     "ValueSource",
     "Violation",
@@ -170,5 +187,6 @@ __all__ = [
     "content_hash",
     "grid_hash",
     "reset_core_state",
+    "resolve_tail_extension",
     "values_hash",
 ]

@@ -13,6 +13,7 @@ __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
 import copy
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -31,11 +32,20 @@ from pysatl_core_bench.accuracy.scenarios.spec import (
     StrategySpec,
 )
 from pysatl_core_bench.accuracy.types import (
-    KNOWN_SPACES,
-    PROBABILITY_SPACE,
+    KNOWN_OUTPUT_SCALES,
+    PROBABILITY_SCALE,
     SCHEMA_VERSION,
     Role,
 )
+
+_SUPPORTED_SCHEMA_VERSIONS = ("1.1", "1.2")
+"""Scenario grammar generations the loader accepts.
+
+1.2 (rev. 61) adds the optional ``grid_hint.tail_extension`` /
+``grid_hint.densify`` fields to the 1.1 grammar — a purely additive
+change, so 1.1-declared files stay valid.  Unknown fields are rejected
+in both generations (a typo must fail loudly, not measure a guess).
+"""
 
 _ALLOWED_TOP_KEYS = frozenset(
     {
@@ -60,15 +70,15 @@ DEGENERATE_NOTE = "degenerate_comparison"
 
 
 class ScenarioExpander:
-    """Unfolds sweep/chain scenario files into ordinary scenarios (К-1/К-5).
+    """Unfolds sweep/chain scenario files into ordinary scenarios (K-1/K-5).
 
     The result model never learns the words "sweep" or "chain": expansion
     produces plain scenarios sharing a ``comparison_group`` and carrying a
     ``sort_key``; the comparator later builds curves/slices from that key.
     The sweep axis may address any nested field — including the
     scenario-level ``distribution`` (e.g. ``distribution.parameters.mu``)
-    and a participant ``strategy`` (М-8); a chain stage may carry a
-    per-stage ``distribution`` override (ред. 40).
+    and a participant ``strategy`` (M-8); a chain stage may carry a
+    per-stage ``distribution`` override (rev. 40).
     """
 
     def expand(self, raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -150,7 +160,7 @@ class ScenarioExpander:
                 {**copy.deepcopy(stage["reference"]), "role": Role.REFERENCE.value},
             ]
             if stage.get("distribution") is not None:
-                # ред. 40: the distribution is scenario-level, so a chain
+                # rev. 40: the distribution is scenario-level, so a chain
                 # that walks over distributions overrides it per stage (the
                 # stage object must be a full {family, parametrization?,
                 # parameters?} declaration; its shape is validated by the
@@ -225,14 +235,15 @@ class ScenarioLoader:
     def load(self, raw: dict[str, Any]) -> ScenarioSpec:
         """Read, normalize, canonicalize and hash one ordinary scenario.
 
-        Mandatory fields are kept to the irreducible minimum (ред. 35):
-        the distribution, the participants and the queries (ред. 40: the
+        Mandatory fields are kept to the irreducible minimum (rev. 35):
+        the distribution, the participants and the queries (rev. 40: the
         distribution is scenario-level — one declaration serves every
         participant).  Everything else has a documented default that the
         loader materializes (D2):
 
         - ``schema_version`` — defaults to the current ``SCHEMA_VERSION``;
-          a *present* but wrong value is still ``Rejected``;
+          a *present* but unsupported value is still ``Rejected``
+          (the accepted generations are ``_SUPPORTED_SCHEMA_VERSIONS``);
         - ``comparison_group`` — defaults to ``scenario_id``; if neither is
           given, the file runner (``run_accuracy.py``) injects the file
           stem as the group before expansion.  Loading a nameless dict
@@ -245,8 +256,11 @@ class ScenarioLoader:
             msg = f"unknown scenario fields: {sorted(unknown)}"
             raise ScenarioRejected(msg)
         schema_version = raw.get("schema_version", SCHEMA_VERSION)
-        if schema_version != SCHEMA_VERSION:
-            msg = f"schema_version must be {SCHEMA_VERSION!r}, got {schema_version!r}"
+        if schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
+            msg = (
+                f"schema_version must be one of {list(_SUPPORTED_SCHEMA_VERSIONS)}, "
+                f"got {schema_version!r}"
+            )
             raise ScenarioRejected(msg)
         for pre_spec in ("sweep_spec", "chain_spec"):
             if raw.get(pre_spec) is not None:
@@ -254,7 +268,14 @@ class ScenarioLoader:
                 raise ScenarioRejected(msg)
 
         sort_key = self._sort_key(raw.get("sort_key"))
-        scenario_id = self._scenario_id(raw, None, sort_key)
+        # The documented three-way default needs the *declared* group (when
+        # the file has one): passing None here made the middle form
+        # "group#<sort_key>" unreachable and the sort_key silently dropped
+        # from the row identity (coverage-audit fix, rev. 60).
+        declared_group = raw.get("comparison_group")
+        scenario_id = self._scenario_id(
+            raw, declared_group if isinstance(declared_group, str) else None, sort_key
+        )
         group = self._group_or_default(raw, scenario_id)
         distribution = self._distribution(raw.get("distribution"))
         participants = self._participants(raw)
@@ -286,8 +307,9 @@ class ScenarioLoader:
             "queries": [
                 {
                     "characteristic": str(q.characteristic),
-                    "space": q.space,
+                    "output_scale": q.output_scale,
                     "grid_hint": dict(q.grid_hint) if q.grid_hint else None,
+                    "points": list(q.points) if q.points is not None else None,
                 }
                 for q in queries
             ],
@@ -295,7 +317,7 @@ class ScenarioLoader:
                 {
                     "name": r.name,
                     "interval": list(r.interval),
-                    "space": r.space,
+                    "output_scale": r.output_scale,
                 }
                 for r in regions
             ],
@@ -327,6 +349,11 @@ class ScenarioLoader:
         if has_list and has_synonyms:
             msg = "use either 'participants' or 'subject'/'references', not both"
             raise ScenarioRejected(msg)
+        # An explicit null and an absent key must behave the same (A-12):
+        # both mean the default policy, so the policy for the role check
+        # below must be resolved the same way.
+        policy_raw = raw.get("pair_policy", "subject")
+        policy = "subject" if policy_raw is None else policy_raw
         entries: list[tuple[Role, Mapping[str, Any]]] = []
         if has_list:
             if not isinstance(raw["participants"], list) or not raw["participants"]:
@@ -336,8 +363,17 @@ class ScenarioLoader:
                 self._require_mapping(entry, "participant")
                 role_value = entry.get("role")
                 if role_value is None:
-                    msg = "participant.role is required in the participants list"
-                    raise ScenarioRejected(msg)
+                    if policy != "symmetric":
+                        # Under 'symmetric' every participant is a peer, so
+                        # the role carries no information and may be omitted;
+                        # in every other mode the role is what distinguishes
+                        # the measured side and cannot be guessed.
+                        msg = (
+                            "participant.role is required in the participants "
+                            "list (omit it only under pair_policy 'symmetric')"
+                        )
+                        raise ScenarioRejected(msg)
+                    role_value = Role.PEER.value
                 entries.append((self._role(role_value), entry))
         else:
             if "subject" in raw:
@@ -368,19 +404,20 @@ class ScenarioLoader:
             adapter_config = entry.get("adapter_config", {})
             self._require_mapping(adapter_config, "participant.adapter_config")
             strategy = self._strategy(entry.get("strategy"))
+            # JSON-safety is checked before the identity hash: the hash
+            # canonicalizes the config, and a non-JSON-safe value must come
+            # back as a ScenarioRejected pipeline state, not as a raw
+            # canonicalizer error from the hashing depth (REV-3).
+            canonical_adapter = self._canonical_adapter_config(adapter_config)
             participant = ParticipantSpec(
                 role=role,
                 source_id=source_id,
-                participant_id=self._participant_id(source_id, adapter_config, strategy),
-                adapter_config=self._canonical_adapter_config(adapter_config),
+                participant_id=self._participant_id(source_id, canonical_adapter, strategy),
+                adapter_config=canonical_adapter,
                 strategy=strategy,
             )
             participants.append(participant)
-        # An explicit null and an absent key must behave the same (А-12):
-        # both mean the default policy, so the role check must not be
-        # skipped for null.
-        policy_raw = raw.get("pair_policy", "subject")
-        self._check_policy_roles("subject" if policy_raw is None else policy_raw, participants)
+        self._check_policy_roles(policy, participants)
         return participants
 
     @staticmethod
@@ -406,7 +443,7 @@ class ScenarioLoader:
 
     @staticmethod
     def _distribution(value: Any) -> DistributionSpec:
-        """The mandatory scenario-level distribution (ред. 40)."""
+        """The mandatory scenario-level distribution (rev. 40)."""
         if not isinstance(value, Mapping):
             msg = (
                 "distribution is required: declare {family, parametrization?, "
@@ -554,13 +591,21 @@ class ScenarioLoader:
     # -- queries / regions ----------------------------------------------------
 
     def _queries(self, value: Any) -> list[AccuracyQuery]:
+        """Validate the queries; explicit ``points`` are kept as declared.
+
+        The loader validates the ``points`` array (non-empty, finite
+        numbers) but does not normalize its content: duplicates stay,
+        because the canonical form must stay faithful to the file (the
+        runner explains every transformation it applies — deduplication,
+        out-of-support filtering — with a validator note, never silently).
+        """
         if not isinstance(value, list) or not value:
             msg = "queries must be a non-empty list"
             raise ScenarioRejected(msg)
         queries: list[AccuracyQuery] = []
         for entry in value:
             self._require_mapping(entry, "query")
-            unknown = set(entry) - {"characteristic", "space", "grid_hint"}
+            unknown = set(entry) - {"characteristic", "output_scale", "grid_hint", "points"}
             if unknown:
                 msg = f"unknown query fields: {sorted(unknown)}"
                 raise ScenarioRejected(msg)
@@ -570,14 +615,14 @@ class ScenarioLoader:
             except ValueError as exc:
                 msg = f"unknown characteristic: {name!r}"
                 raise ScenarioRejected(msg) from exc
-            space = entry.get("space", "probability")
-            if space not in KNOWN_SPACES:
-                msg = f"unknown query space: {space!r}"
+            output_scale = entry.get("output_scale", "probability")
+            if output_scale not in KNOWN_OUTPUT_SCALES:
+                msg = f"unknown query output_scale: {output_scale!r}"
                 raise ScenarioRejected(msg)
             hint = entry.get("grid_hint")
             if hint is not None:
                 self._require_mapping(hint, "query.grid_hint")
-                unknown = set(hint) - {"n_points"}
+                unknown = set(hint) - {"n_points", "tail_extension", "densify"}
                 if unknown:
                     msg = f"unknown grid_hint fields: {sorted(unknown)}"
                     raise ScenarioRejected(msg)
@@ -585,24 +630,78 @@ class ScenarioLoader:
                 if not isinstance(n, int) or isinstance(n, bool) or n < 4:
                     msg = "grid_hint.n_points must be an integer >= 4"
                     raise ScenarioRejected(msg)
+                tail = hint.get("tail_extension")
+                if tail is not None and (
+                    isinstance(tail, bool)
+                    or not isinstance(tail, (int, float))
+                    or not math.isfinite(float(tail))
+                    or float(tail) <= 0.0
+                ):
+                    msg = "grid_hint.tail_extension must be a positive finite number"
+                    raise ScenarioRejected(msg)
+                densify = hint.get("densify")
+                if densify is not None and not isinstance(densify, bool):
+                    msg = "grid_hint.densify must be a boolean"
+                    raise ScenarioRejected(msg)
                 hint = dict(hint)
+            points = self._explicit_points(entry.get("points"))
             queries.append(
-                AccuracyQuery(characteristic=characteristic, space=space, grid_hint=hint)
+                AccuracyQuery(
+                    characteristic=characteristic,
+                    output_scale=output_scale,
+                    grid_hint=hint,
+                    points=points,
+                )
             )
-        # REV-3: duplicate (characteristic, space) queries would produce two
-        # identical MetricRecords without a distinguishing key.
+        # REV-3: duplicate (characteristic, output_scale) queries would produce two
+        # identical MetricRecords without a distinguishing key.  A duplicate value
+        # *inside* one query's points array is legal (rev. 60): the runner dedups
+        # it with an explicit note instead of rejecting the file.
         seen: set[tuple[str, str]] = set()
         for query in queries:
-            key = (str(query.characteristic), query.space)
+            key = (str(query.characteristic), query.output_scale)
             if key in seen:
-                msg = f"duplicate query {key[0]!r} in space {key[1]!r}"
+                msg = f"duplicate query {key[0]!r} in output_scale {key[1]!r}"
                 raise ScenarioRejected(msg)
             seen.add(key)
         return queries
 
+    @staticmethod
+    def _explicit_points(value: Any) -> tuple[float, ...] | None:
+        """Validate the explicit ``points`` array of one query (rev. 60).
+
+        The array is the user's contract "measure exactly these
+        coordinates", so the validation is strict where it protects the
+        contract (numbers only, finite, at least one) and absent where it
+        would rewrite the request (no sorting, no deduplication, no
+        clipping).  Integers are canonicalized to floats like every
+        scenario number; a bool is rejected — JSON ``true`` is not a
+        coordinate.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, list) or not value:
+            msg = "query.points must be a non-empty list of numbers"
+            raise ScenarioRejected(msg)
+        points: list[float] = []
+        for index, item in enumerate(value):
+            if isinstance(item, bool) or not isinstance(item, (int, float)):
+                msg = f"query.points[{index}] must be a number, got {item!r}"
+                raise ScenarioRejected(msg)
+            try:
+                number = float(item)
+            except OverflowError as exc:
+                msg = f"query.points[{index}] {item!r} is too large for a float"
+                raise ScenarioRejected(msg) from exc
+            if number != number or number in (float("inf"), float("-inf")):
+                msg = f"query.points[{index}] must be finite, got {item!r}"
+                raise ScenarioRejected(msg)
+            points.append(number)
+        return tuple(points)
+
     def _regions(self, value: Any) -> list[Region]:
         if value is None:
-            value = [{"name": "bulk", "interval": [None, None], "space": "probability"}]
+            value = [{"name": "bulk", "interval": [None, None], "output_scale": "probability"}]
         if not isinstance(value, list) or not value:
             msg = "regions must be a non-empty list"
             raise ScenarioRejected(msg)
@@ -610,7 +709,7 @@ class ScenarioLoader:
         names: set[str] = set()
         for entry in value:
             self._require_mapping(entry, "region")
-            unknown = set(entry) - {"name", "interval", "space"}
+            unknown = set(entry) - {"name", "interval", "output_scale"}
             if unknown:
                 msg = f"unknown region fields: {sorted(unknown)}"
                 raise ScenarioRejected(msg)
@@ -623,11 +722,11 @@ class ScenarioLoader:
                 raise ScenarioRejected(msg)
             names.add(name)
             interval = self._interval(entry.get("interval"))
-            space = entry.get("space", "probability")
-            if space not in KNOWN_SPACES:
-                msg = f"unknown region space: {space!r}"
+            output_scale = entry.get("output_scale", "probability")
+            if output_scale not in KNOWN_OUTPUT_SCALES:
+                msg = f"unknown region output_scale: {output_scale!r}"
                 raise ScenarioRejected(msg)
-            regions.append(Region(name=name, interval=interval, space=space))
+            regions.append(Region(name=name, interval=interval, output_scale=output_scale))
         return regions
 
     @staticmethod
@@ -662,7 +761,7 @@ class ScenarioLoader:
 
     @staticmethod
     def _group_or_default(raw: Mapping[str, Any], scenario_id: str | None) -> str:
-        """The comparison group, defaulting to ``scenario_id`` (ред. 35)."""
+        """The comparison group, defaulting to ``scenario_id`` (rev. 35)."""
         group = raw.get("comparison_group")
         if group is None:
             if scenario_id is not None:
@@ -705,14 +804,19 @@ class ScenarioLoader:
 
     @staticmethod
     def _cross_check(queries: list[AccuracyQuery], regions: list[Region]) -> None:
-        """Grammar contradictions knowable without a library (REV-3)."""
+        """Grammar contradictions knowable without a library (REV-3).
+
+        Both checks below reject the *file* before any run starts: the
+        alternative would be an honest but confusing empty result for a
+        request that could never be served.
+        """
         ppf = any(q.characteristic == CharacteristicName.PPF for q in queries)
         if ppf:
-            bad = [r.name for r in regions if r.space != PROBABILITY_SPACE]
+            bad = [r.name for r in regions if r.output_scale != PROBABILITY_SCALE]
             if bad:
                 msg = (
-                    "ppf queries measure quantile levels in probability space; "
-                    f"regions {bad} declare another space"
+                    "ppf queries measure quantile levels on the probability scale; "
+                    f"regions {bad} declare another output_scale"
                 )
                 raise ScenarioRejected(msg)
             # The level axis is (0, 1) by the definition of quantiles —
@@ -734,6 +838,51 @@ class ScenarioLoader:
                     f"{empty} resolve to no quantile levels at all"
                 )
                 raise ScenarioRejected(msg)
+        # rev. 60: explicit points.  R6 — a ppf level at exactly 0 or 1 is an
+        # infinite quantile; the generator's clip-to-nextafter is a generator
+        # policy, applying it to a user-declared level would silently rewrite
+        # the request.  R5 — a point falling into no region's raw interval
+        # would be silently unmeasurable (the metric record is keyed by
+        # (query, region)), which is "no silence" violated; the loader rejects
+        # the orphan with its coordinate instead.
+        for query in queries:
+            if query.points is None:
+                continue
+            name = str(query.characteristic)
+            if query.characteristic == CharacteristicName.PPF:
+                invalid_levels = [x for x in query.points if not 0.0 < x < 1.0]
+                if invalid_levels:
+                    msg = (
+                        f"explicit ppf points of query {name!r} must lie strictly "
+                        f"inside (0, 1): {invalid_levels} would be infinite quantiles"
+                    )
+                    raise ScenarioRejected(msg)
+            orphans = [
+                x
+                for x in query.points
+                if not any(
+                    ScenarioLoader._in_raw_interval(x, region.interval) for region in regions
+                )
+            ]
+            if orphans:
+                msg = (
+                    f"explicit points of query {name!r} fall into no declared region: "
+                    f"{orphans}; extend a region's interval so every requested point "
+                    "is measured somewhere"
+                )
+                raise ScenarioRejected(msg)
+
+    @staticmethod
+    def _in_raw_interval(x: float, interval: Interval) -> bool:
+        """Containment in the *raw* region interval (no support, no tail).
+
+        The raw interval is what the file declares; runtime knowledge
+        (support, ``TAIL_EXTENSION``) may still drop the point later, and
+        that drop is reported as a validator note, not as a rejection.
+        """
+        lo = -math.inf if interval[0] is None else float(interval[0])
+        hi = math.inf if interval[1] is None else float(interval[1])
+        return lo <= x <= hi
 
     @staticmethod
     def _require_mapping(value: Any, what: str) -> None:
@@ -759,7 +908,7 @@ class ScenarioLoader:
     def _scenario_id(
         raw: Mapping[str, Any], group: str | None, sort_key: float | str | None
     ) -> str | None:
-        """Explicit scenario_id, or ``group``-derived, or ``None`` (ред. 35).
+        """Explicit scenario_id, or ``group``-derived, or ``None`` (rev. 35).
 
         The three-way default: scenario_id > ``group[<sort_key>]`` > None;
         when both end up None the group defaults back to the scenario_id
@@ -807,11 +956,11 @@ def _json_safe(value: Any) -> Any:
 
 
 class ScenarioValidator:
-    """Degenerate-comparison check on canonical configurations (B1 + М-5).
+    """Degenerate-comparison check on canonical configurations (B1 + M-5).
 
     The single code point of the rule "identical canonical identities ->
-    degenerate comparison, visible as a validator note" (М-5); the runner
-    calls it instead of re-implementing the rule (А-4).
+    degenerate comparison, visible as a validator note" (M-5); the runner
+    calls it instead of re-implementing the rule (A-4).
     """
 
     def validate(self, spec: ScenarioSpec) -> list[ValidatorNote]:

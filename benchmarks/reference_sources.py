@@ -4,7 +4,7 @@ These are deliberately *outside* the pysatl_core_bench package: the framework
 is source-agnostic, and wrappers of external libraries are written by the
 bench consumer, not by the framework.  The scipy wrapper is built with the
 generic ``ExternalFunctionSource`` — its callable takes the query points as a
-pysatl-core ``NumericArray``; ``distribution`` (ред. 40: the scenario-level
+pysatl-core ``NumericArray``; ``distribution`` (rev. 40: the scenario-level
 ``DistributionSpec``) carries the measured distribution, ``participant`` the
 adapter knobs and ``query`` the requested characteristic.
 
@@ -40,6 +40,7 @@ _SERVED: tuple[CharacteristicName, ...] = (
     CharacteristicName.PDF,
     CharacteristicName.CDF,
     CharacteristicName.PPF,
+    CharacteristicName.LPDF,
 )
 
 
@@ -75,6 +76,12 @@ def _scipy_norm_values(
         return sps.norm.cdf(arr, loc=mu, scale=sigma)
     if query.characteristic == CharacteristicName.PPF:
         return sps.norm.ppf(arr, loc=mu, scale=sigma)
+    if query.characteristic == CharacteristicName.LPDF:
+        # lpdf (rev. 58): the log-density is a real CharacteristicName and is
+        # served by the pysatl-core graph, so the reference answers it too;
+        # scipy computes it independently (stabilized log formula), not as
+        # log(pdf(...)) of the branch above.
+        return sps.norm.logpdf(arr, loc=mu, scale=sigma)
     msg = f"scipy.stats.norm cannot serve {str(query.characteristic)!r}"
     raise NotImplementedError(msg)
 
@@ -90,6 +97,63 @@ def scipy_norm_source(source_id: str = "scipy-norm") -> ExternalFunctionSource:
     )
 
 
+def _scipy_exponential_values(
+    distribution: DistributionSpec,
+    participant: ParticipantSpec,  # noqa: ARG001 - adapter knobs unused by scipy
+    query: AccuracyQuery,
+    points: NumericArray,
+) -> ArrayLike:
+    """Evaluate scipy.stats.expon for one characteristic on the given points.
+
+    Same refusal discipline as the norm wrapper: the wrapper serves
+    exactly the identity it declares, everything else is an honest
+    ``NotImplementedError``.
+    """
+    family = distribution.family
+    parametrization = distribution.parametrization
+    parameters = distribution.parameters
+    if family != "Exponential" or not isinstance(parameters, Mapping):
+        msg = (
+            "scipy.stats.expon serves Exponential only; the scenario declares "
+            f"family={family!r}, parametrization={parametrization!r}, "
+            f"parameters={dict(parameters) if isinstance(parameters, Mapping) else parameters!r}"
+        )
+        raise NotImplementedError(msg)
+    if parametrization == "rate" and "lambda_" in parameters:
+        scale = 1.0 / float(parameters["lambda_"])
+    elif parametrization == "scale" and "beta" in parameters:
+        scale = float(parameters["beta"])
+    else:
+        msg = (
+            "scipy.stats.expon requires Exponential/rate{'lambda_'} or "
+            f"Exponential/scale{{'beta'}}; got parametrization={parametrization!r}, "
+            f"parameters={sorted(parameters)}"
+        )
+        raise NotImplementedError(msg)
+    arr = np.asarray(points, dtype=np.float64)
+    if query.characteristic == CharacteristicName.PDF:
+        return sps.expon.pdf(arr, scale=scale)
+    if query.characteristic == CharacteristicName.CDF:
+        return sps.expon.cdf(arr, scale=scale)
+    if query.characteristic == CharacteristicName.PPF:
+        return sps.expon.ppf(arr, scale=scale)
+    if query.characteristic == CharacteristicName.LPDF:
+        return sps.expon.logpdf(arr, scale=scale)
+    msg = f"scipy.stats.expon cannot serve {str(query.characteristic)!r}"
+    raise NotImplementedError(msg)
+
+
+def scipy_exponential_source(source_id: str = "scipy-exp") -> ExternalFunctionSource:
+    """scipy.stats.expon as a compute-capable source for Exponential(rate|scale)."""
+    return ExternalFunctionSource(
+        source_id,
+        _scipy_exponential_values,
+        provenance=Provenance(library="scipy", library_version=scipy_version),
+        characteristics=_SERVED,
+        support=SupportBounds(0.0, float("inf"), True, False),
+    )
+
+
 _TABLE_DIR = Path(__file__).resolve().parent / "reference_tables"
 
 
@@ -98,7 +162,7 @@ def mpmath_table_sources(table_dir: str | Path | None = None) -> list[TableLooku
 
     Every ``normal_<characteristic>_*.json`` under ``reference_tables/``
     becomes a lookup-only ``TableLookupSource`` registered under
-    ``mpmath-normal-<characteristic>`` (ред. 40: the service wraps the
+    ``mpmath-normal-<characteristic>`` (rev. 40: the service wraps the
     ``PrecomputedTable`` data).  A missing table directory yields an empty
     list; scenarios referencing the tables then fail with
     ``SourceNotRegistered`` — the honest outcome, never a silent

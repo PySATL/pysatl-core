@@ -1,0 +1,40 @@
+{
+  "distribution": {
+    "family": "Normal",
+    "parametrization": "meanStd",
+    "parameters": {
+      "mu": 0.0,
+      "sigma": 1.0
+    }
+  },
+  "schema_version": "1.2",
+  "scenario_id": "S1.11-invariant-check",
+  "comparison_group": "S1.11-invariant-check-vs-reference",
+  "subject": {
+    "source_id": "pysatl-core",
+    "strategy": "DefaultComputationStrategy"
+  },
+  "references": [
+    {
+      "source_id": "scipy-norm"
+    }
+  ],
+  "queries": [
+    {
+      "characteristic": "cdf",
+      "grid_hint": {
+        "n_points": 65
+      }
+    },
+    {
+      "characteristic": "pdf"
+    }
+  ],
+  "regions": [
+    {
+      "name": "bulk",
+      "interval": [-3.0, 3.0]
+    }
+  ],
+  "invariant_check_on": ["subject"]
+}
