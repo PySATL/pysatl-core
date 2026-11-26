@@ -119,6 +119,21 @@ class Distribution(ABC):
         from pysatl_core.sampling.default import DefaultSamplingUnivariateStrategy
 
         self._distribution_type = distribution_type
+        self._analytical_computations = self._normalize_analytical_computations(
+            analytical_computations
+        )
+        self._support = support
+        self._sampling_strategy = sampling_strategy or DefaultSamplingUnivariateStrategy()
+        self._computation_strategy = computation_strategy or DefaultComputationStrategy()
+
+    @staticmethod
+    def _normalize_analytical_computations(
+        analytical_computations: Mapping[
+            GenericCharacteristicName,
+            (AnalyticalComputation[Any, Any] | Mapping[LabelName, AnalyticalComputation[Any, Any]]),
+        ],
+    ) -> dict[GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]]:
+        """Copy and validate distribution-provided characteristic methods."""
         normalized_analytical: dict[
             GenericCharacteristicName, dict[LabelName, AnalyticalComputation[Any, Any]]
         ] = {}
@@ -140,10 +155,7 @@ class Distribution(ABC):
                     "analytical computation."
                 )
 
-        self._analytical_computations = normalized_analytical
-        self._support = support
-        self._sampling_strategy = sampling_strategy or DefaultSamplingUnivariateStrategy()
-        self._computation_strategy = computation_strategy or DefaultComputationStrategy()
+        return normalized_analytical
 
     @property
     def distribution_type(self) -> DistributionType:

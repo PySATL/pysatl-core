@@ -14,6 +14,7 @@ __author__ = "Artem Romanyuk"
 __copyright__ = "Copyright (c) 2025 PySATL project"
 __license__ = "SPDX-License-Identifier: MIT"
 
+from copy import deepcopy
 from typing import cast
 
 import numpy as np
@@ -121,6 +122,29 @@ class TestConfigProperty:
 _SAMPLER_MODULE = "pysatl_core.sampling.unuran.core.unuran_sampling_strategy.DefaultUnuranSampler"
 
 
+class TestDeepcopy:
+    def test_config_is_independent_and_cached_sampler_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        config = UnuranMethodConfig(method_params={"nested": {"values": [1]}})
+        strategy = DefaultUnuranSamplingStrategy(config)
+        strategy.sample(1, _make_continuous_distr())
+        cached_sampler = strategy._sampler
+
+        clone, cloned_config = deepcopy((strategy, config))
+
+        assert cached_sampler is not None
+        assert strategy._sampler is cached_sampler
+        assert clone._sampler is None
+        assert clone.config is cloned_config
+        assert clone.config is not config
+        assert clone.config.method_params is not None
+        assert config.method_params is not None
+        clone.config.method_params["nested"]["values"].append(2)
+        assert config.method_params["nested"]["values"] == [1]
+
+
 class TestSampleMethod:
     """Tests for DefaultUnuranSamplingStrategy.sample."""
 
@@ -176,6 +200,45 @@ class TestSampleMethod:
         sampler_second = strategy._sampler
 
         assert sampler_first is sampler_second
+
+    def test_invalidate_clears_cached_sampler(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """invalidate() drops the cached sampler so the next call rebuilds it."""
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        strategy = DefaultUnuranSamplingStrategy()
+        distr = _make_continuous_distr()
+
+        strategy.sample(2, distr)
+        assert strategy._sampler is not None
+
+        strategy.invalidate()
+        assert strategy._sampler is None
+
+    def test_invalidate_forces_new_sampler_on_next_sample(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After invalidate(), the next sample() builds a fresh sampler instance."""
+        monkeypatch.setattr(_SAMPLER_MODULE, _StubSampler)
+        strategy = DefaultUnuranSamplingStrategy()
+        distr = _make_continuous_distr()
+
+        strategy.sample(2, distr)
+        first_sampler = strategy._sampler
+
+        strategy.invalidate()
+        strategy.sample(2, distr)
+        second_sampler = strategy._sampler
+
+        assert first_sampler is not None
+        assert second_sampler is not None
+        assert first_sampler is not second_sampler
+
+    def test_invalidate_is_idempotent_when_no_sampler_cached(self) -> None:
+        """invalidate() on a fresh strategy with no sampler is a no-op and does not raise."""
+        strategy = DefaultUnuranSamplingStrategy()
+        assert strategy._sampler is None
+
+        strategy.invalidate()
+        assert strategy._sampler is None
 
     def test_falls_back_to_default_strategy_when_sampler_init_fails(
         self, monkeypatch: pytest.MonkeyPatch
