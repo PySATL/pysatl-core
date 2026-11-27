@@ -23,6 +23,7 @@ from pysatl_core.distributions.support import (
 )
 from pysatl_core.transformations.distribution import DerivedDistribution
 from pysatl_core.transformations.lightweight_distribution import LightweightDistribution
+from pysatl_core.transformations.operations.methods._utils import _CachedDiscreteMassTable
 from pysatl_core.transformations.operations.methods.mixture import (
     default_finite_mixture_transformation_methods,
 )
@@ -96,9 +97,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
         self._weights = validated_weights
         self._roles = roles
         self._role_to_index = {role: index for index, role in enumerate(roles)}
-        self._cached_discrete_mass_table: tuple[NumericArray, NumericArray, NumericArray] | None = (
-            None
-        )
+        self._cached_discrete_mass_table: _CachedDiscreteMassTable | None = None
 
         distribution_type = self._validate_distribution_types(
             [component.distribution_type for component in component_snapshots]
@@ -328,8 +327,10 @@ class FiniteMixtureDistribution(DerivedDistribution):
         **options: Any,
     ) -> tuple[NumericArray, NumericArray, NumericArray]:
         """Build normalized finite PMF table for discrete mixture."""
-        if not options and self._cached_discrete_mass_table is not None:
-            return self._cached_discrete_mass_table
+        pmf_methods = {role: sources[role][CharacteristicName.PMF] for role in self.parent_roles}
+        cached = self._cached_discrete_mass_table
+        if not options and cached is not None and cached.matches(pmf_methods):
+            return cached.table
 
         if self._discrete_points is None:
             raise RuntimeError(
@@ -337,8 +338,7 @@ class FiniteMixtureDistribution(DerivedDistribution):
             )
 
         methods = [
-            cast(Method[NumericArray, NumericArray], sources[role][CharacteristicName.PMF])
-            for role in self._roles
+            cast(Method[NumericArray, NumericArray], pmf_methods[role]) for role in self._roles
         ]
         points = self._discrete_points
         masses = np.zeros(points.shape, dtype=float)
@@ -355,7 +355,10 @@ class FiniteMixtureDistribution(DerivedDistribution):
         cdf_values[-1] = 1.0
         output = (points, masses, cdf_values)
         if not options:
-            self._cached_discrete_mass_table = output
+            self._cached_discrete_mass_table = _CachedDiscreteMassTable(
+                methods=pmf_methods,
+                table=output,
+            )
         return output
 
 
